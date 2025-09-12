@@ -22,6 +22,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 
 from pyproj import Transformer
+import concurrent.futures
 warnings.filterwarnings("ignore")
 
 
@@ -33,6 +34,48 @@ warnings.filterwarnings("ignore")
 # from tensorflow.keras.preprocessing.image import load_img
 
 
+
+def _cuda_available():
+    try:
+        return hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0
+    except Exception:
+        return False
+
+
+def cuda_resize_if_available(img, dsize, interpolation=cv2.INTER_NEAREST):
+    if img is None:
+        return img
+    if _cuda_available() and img.ndim in (2, 3) and img.dtype == np.uint8 and hasattr(cv2.cuda, 'resize'):
+        try:
+            g = cv2.cuda_GpuMat()
+            g.upload(img)
+            g_out = cv2.cuda.resize(g, dsize, interpolation=interpolation)
+            return g_out.download()
+        except Exception:
+            pass
+    return cv2.resize(img, dsize, interpolation=interpolation)
+
+
+def log_cuda_info_once():
+    try:
+        if getattr(log_cuda_info_once, "_logged", False):
+            return
+        devices = 0
+        has_tm = False
+        try:
+            if hasattr(cv2, 'cuda'):
+                devices = cv2.cuda.getCudaEnabledDeviceCount()
+                has_tm = hasattr(cv2.cuda, 'createTemplateMatching')
+        except Exception:
+            pass
+        try:
+            build_has_cuda = 'CUDA: YES' in cv2.getBuildInformation()
+        except Exception:
+            build_has_cuda = False
+        print(f"OpenCV CUDA devices: {devices}, has TM: {has_tm}, build CUDA: {build_has_cuda}")
+        log_cuda_info_once._logged = True
+    except Exception:
+        pass
 
 def intersection(a,b):
     x = max(a[0], b[0])
@@ -289,14 +332,23 @@ def rotate_image(image, angle):
     # Compute the tranform for the combined rotation and translation
     affine_mat = (np.matrix(trans_mat) * np.matrix(rot_mat))[0:2, :]
 
-    # Apply the transform
-    result = cv2.warpAffine(
-        image,
-        affine_mat,
-        (new_w, new_h),
-        flags=cv2.INTER_LINEAR
-    )
+    # Apply the transform (prefer CUDA if available)
+    try:
+        _gpu = hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0 and hasattr(cv2.cuda, 'warpAffine')
+    except Exception:
+        _gpu = False
 
+    if _gpu and image.ndim == 2 and image.dtype == np.uint8:
+        try:
+            g_img = cv2.cuda_GpuMat()
+            g_img.upload(image)
+            g_res = cv2.cuda.warpAffine(g_img, affine_mat, (new_w, new_h), flags=cv2.INTER_LINEAR)
+            result = g_res.download()
+            return result
+        except Exception:
+            pass
+
+    result = cv2.warpAffine(image, affine_mat, (new_w, new_h), flags=cv2.INTER_LINEAR)
     return result
 
 
@@ -394,13 +446,17 @@ def rotated_rect(w, h, angle):
 #%%
 
 #simulasyon olarak çalışması için true olarak ayarlayın, Benchmark için false olarak ayarlayın
-benchmark=True
+benchmark=False
 
 # Global debug and sizing constants
 DEBUG = False
 PATCH_SIZE = 544
 PATCH_HALF = PATCH_SIZE // 2
 PRED_BORDER = 16
+# CPU optimization flags
+USE_PYRAMID = True
+COARSE_SCALE = 0.5
+ROI_PAD_FACTOR = 2.0
 
 if benchmark==True:
     cerceve_boyutu_deger=5000
@@ -438,11 +494,169 @@ def find_corner_coordinates(center_latitude, center_longitude, pixel_distance, G
 
 
 def match(img,template):
-    methods =['cv2.TM_CCOEFF_NORMED']
-    method  = eval(methods[0])
-    
-    res= cv2.matchTemplate(img, template, method, None)
+    # Prefer CUDA if available and enabled, otherwise fall back to CPU
+    method = cv2.TM_CCOEFF_NORMED
+
+    # Lazy-init CUDA flags on first call
+    global _CUDA_TM_INITIALIZED, _CUDA_TM_AVAILABLE, _CUDA_TM_DISABLED
+    try:
+        _CUDA_TM_INITIALIZED
+    except NameError:
+        _CUDA_TM_INITIALIZED = False
+        _CUDA_TM_AVAILABLE = False
+        _CUDA_TM_DISABLED = False
+
+    if not _CUDA_TM_INITIALIZED:
+        try:
+            _CUDA_TM_AVAILABLE = hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0 and hasattr(cv2.cuda, 'createTemplateMatching')
+        except Exception:
+            _CUDA_TM_AVAILABLE = False
+        _CUDA_TM_INITIALIZED = True
+
+    if _CUDA_TM_AVAILABLE and not _CUDA_TM_DISABLED and img.dtype == np.uint8 and template.dtype == np.uint8 and img.ndim == 2 and template.ndim == 2:
+        try:
+            # Upload to GPU
+            g_img = cv2.cuda_GpuMat()
+            g_tmpl = cv2.cuda_GpuMat()
+            g_img.upload(img)
+            g_tmpl.upload(template)
+
+            # Determine src type
+            src_type = cv2.CV_8UC1 if hasattr(cv2, 'CV_8UC1') else cv2.CV_8U
+            tm = cv2.cuda.createTemplateMatching(src_type, method)
+            g_res = tm.match(g_img, g_tmpl)
+            res = g_res.download()
+            return res
+        except Exception as e:
+            print("CUDA template matching kullanılamadı, CPU'ya düşülüyor:", e)
+            _CUDA_TM_DISABLED = True
+
+    # CPU fallback
+    res = cv2.matchTemplate(img, template, method, None)
     return res
+
+def _init_cuda_tm_state():
+    global _CUDA_TM_INITIALIZED, _CUDA_TM_AVAILABLE, _CUDA_TM_DISABLED
+    try:
+        _CUDA_TM_INITIALIZED
+    except NameError:
+        _CUDA_TM_INITIALIZED = False
+        _CUDA_TM_AVAILABLE = False
+        _CUDA_TM_DISABLED = False
+    if not _CUDA_TM_INITIALIZED:
+        try:
+            _CUDA_TM_AVAILABLE = hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0 and hasattr(cv2.cuda, 'createTemplateMatching')
+        except Exception:
+            _CUDA_TM_AVAILABLE = False
+        _CUDA_TM_INITIALIZED = True
+
+def match_three(img, templates):
+    """Run template matching for three templates.
+    If CUDA is available, upload img once and run three matches on GPU.
+    Returns (res1, res2, res3).
+    """
+    method = cv2.TM_CCOEFF_NORMED
+    _init_cuda_tm_state()
+
+    # CPU fallback path
+    if not _CUDA_TM_AVAILABLE or any(t.ndim != 2 or t.dtype != np.uint8 for t in templates) or img.ndim != 2 or img.dtype != np.uint8:
+        try:
+            if not getattr(match_three, "_logged_backend", False):
+                print("TemplateMatching backend: CPU")
+                match_three._logged_backend = True
+        except Exception:
+            pass
+
+        img_c = np.ascontiguousarray(img)
+        tmps_c = [np.ascontiguousarray(t) for t in templates]
+
+        def _match_direct(a, b):
+            return cv2.matchTemplate(a, b, method, None)
+
+        def _match_pyramid(a, b):
+            # Full result shape
+            H, W = a.shape[:2]
+            h, w = b.shape[:2]
+            resH, resW = (H - h + 1, W - w + 1)
+            if resH <= 0 or resW <= 0:
+                return np.empty((0, 0), dtype=np.float32)
+
+            # Coarse downscale
+            s = COARSE_SCALE
+            a_small = cv2.resize(a, (int(W * s), int(H * s)), interpolation=cv2.INTER_AREA)
+            b_small = cv2.resize(b, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
+            res_small = cv2.matchTemplate(a_small, b_small, method, None)
+            _, _, _, max_loc_small = cv2.minMaxLoc(res_small)
+
+            # Map back to full-res match coordinates
+            cx = int(max_loc_small[0] / s)
+            cy = int(max_loc_small[1] / s)
+
+            # ROI around coarse location in res-space
+            pad = int(max(w, h) * ROI_PAD_FACTOR)
+            x1 = max(0, cx - pad)
+            y1 = max(0, cy - pad)
+            x2 = min(resW - 1, cx + pad)
+            y2 = min(resH - 1, cy + pad)
+
+            # Corresponding image region for refined match
+            img_x1 = x1
+            img_y1 = y1
+            img_x2 = x2 + w - 1
+            img_y2 = y2 + h - 1
+            img_x2 = min(img_x2, W - 1)
+            img_y2 = min(img_y2, H - 1)
+
+            # Ensure valid region
+            if img_x2 - img_x1 + 1 < w or img_y2 - img_y1 + 1 < h:
+                # Fallback to direct if ROI is degenerate
+                return cv2.matchTemplate(a, b, method, None)
+
+            a_roi = a[img_y1:img_y2 + 1, img_x1:img_x2 + 1]
+            res_roi = cv2.matchTemplate(a_roi, b, method, None)
+
+            # Paste into full-sized result with very low value outside
+            res_full = np.empty((resH, resW), dtype=res_roi.dtype)
+            res_full.fill(-1e9)
+            res_full[y1:y2 + 1, x1:x2 + 1] = res_roi
+            return res_full
+
+        if USE_PYRAMID:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+                futs = [ex.submit(_match_pyramid, img_c, t) for t in tmps_c]
+                return tuple(f.result() for f in futs)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+                futs = [ex.submit(_match_direct, img_c, t) for t in tmps_c]
+                return tuple(f.result() for f in futs)
+
+    # GPU path
+    try:
+        g_img = cv2.cuda_GpuMat()
+        g_img.upload(img)
+        src_type = cv2.CV_8U
+        # Cache TemplateMatching object
+        if not hasattr(match_three, "_tm") or match_three._tm is None:
+            match_three._tm = cv2.cuda.createTemplateMatching(src_type, method)
+        tm = match_three._tm
+
+        results = []
+        for t in templates:
+            g_tmpl = cv2.cuda_GpuMat()
+            g_tmpl.upload(t)
+            g_res = tm.match(g_img, g_tmpl)
+            results.append(g_res.download())
+        # Log once which backend used
+        try:
+            if not getattr(match_three, "_logged_backend", False):
+                print("TemplateMatching backend: CUDA")
+                match_three._logged_backend = True
+        except Exception:
+            pass
+        return tuple(results)
+    except Exception as e:
+        print("CUDA TM kullanılmadı (hata), CPU'ya düşülüyor:", e)
+        return tuple(cv2.matchTemplate(img, t, method, None) for t in templates)
     
 
 
@@ -481,6 +695,11 @@ def standart_sapma(data):
 
 
 if __name__ == '__main__': 
+    # Log CUDA environment once
+    try:
+        log_cuda_info_once()
+    except Exception:
+        pass
     
     #haritalar klasöründeki ilk görüntüde DEM verileri vardır. ikinci görüntü ise normal rgb görüntüdür.
     harita_yol=dirname+'/haritalar/'
@@ -897,7 +1116,7 @@ if __name__ == '__main__':
             
             height,width= (cr_image.shape[0],cr_image.shape[1])
             
-            rotated_image=cv2.resize(cr_image, (int(width*olcek_scale_test),int(height*olcek_scale_test)),interpolation=cv2.INTER_NEAREST ) 
+            rotated_image = cuda_resize_if_available(cr_image, (int(width*olcek_scale_test), int(height*olcek_scale_test)), interpolation=cv2.INTER_NEAREST)
             
             olcek_scale_sol_ust=olcek_scale_test*(rakim_sol_ust/rakim)
             olcek_scale_sag_alt=olcek_scale_test*(rakim_sag_alt/rakim)
@@ -905,8 +1124,8 @@ if __name__ == '__main__':
             #olcek_scale_sol_ust=olcek_scale_test*(rakim/rakim_sol_ust)
             #olcek_scale_sag_alt=olcek_scale_test*(rakim/rakim_sag_alt)
             
-            rotated_image_sol_ust=cv2.resize(cr_image, (int(width*olcek_scale_sol_ust),int(height*olcek_scale_sol_ust)),interpolation=cv2.INTER_NEAREST ) 
-            rotated_image_sag_alt=cv2.resize(cr_image, (int(width*olcek_scale_sag_alt),int(height*olcek_scale_sag_alt)),interpolation=cv2.INTER_NEAREST ) 
+            rotated_image_sol_ust = cuda_resize_if_available(cr_image, (int(width*olcek_scale_sol_ust), int(height*olcek_scale_sol_ust)), interpolation=cv2.INTER_NEAREST)
+            rotated_image_sag_alt = cuda_resize_if_available(cr_image, (int(width*olcek_scale_sag_alt), int(height*olcek_scale_sag_alt)), interpolation=cv2.INTER_NEAREST)
             
             
             #çözünürlüğü 30 cm'ye ayarlanmış görüntünün orta noktası bulnur
@@ -998,9 +1217,7 @@ if __name__ == '__main__':
             #paralel programlama ile aynı anda 3 templatematching yapılır
             inputs=[(cerceve,template[0]),(cerceve,template[1]),(cerceve,template[2])]
             # Template matching (sequential to avoid IPC overhead)
-            res1 = match(cerceve, template[0])
-            res2 = match(cerceve, template[1])
-            res3 = match(cerceve, template[2])
+            res1, res2, res3 = match_three(cerceve, [template[0], template[1], template[2]])
             #methods =['cv2.TM_CCOEFF']
             #for meth in methods:
                 #method  = eval(meth)    #stringleri fonksiyona çeviren fonksiyona
