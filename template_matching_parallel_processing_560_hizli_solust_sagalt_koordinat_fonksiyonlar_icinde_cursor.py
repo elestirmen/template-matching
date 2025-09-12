@@ -1,5 +1,5 @@
 import os
-os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = pow(2,40).__str__()
+os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(2**40)
 import cv2
 from osgeo import gdal
 #import exiftool
@@ -12,15 +12,11 @@ import time
 import rasterio as rio
 import numpy as np
 from math import cos, sqrt
-import os
 import piexif
 import csv
-os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = pow(2,40).__str__()
-
-from rasterio.warp import transform
 from PIL import Image
 from PIL.ExifTags import TAGS
-
+from affine import Affine
 from pyproj import Transformer
 import concurrent.futures
 warnings.filterwarnings("ignore")
@@ -211,8 +207,6 @@ def quick_distance_utm(Lat1, Long1, Lat2, Long2):
     
     
     
-from pyproj import Proj, transform
-
 def latlon_to_utm(latitude, longitude, zone_number=None, hemisphere=None):
     """
     Convert Latitude and Longitude to UTM coordinates.
@@ -235,19 +229,113 @@ def latlon_to_utm(latitude, longitude, zone_number=None, hemisphere=None):
     if hemisphere is None:
         hemisphere = 'N' if latitude >= 0 else 'S'
     
-    # Create a Proj object for WGS84
-    wgs84 = Proj(proj='latlong', datum='WGS84')
-    
-    # Create a Proj object for the UTM zone
-    utm = Proj(proj='utm', zone=zone_number, datum='WGS84')
-    
-    # Perform the coordinate transformation
-    easting, northing = transform(wgs84, utm, longitude, latitude)
-    
+    # Select EPSG code by hemisphere
+    epsg = 32600 + zone_number if hemisphere.upper() == 'N' else 32700 + zone_number
+    tfm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+    easting, northing = tfm.transform(longitude, latitude)
     return easting, northing, zone_number, hemisphere
 
 
 from math import sin, cos, sqrt, atan2, radians
+
+# ----------------------------
+# Helpers: EXIF, cropping, CRS
+# ----------------------------
+
+def _to_float_ratio(val):
+    try:
+        # PIL may return tuples like (num, den)
+        if isinstance(val, tuple) and len(val) == 2:
+            num, den = val
+            den = den or 1
+            return float(num) / float(den)
+        return float(val)
+    except Exception:
+        return None
+
+def parse_exif(image_path):
+    """Parse EXIF safely; returns dict with keys:
+    yaw, latitude, longitude, altitude, focal_length, model.
+    Returns None on failure.
+    """
+    import re
+    try:
+        with Image.open(image_path) as im:
+            exif = im._getexif() or {}
+    except Exception:
+        return None
+
+    def get_field(exif_dict, field):
+        for (k, v) in exif_dict.items():
+            if TAGS.get(k) == field:
+                return v
+        return None
+
+    yaw = 0.0
+    mk = get_field(exif, 'MakerNote')
+    if mk is not None:
+        s = str(mk)
+        m = re.search(r'FlightDegree[^0-9]*([0-9]+)', s)
+        if m:
+            try:
+                yaw = int(m.group(1)) / 10.0
+            except Exception:
+                yaw = 0.0
+
+    gps = get_field(exif, 'GPSInfo') or {}
+    lat_ref = gps.get(1, 'N')
+    lat_val = gps.get(2)
+    lon_ref = gps.get(3, 'E')
+    lon_val = gps.get(4)
+    alt_val = gps.get(6)
+    alt_ref = gps.get(5, 0)
+
+    def conv(ref, coord):
+        if coord is None:
+            return None
+        try:
+            d = _to_float_ratio(coord[0])
+            m = _to_float_ratio(coord[1])
+            s = _to_float_ratio(coord[2])
+            if None in (d, m, s):
+                return None
+            sign = 1 if ref in ('N', 'E') else -1
+            return sign * (d + m/60.0 + s/3600.0)
+        except Exception:
+            return None
+
+    latitude = conv(lat_ref, lat_val)
+    longitude = conv(lon_ref, lon_val)
+
+    altitude = _to_float_ratio(alt_val)
+    if altitude is not None and alt_ref == 1:
+        altitude = -altitude
+
+    fl = get_field(exif, 'FocalLength')
+    focal_length = _to_float_ratio(fl)
+    model = get_field(exif, 'Model')
+
+    return {
+        'yaw': yaw,
+        'latitude': latitude,
+        'longitude': longitude,
+        'altitude': altitude,
+        'focal_length': focal_length,
+        'model': model,
+    }
+
+def make_rc_to_ll(dataset):
+    """Create a pixel(row,col)->(lon,lat) converter for a rasterio dataset."""
+    T1 = dataset.transform * Affine.translation(0.5, 0.5)
+    to_wgs = Transformer.from_crs(dataset.crs, "EPSG:4326", always_xy=True)
+    def rc_to_ll(row, col):
+        x, y = (col, row) * T1
+        lon, lat = to_wgs.transform(x, y)
+        return lon, lat
+    return rc_to_ll
+
+def is_valid_slice(img, x1, y1, x2, y2):
+    return x1 >= 0 and y1 >= 0 and x2 <= img.shape[1] and y2 <= img.shape[0]
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     # Earth radius in kilometers
@@ -725,39 +813,20 @@ if __name__ == '__main__':
     
     import rasterio
     from affine import Affine
-    from pyproj import Proj, transform, Transformer
  
     #fname = 'urgup_gmap_georef.tif'
     fname = harita_yol+harita_yol_list[0]
-    # Read raster
+    # Read raster (metadata only)
     with rasterio.open(fname) as r:
         T0 = r.transform  # upper-left pixel corner affine transform
-        p1 = Proj(r.crs)
-        print(p1)
-        A = r.read()  # pixel values
-    
-    # All rows and columns
-    cols, rows = np.meshgrid(np.arange(A.shape[2]), np.arange(A.shape[1]))
+        T1 = T0 * Affine.translation(0.5, 0.5)
+        to_wgs = Transformer.from_crs(r.crs, "EPSG:4326", always_xy=True)
     
     def koordinat_bul(row,col):
-        # Get affine transform for pixel centres
-        T1 = T0 * Affine.translation(0.5, 0.5)
-        # Function to convert pixel row/column index (from 0) to easting/northing at centre
-        rc2en = lambda r, c: (c, r) * T1
-        
-        # All eastings and northings (there is probably a faster way to do this)
-        eastings, northings = np.vectorize(rc2en, otypes=[float, float])([row], [col])
-        
-        
-        # Project all longitudes, latitudes
-        p2 = Proj(proj='latlong',datum='WGS84')
-        
-        #p2 = Proj(proj='utm', zone=36, datum='WGS84')  # UTM Zone 33T  #silinecek
-        
-        longs, lats = transform(p1, p2, eastings, northings)
-       
-        
-        return (longs,lats)
+        # Convert pixel (row,col) to lon/lat using affine + CRS
+        x, y = (col, row) * T1
+        lon, lat = to_wgs.transform(x, y)
+        return (np.array([lon]), np.array([lat]))
     
     
     #%%
@@ -821,6 +890,7 @@ if __name__ == '__main__':
         # Open main map once per loop and reuse for pixel lookups
         map_ds = rio.open(ana_harita)
         ll_to_map = Transformer.from_crs("EPSG:4326", map_ds.crs, always_xy=True)
+        rc_to_ll = make_rc_to_ll(map_ds)
           
         kenarx=int(t_img.shape[0]/512)
         
@@ -1141,9 +1211,24 @@ if __name__ == '__main__':
                 continue
            
             
-            rotated_part1 = rotated_image_sol_ust[center[1]-PATCH_HALF-fark:center[1]+PATCH_HALF-fark,center[0]-PATCH_HALF-fark:center[0]+PATCH_HALF-fark]
-            rotated_part2 = rotated_image[center[1]-PATCH_HALF:center[1]+PATCH_HALF,center[0]-PATCH_HALF:center[0]+PATCH_HALF]
-            rotated_part3 = rotated_image_sag_alt[center[1]-PATCH_HALF+fark:center[1]+PATCH_HALF+fark,center[0]-PATCH_HALF+fark:center[0]+PATCH_HALF+fark]
+            y1 = center[1]-PATCH_HALF-fark; y2 = center[1]+PATCH_HALF-fark
+            x1 = center[0]-PATCH_HALF-fark; x2 = center[0]+PATCH_HALF-fark
+            if not is_valid_slice(rotated_image_sol_ust, x1, y1, x2, y2):
+                print("rotated_part1 sınır dışında")
+                continue
+            rotated_part1 = rotated_image_sol_ust[y1:y2, x1:x2]
+            y1 = center[1]-PATCH_HALF; y2 = center[1]+PATCH_HALF
+            x1 = center[0]-PATCH_HALF; x2 = center[0]+PATCH_HALF
+            if not is_valid_slice(rotated_image, x1, y1, x2, y2):
+                print("rotated_part2 sınır dışında")
+                continue
+            rotated_part2 = rotated_image[y1:y2, x1:x2]
+            y1 = center[1]-PATCH_HALF+fark; y2 = center[1]+PATCH_HALF+fark
+            x1 = center[0]-PATCH_HALF+fark; x2 = center[0]+PATCH_HALF+fark
+            if not is_valid_slice(rotated_image_sag_alt, x1, y1, x2, y2):
+                print("rotated_part3 sınır dışında")
+                continue
+            rotated_part3 = rotated_image_sag_alt[y1:y2, x1:x2]
             
             
             
@@ -1337,11 +1422,7 @@ if __name__ == '__main__':
                 koordinatlar[1][konum[0]][konum[1]] ise modelin tahmin ettiği konumun koordinatlarını verir
                 ve aralarındaki uzaklık hesaplanır.    
             """
-            koordinatlar=koordinat_bul(konum[1],konum[0])
-            
-            
-            lat_tahmin = koordinatlar[1][0]
-            long_tahmin = koordinatlar[0][0]
+            long_tahmin, lat_tahmin = rc_to_ll(konum[1], konum[0])
             
                 
             uzaklik = haversine_distance(gps_latitude,gps_longitude,lat_tahmin,long_tahmin)  
@@ -1494,6 +1575,11 @@ if __name__ == '__main__':
             print((i+1),"/",(len(anlik_yol_list)),"     dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) +",  dogru pozitif: "+str(dogru_pozitif)+",  yanlış pozitif: "+str(yanlis_pozitif)+",  dogru negatif: "+str(dogru_negatif)+",  yanlış negatif: "+str(yanlis_negatif)+"\n")
          
         
+        # Close map dataset for this loop to free resources
+        try:
+            map_ds.close()
+        except Exception:
+            pass
         uzaklik_hatalari = np.array(uzaklik_hatalari)
 
         rmse_degeri = rmse(uzaklik_hatalari)
@@ -1537,4 +1623,12 @@ if __name__ == '__main__':
         except Exception as _e:
             print("sonuclar dosyaya yazılırken hata:", _e)
 
+        try:
+            dem_ds.close()
+        except Exception:
+            pass
+        try:
+            del dataset
+        except Exception:
+            pass
         input("pause")
