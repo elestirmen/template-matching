@@ -359,6 +359,89 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 
 
+"""
+UI helpers: panels, scale bar, minimal HUD
+"""
+def _draw_alpha_panel(img, x0, y0, x1, y1, color=(0, 0, 0), alpha=0.5):
+    """Draw a filled rectangle with alpha blending onto img in-place."""
+    x0 = max(0, min(int(x0), img.shape[1]-1))
+    x1 = max(0, min(int(x1), img.shape[1]-1))
+    y0 = max(0, min(int(y0), img.shape[0]-1))
+    y1 = max(0, min(int(y1), img.shape[0]-1))
+    if x1 <= x0 or y1 <= y0:
+        return
+    overlay = img.copy()
+    cv2.rectangle(overlay, (x0, y0), (x1, y1), color, thickness=-1)
+    cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, dst=img)
+
+
+def draw_info_panel(img, lines, top_left=(25, 150), font=cv2.FONT_HERSHEY_SIMPLEX,
+                    font_scale=6, thickness=20, text_color=(255, 255, 255),
+                    bg_color=(0, 0, 0), alpha=0.5, padding=25, line_gap=None):
+    """Draw a semi-transparent info panel with multiple text lines.
+
+    lines: list of strings to show, one per line
+    top_left: baseline of the first text line (x, y)
+    """
+    if not lines:
+        return
+    try:
+        sizes = [cv2.getTextSize(str(s), font, font_scale, thickness)[0] for s in lines]
+    except Exception:
+        return
+    max_w = max(w for (w, h) in sizes)
+    max_h = max(h for (w, h) in sizes)
+    if line_gap is None:
+        line_gap = int(max_h * 1.6)
+
+    x, y = top_left
+    panel_w = max_w + 2 * padding
+    panel_h = line_gap * len(lines) + padding
+    panel_x0 = max(0, x - padding)
+    panel_y0 = max(0, y - max_h - padding)
+    panel_x1 = min(img.shape[1]-1, panel_x0 + panel_w)
+    panel_y1 = min(img.shape[0]-1, panel_y0 + panel_h)
+    _draw_alpha_panel(img, panel_x0, panel_y0, panel_x1, panel_y1, color=bg_color, alpha=alpha)
+
+    for i, s in enumerate(lines):
+        org = (int(x), int(y + i * line_gap))
+        cv2.putText(img, str(s), org, font, font_scale, text_color, thickness, cv2.LINE_AA)
+
+
+def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=35,
+                   color=(255, 255, 255), text_color=(255, 255, 255),
+                   font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=3, thickness=8):
+    """Draw a metric scale bar in the bottom-right corner.
+
+    cpp_cm_per_px: centimeters per pixel (float). If None/0, function does nothing.
+    scale_meters: length of the scale bar in meters.
+    """
+    try:
+        cpp = float(cpp_cm_per_px)
+    except Exception:
+        return
+    if cpp <= 0:
+        return
+    bar_w = int((scale_meters * 100.0) / cpp)  # px
+    if bar_w < 20:
+        return
+    h, w = img.shape[:2]
+    x1 = max(0, w - margin - bar_w)
+    y1 = max(0, h - margin - bar_height)
+    x2 = min(w - 1, x1 + bar_w)
+    y2 = min(h - 1, y1 + bar_height)
+
+    # Background for readability
+    _draw_alpha_panel(img, x1 - 25, y1 - 80, x2 + 25, y2 + 25, color=(0, 0, 0), alpha=0.5)
+    cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness=-1)
+    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), thickness=max(2, thickness // 2))  # border
+
+    label = f"{int(scale_meters)} m"
+    (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
+    tx = x1 + (bar_w - tw) // 2
+    ty = max(th + 10, y1 - 15)
+    cv2.putText(img, label, (tx, ty), font, font_scale, text_color, thickness, cv2.LINE_AA)
+
 
 
 
@@ -1520,31 +1603,39 @@ if __name__ == '__main__':
                 
                 
             window_name = 'Image'
-  
-            # font
-            font = cv2.FONT_HERSHEY_SIMPLEX
-              
-            # org
-            org = (25, 150)
-              
-            # fontScale
-            fontScale = 6
-               
-            # Blue color in BGR
-            color = (0, 0, 255)
-              
-            # Line thickness of 2 px
-            thickness = 25
-               
-            text="hdg: "+str(yaw)+"' "
-            # Using cv2.putText() method
-            cv2.putText(res, text, org, font, 
-                               fontScale, color, thickness, cv2.LINE_AA)
-            
-            text="alt: "+str(int(ucus_yuksekligi))+" metre"
-            org = (25, 325)
-            cv2.putText(res, text, org, font, 
-                               fontScale, color, thickness, cv2.LINE_AA)
+
+            # Clean HUD with semi-transparent background instead of raw text
+            hud_lines = [
+                f"HDG: {yaw:.1f} deg",
+                f"ALT: {int(ucus_yuksekligi)} m",
+                f"ERR: {int(uzaklik*1000)} m",
+            ]
+            draw_info_panel(
+                res,
+                hud_lines,
+                top_left=(25, 150),
+                font=cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale=6,
+                thickness=20,
+                text_color=(255, 255, 255),
+                bg_color=(0, 0, 0),
+                alpha=0.5,
+                padding=25,
+            )
+
+            # Add a 100 m scale bar if spatial resolution is known (cm/px)
+            try:
+                draw_scale_bar(res, mekansal_cozunurluk, scale_meters=100, margin=80, bar_height=40,
+                               color=(255,255,255), text_color=(255,255,255), font_scale=3, thickness=8)
+            except Exception:
+                pass
+
+            # Subtle center crosshair for orientation
+            try:
+                cv2.drawMarker(res, (res.shape[1]//2, res.shape[0]//2), (255,255,255),
+                               markerType=cv2.MARKER_CROSS, markerSize=120, thickness=8, line_type=cv2.LINE_AA)
+            except Exception:
+                pass
                 
                 
                 
