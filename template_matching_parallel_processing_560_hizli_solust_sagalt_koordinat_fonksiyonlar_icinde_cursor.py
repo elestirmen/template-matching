@@ -468,7 +468,7 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
 
 
 def draw_plane_icon(img, center, heading_deg, size_px=180,
-                    color=(0, 255, 255), outline=(0, 0, 0), outline_thickness=6):
+                    color=(255, 0, 255), outline=(0, 0, 0), outline_thickness=6):
     """Gerçek konumu bir uçak simgesi ile göstermek için basit bir ikon çizer.
 
     - center: (x, y) piksel koordinatı (örn. (knm[1], knm[0]))
@@ -515,7 +515,7 @@ def draw_plane_icon(img, center, heading_deg, size_px=180,
 
 
 def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
-                       color=(0, 255, 255), outline=(0, 0, 0), outline_thickness=8):
+                       color=(255, 0, 255), outline=(0, 0, 0), outline_thickness=8):
     """Gerçek konumu bir uçak simgesi ile göstermek için daha gerçekçi bir ikon çizer.
 
     - center: (x, y) piksel koordinatı (örn. (knm[1], knm[0]))
@@ -1815,7 +1815,7 @@ if __name__ == '__main__':
             
             # Uçak simgesini (gerçek konum ve heading ile) çiz
             try:
-                draw_plane_icon_v2(img, (knm[1], knm[0]), yaw, size_px=220, color=(0,255,255), outline=(0,0,0), outline_thickness=10)
+                draw_plane_icon_v2(img, (knm[1], knm[0]), yaw, size_px=220, color=(255,0,255), outline=(0,0,0), outline_thickness=10)
             except Exception:
                 pass
 
