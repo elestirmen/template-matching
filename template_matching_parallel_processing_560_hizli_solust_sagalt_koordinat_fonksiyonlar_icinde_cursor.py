@@ -1,3 +1,19 @@
+"""
+Bu betik, anlık (drone) görüntülerini referans ortofoto/harita üzerinde konumlandırır.
+
+Özet akış:
+- EXIF'ten yaw (uçuş başı), GPS, odak uzaklığı ve irtifa bilgisi okunur.
+- DEM (sayısal yükseklik modeli) ile farklı noktalardaki rakım farkı dikkate alınarak üç ölçekli şablon oluşturulur.
+- Keras modeli ile bu şablonlardan özellik/olasılık haritaları üretilir.
+- Template Matching ile ana haritada en iyi eşleşmeler bulunur; üç eşleşmenin kesişiminden konum çıkarılır.
+- Hata metrikleri (RMSE/MAE/std) ve sınıflandırma istatistikleri (TP/FP/TN/FN, F-skor) hesaplanır ve dosyaya yazılır.
+- İsteğe bağlı CUDA hızlandırması ile bazı adımlar GPU'da çalıştırılır.
+
+Klasörler:
+- `haritalar/`: Ana haritalar (DEM ve ortofoto)
+- `model/`: Keras modelleri (544x544 girişli, kenar kırpmalı çıkış)
+- `parcalar/`: Anlık görüntüler (EXIF içeren JPG/PNG)
+"""
 import os
 os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(2**40)
 import cv2
@@ -21,6 +37,14 @@ from pyproj import Transformer
 import concurrent.futures
 warnings.filterwarnings("ignore")
 
+
+# -----------------------------------------------------------------------------
+# Yardımcı fonksiyonlar grupları
+# - CUDA kontrolü ve hızlandırılmış işlemler (resize / template matching)
+# - EXIF/GPS okuma ve dönüşümler (WGS84 <-> UTM, piksel <-> koordinat)
+# - Basit geometri ve metrikler (kesişim, RMSE/MAE/std, Haversine)
+# - Görsel arayüz yardımcıları (HUD paneli, ölçek çubuğu, işaret çizimi)
+# -----------------------------------------------------------------------------
 
 # import rasterio as rio
 # from rasterio.warp import transform 
@@ -443,6 +467,174 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
     cv2.putText(img, label, (tx, ty), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
 
+def draw_plane_icon(img, center, heading_deg, size_px=180,
+                    color=(0, 255, 255), outline=(0, 0, 0), outline_thickness=6):
+    """Gerçek konumu bir uçak simgesi ile göstermek için basit bir ikon çizer.
+
+    - center: (x, y) piksel koordinatı (örn. (knm[1], knm[0]))
+    - heading_deg: yaw/heading (derece). 0=Kuzey, pozitif saat yönü varsayımı ile -yaw uygulanır.
+    - size_px: ikonun uzunluğu (burun-kuyruk arası) piksel cinsinden.
+    """
+    try:
+        cx, cy = int(center[0]), int(center[1])
+        h = float(size_px)
+        w = h * 0.7
+
+        # Basit uçak silueti (burun yukarı bakacak şekilde tanımlı)
+        pts = np.array([
+            [0.0, -0.5 * h],      # burun
+            [0.5 * w, -0.15 * h], # sağ kanat ucu
+            [0.25 * w, 0.50 * h], # sağ kuyruk
+            [0.0, 0.33 * h],      # gövde alt
+            [-0.25 * w, 0.50 * h],# sol kuyruk
+            [-0.5 * w, -0.15 * h] # sol kanat ucu
+        ], dtype=np.float32)
+
+        # İkonu heading'e göre döndür (OpenCV pozitif=CCW, yaw pozitif= saat yönü varsayımıyla -yaw)
+        ang = float(heading_deg)
+        rad = np.deg2rad(ang)
+        c, s = np.cos(rad), np.sin(rad)
+        R = np.array([[c, -s], [s, c]], dtype=np.float32)
+        pts_rot = (pts @ R.T)
+        pts_rot[:, 0] += cx
+        pts_rot[:, 1] += cy
+        pts_i = pts_rot.astype(np.int32)
+
+        # Doldur + kenarlık
+        cv2.fillPoly(img, [pts_i], color)
+        if outline_thickness > 0:
+            cv2.polylines(img, [pts_i], isClosed=True, color=outline, thickness=outline_thickness, lineType=cv2.LINE_AA)
+    except Exception:
+        # Hata durumunda bir yedek işaret bırak (küçük daire)
+        try:
+            cv2.circle(img, (cx, cy), 10, color, 2)
+        except Exception:
+            pass
+
+
+
+
+def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
+                       color=(0, 255, 255), outline=(0, 0, 0), outline_thickness=8):
+    """Gerçek konumu bir uçak simgesi ile göstermek için daha gerçekçi bir ikon çizer.
+
+    - center: (x, y) piksel koordinatı (örn. (knm[1], knm[0]))
+    - heading_deg: yaw/heading (derece). 0=Kuzey, pozitif saat yönü varsayımıyla -yaw uygulanır.
+    - size_px: ikonun toplam uzunluğu (burun-kuyruk).
+
+    PNG desteği: Eğer çalışma klasöründe `plane_icon.png`/`plane.png` (veya `assets/` altında) varsa,
+    otomatik olarak bu PNG döndürülerek alfa ile bindirilir. Yoksa vektörel bir siluet çizilir.
+    """
+    try:
+        cx, cy = int(center[0]), int(center[1])
+
+        # 1) Önce varsa PNG ikonunu kullan
+        icon = None
+        try:
+            candidates = [
+                os.getenv('PLANE_ICON_PNG'),
+                os.path.join(dirname, 'plane_icon.png'),
+                os.path.join(dirname, 'plane.png'),
+                os.path.join(dirname, 'assets', 'plane_icon.png'),
+                os.path.join(dirname, 'assets', 'plane.png'),
+            ]
+            for p in candidates:
+                if p and os.path.exists(p):
+                    icon = cv2.imread(p, cv2.IMREAD_UNCHANGED)
+                    if icon is not None and icon.size > 0:
+                        break
+        except Exception:
+            icon = None
+
+        if icon is not None and icon.ndim in (2, 3, 4):
+            # Döndür ve merkezde bindir
+            # 0 derece = Kuzey olacak şekilde hizala (PNG başı genelde sağ/East varsayıldığında +90)
+            ang = float(heading_deg) - 90.0
+            ih, iw = icon.shape[:2]
+            M = cv2.getRotationMatrix2D((iw/2.0, ih/2.0), ang, 1.0)
+            abs_cos = abs(M[0,0]); abs_sin = abs(M[0,1])
+            nW = int(ih * abs_sin + iw * abs_cos)
+            nH = int(ih * abs_cos + iw * abs_sin)
+            M[0,2] += (nW/2.0) - iw/2.0
+            M[1,2] += (nH/2.0) - ih/2.0
+            rot = cv2.warpAffine(icon, M, (nW, nH), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
+
+            # Ölçekle (en büyük boyutu size_px olacak şekilde)
+            scale = float(size_px) / max(nW, nH)
+            if scale != 1.0:
+                rot = cv2.resize(rot, (max(1,int(nW*scale)), max(1,int(nH*scale))), interpolation=cv2.INTER_AREA)
+            rh, rw = rot.shape[:2]
+
+            # ROI belirle ve alfa ile bindir
+            x1 = cx - rw//2; y1 = cy - rh//2
+            x2 = x1 + rw;   y2 = y1 + rh
+            H, W = img.shape[:2]
+            rx1 = max(0, x1); ry1 = max(0, y1)
+            rx2 = min(W, x2); ry2 = min(H, y2)
+            if rx1 < rx2 and ry1 < ry2:
+                sx1 = rx1 - x1; sy1 = ry1 - y1; sx2 = sx1 + (rx2 - rx1); sy2 = sy1 + (ry2 - ry1)
+                overlay = rot[sy1:sy2, sx1:sx2]
+                base = img[ry1:ry2, rx1:rx2]
+                if overlay.shape[2] == 4:
+                    alpha = overlay[:,:,3:4].astype(np.float32) / 255.0
+                    fg = overlay[:,:,:3].astype(np.float32)
+                    bg = base.astype(np.float32)
+                    comp = alpha * fg + (1.0 - alpha) * bg
+                    img[ry1:ry2, rx1:rx2] = np.clip(comp, 0, 255).astype(np.uint8)
+                else:
+                    img[ry1:ry2, rx1:rx2] = overlay
+            return
+
+        # 2) PNG yoksa vektörel siluet çiz
+        h = float(size_px)
+        w = h * 0.7
+        pts = np.array([
+            [0.00*w, -0.60*h],   # burun
+            [0.12*w, -0.45*h],   # gövde sağ (ileri)
+            [0.18*w, -0.15*h],   # gövde sağ (kanat öncesi)
+            [0.60*w,  0.02*h],   # sağ kanat ucu
+            [0.20*w,  0.08*h],   # sağ kanat arkası
+            [0.18*w,  0.42*h],   # gövde sağ (arka)
+            [0.35*w,  0.52*h],   # sağ yatay stabilize ucu
+            [0.12*w,  0.55*h],   # kuyruk sağ
+            [0.00*w,  0.60*h],   # kuyruk orta
+            [-0.12*w, 0.55*h],   # kuyruk sol
+            [-0.35*w, 0.52*h],   # sol yatay stabilize ucu
+            [-0.18*w, 0.42*h],   # gövde sol (arka)
+            [-0.20*w, 0.08*h],   # sol kanat arkası
+            [-0.60*w, 0.02*h],   # sol kanat ucu
+            [-0.18*w,-0.15*h],   # gövde sol (kanat öncesi)
+            [-0.12*w,-0.45*h],   # gövde sol (ileri)
+        ], dtype=np.float32)
+
+        cockpit = np.array([
+            [0.00*w, -0.52*h],
+            [0.09*w, -0.40*h],
+            [-0.09*w, -0.40*h],
+        ], dtype=np.float32)
+
+        # 0 derece = Kuzey (yukarı) olacak şekilde hizala
+        ang = float(heading_deg)
+        rad = np.deg2rad(ang)
+        c, s = np.cos(rad), np.sin(rad)
+        R = np.array([[c, -s], [s, c]], dtype=np.float32)
+
+        pts_rot = (pts @ R.T);
+        cockpit_rot = (cockpit @ R.T)
+        pts_rot[:, 0] += cx;  pts_rot[:, 1] += cy
+        cockpit_rot[:, 0] += cx; cockpit_rot[:, 1] += cy
+        pts_i = pts_rot.astype(np.int32)
+        cp_i = cockpit_rot.astype(np.int32)
+
+        cv2.fillPoly(img, [pts_i], color)
+        cv2.fillPoly(img, [cp_i], (0, 0, 0))
+        if outline_thickness > 0:
+            cv2.polylines(img, [pts_i], isClosed=True, color=outline, thickness=outline_thickness, lineType=cv2.LINE_AA)
+    except Exception:
+        try:
+            cv2.circle(img, (cx, cy), 10, color, 2)
+        except Exception:
+            pass
 
 
 def rotate_image(image, angle):
@@ -617,6 +809,12 @@ def rotated_rect(w, h, angle):
 #%%
 
 #simulasyon olarak çalışması için true olarak ayarlayın, Benchmark için false olarak ayarlayın
+# -----------------------------------------------------------------------------
+# Global ayarlar ve sabitler
+# - benchmark: Görsel ve adım adım akış yerine daha yalın/performans denemesi
+# - PATCH_SIZE/PRED_BORDER: Modelin beklediği giriş ve çıktı kenar kırpma miktarı
+# - USE_PYRAMID/COARSE_SCALE/ROI_PAD_FACTOR: Template Matching'i hızlandırma parametreleri
+# -----------------------------------------------------------------------------
 benchmark=False
 
 # Global debug and sizing constants
@@ -873,6 +1071,7 @@ if __name__ == '__main__':
         pass
     
     #haritalar klasöründeki ilk görüntüde DEM verileri vardır. ikinci görüntü ise normal rgb görüntüdür.
+    # 1) Yol/klasör hazırlığı: haritalar (ana harita), model (Keras), parcalar (anlık görüntüler)
     harita_yol=dirname+'/haritalar/'
     harita_yol_list=os.listdir(harita_yol)
     model_yol=dirname+'/model/'
@@ -924,6 +1123,7 @@ if __name__ == '__main__':
     
     #DEM verileri aktarılır
     
+    # 3) DEM rasterını (elevation) aç
     filename = ana_harita_elevation
             
     dataset = gdal.Open(filename)
@@ -941,6 +1141,7 @@ if __name__ == '__main__':
     #%%
     
     
+    # 4) Başlangıç durumları ve toplayıcılar
     cerceve_boyutu=cerceve_boyutu_deger
     sonuclar = []
     
@@ -966,6 +1167,7 @@ if __name__ == '__main__':
         dogru_tahmin=0
         yanlis_tahmin=0
         ana_harita="haritalar/"+harita_yol_list[k]
+        # Referans haritayı gri-ton olarak oku (Template Matching için daha uygundur)
           
         t_img = cv2.imread(ana_harita,0)  #haritalar klasöründeki ikinci görüntüyü okur
         print(t_img.shape)
@@ -978,6 +1180,7 @@ if __name__ == '__main__':
         kenarx=int(t_img.shape[0]/512)
         
         #parcalar klasöründeki anlık görüntüleri getirir
+        # 6) parcalar klasöründeki anlık görüntüleri getirir
         anlik_yol = os.getenv("ANLIK_YOL", os.path.join(dirname, 'parcalar'))
         
         #anlik_yol="parcalar/"
@@ -986,6 +1189,7 @@ if __name__ == '__main__':
         
         #anlik_goruntu=anlik_yol+anlik_yol_list[0]
         
+        # Dosyaları zamana göre sırala (akış sırasını korumak için pratik)
         anlik_yol_list = sorted( anlik_yol_list,
                                 key = lambda x: os.path.getmtime(os.path.join(anlik_yol, x))  # tarihe göre klasördeki dosyaları sıralar
                                 )
@@ -998,6 +1202,7 @@ if __name__ == '__main__':
         uzaklik=0
         fark=100
         irtifa_dizisi=[]
+        # 7) Her anlık görüntü için döngü
         for i in range(len(anlik_yol_list)):
             
             yanlis_pozitif_kontrol = 0            
@@ -1076,6 +1281,7 @@ if __name__ == '__main__':
             
            
             # Use pre-opened map and transformer for fast lookups
+            # Harita üzerinde EXIF koordinatına karşılık gelen pikseli bul
             knm = piksel_bul_fast(map_ds, ll_to_map, gps_longitude, gps_latitude)
             
 
@@ -1083,6 +1289,7 @@ if __name__ == '__main__':
             
                        
                 
+            # İlk karede EXIF konumuna yakın çevrede, sonraki karelerde bir önceki tahmine yakın çevrede ara
             if benchmark==False:
                 
                 if i==0:
@@ -1224,6 +1431,7 @@ if __name__ == '__main__':
             
             #################################################################################################
             
+            # 7.1) Anlık görüntüyü oku ve yaw/ölçek ile döndürmeye hazırla
             # Reading the image
             image = cv2.imread(anlik_goruntu,0)
             
@@ -1269,6 +1477,7 @@ if __name__ == '__main__':
             
             height,width= (cr_image.shape[0],cr_image.shape[1])
             
+            # Üç farklı ölçek kullan: merkez, sol-üst ve sağ-alt rakıma göre düzelt
             rotated_image = cuda_resize_if_available(cr_image, (int(width*olcek_scale_test), int(height*olcek_scale_test)), interpolation=cv2.INTER_NEAREST)
             
             olcek_scale_sol_ust=olcek_scale_test*(rakim_sol_ust/rakim)
@@ -1322,6 +1531,7 @@ if __name__ == '__main__':
                 _ = cv2.waitKey(1) 
             
             
+            # 7.2) Template listesi (3 ölçek)
             template=[]
             
             template.append(rotated_part1)
@@ -1340,6 +1550,7 @@ if __name__ == '__main__':
             # model = load_model(model_yolu)
             
             # Batch preprocess and predict for the 3 templates
+            # 7.3) Model giriş ön işlemleri (resize/equalize/normalize)
             pre_list = []
             for j in range(3):
                 t_resized = cv2.resize(template[j], (PATCH_SIZE, PATCH_SIZE), interpolation=cv2.INTER_NEAREST)
@@ -1386,6 +1597,7 @@ if __name__ == '__main__':
             inputs=[(cerceve,template[0]),(cerceve,template[1]),(cerceve,template[2])]
             # Template matching (sequential to avoid IPC overhead)
             res1, res2, res3 = match_three(cerceve, [template[0], template[1], template[2]])
+            # Not: CUDA varsa tek seferde görüntü yüklenip üç eşleşme GPU’da yapılır; aksi halde CPU.
             #methods =['cv2.TM_CCOEFF']
             #for meth in methods:
                 #method  = eval(meth)    #stringleri fonksiyona çeviren fonksiyona
@@ -1421,6 +1633,7 @@ if __name__ == '__main__':
                  
             
                  
+            # Üç aday dikdörtgenin (x,y,w,h) biçiminde paketlenmesi
             a=(top_left1[0],top_left1[1],w,h)
             b=(top_left2[0],top_left2[1],w,h)
             c=(top_left3[0],top_left3[1],w,h)
@@ -1481,6 +1694,7 @@ if __name__ == '__main__':
             
             
             
+            # Kesişim merkezinin koordinatı (piksel cinsinden)
             konum_y=kare[0]+int(kare[2]/2)
             konum_x=kare[1]+int(kare[3]/2)
                 
@@ -1525,6 +1739,7 @@ if __name__ == '__main__':
             
             
             
+            # Başarı eşiği: 70 metre (0.07 km). Duruma göre TP/FP/TN/FN sayaçları güncellenir.
             if(uzaklik<=0.07):
                 if yanlis_negatif_kontrol>0:
                     yanlis_negatif+=1
@@ -1598,13 +1813,19 @@ if __name__ == '__main__':
                 resalt= 0
                 
             
+            # Uçak simgesini (gerçek konum ve heading ile) çiz
+            try:
+                draw_plane_icon_v2(img, (knm[1], knm[0]), yaw, size_px=220, color=(0,255,255), outline=(0,0,0), outline_thickness=10)
+            except Exception:
+                pass
+
             res = img[ressol:ressag,resust:resalt] 
                 
                 
                 
             window_name = 'Image'
 
-            # Clean HUD with semi-transparent background instead of raw text
+            # 7.4) HUD: başlık (yaw), uçuş yüksekliği ve hatayı göster; ölçek çubuğu ve hedef işaretleri çiz
             hud_lines = [
                 f"HDG: {yaw:.1f} deg",
                 f"ALT: {int(ucus_yuksekligi)} m",
@@ -1666,6 +1887,7 @@ if __name__ == '__main__':
             print((i+1),"/",(len(anlik_yol_list)),"     dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) +",  dogru pozitif: "+str(dogru_pozitif)+",  yanlış pozitif: "+str(yanlis_pozitif)+",  dogru negatif: "+str(dogru_negatif)+",  yanlış negatif: "+str(yanlis_negatif)+"\n")
          
         
+        # 8) Döngü sonu: kaynakları serbest bırak, hata metriklerini hesapla ve çıktı dosyalarına yaz
         # Close map dataset for this loop to free resources
         try:
             map_ds.close()
