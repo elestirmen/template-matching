@@ -697,49 +697,7 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
     cv2.putText(img, label, (tx, ty), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
 
-def draw_plane_icon(img, center, heading_deg, size_px=180,
-                    color=(255, 0, 255), outline=(0, 0, 0), outline_thickness=6):
-    """GerÃ§ek konumu bir uÃ§ak simgesi ile gÃ¶stermek iÃ§in basit bir ikon Ã§izer.
 
-    - center: (x, y) piksel koordinatÄ± (Ã¶rn. (knm[1], knm[0]))
-    - heading_deg: yaw/heading (derece). 0=Kuzey, pozitif saat yÃ¶nÃ¼ varsayÄ±mÄ± ile -yaw uygulanÄ±r.
-    - size_px: ikonun uzunluÄŸu (burun-kuyruk arasÄ±) piksel cinsinden.
-    """
-    try:
-        cx, cy = int(center[0]), int(center[1])
-        h = float(size_px)
-        w = h * 0.7
-
-        # Basit uÃ§ak silueti (burun yukarÄ± bakacak ÅŸekilde tanÄ±mlÄ±)
-        pts = np.array([
-            [0.0, -0.5 * h],      # burun
-            [0.5 * w, -0.15 * h], # saÄŸ kanat ucu
-            [0.25 * w, 0.50 * h], # saÄŸ kuyruk
-            [0.0, 0.33 * h],      # gÃ¶vde alt
-            [-0.25 * w, 0.50 * h],# sol kuyruk
-            [-0.5 * w, -0.15 * h] # sol kanat ucu
-        ], dtype=np.float32)
-
-        # Ä°konu heading'e gÃ¶re dÃ¶ndÃ¼r (OpenCV pozitif=CCW, yaw pozitif= saat yÃ¶nÃ¼ varsayÄ±mÄ±yla -yaw)
-        ang = float(heading_deg)
-        rad = np.deg2rad(ang)
-        c, s = np.cos(rad), np.sin(rad)
-        R = np.array([[c, -s], [s, c]], dtype=np.float32)
-        pts_rot = (pts @ R.T)
-        pts_rot[:, 0] += cx
-        pts_rot[:, 1] += cy
-        pts_i = pts_rot.astype(np.int32)
-
-        # Doldur + kenarlÄ±k
-        cv2.fillPoly(img, [pts_i], color)
-        if outline_thickness > 0:
-            cv2.polylines(img, [pts_i], isClosed=True, color=outline, thickness=outline_thickness, lineType=cv2.LINE_AA)
-    except Exception:
-        # Hata durumunda bir yedek iÅŸaret bÄ±rak (kÃ¼Ã§Ã¼k daire)
-        try:
-            cv2.circle(img, (cx, cy), 10, color, 2)
-        except Exception:
-            pass
 
 
 
@@ -815,51 +773,160 @@ def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
                     img[ry1:ry2, rx1:rx2] = overlay
             return
 
-        # 2) PNG yoksa vektÃ¶rel siluet Ã§iz
-        h = float(size_px)
-        w = h * 0.7
-        pts = np.array([
-            [0.00*w, -0.60*h],   # burun
-            [0.12*w, -0.45*h],   # gÃ¶vde saÄŸ (ileri)
-            [0.18*w, -0.15*h],   # gÃ¶vde saÄŸ (kanat Ã¶ncesi)
-            [0.60*w,  0.02*h],   # saÄŸ kanat ucu
-            [0.20*w,  0.08*h],   # saÄŸ kanat arkasÄ±
-            [0.18*w,  0.42*h],   # gÃ¶vde saÄŸ (arka)
-            [0.35*w,  0.52*h],   # saÄŸ yatay stabilize ucu
-            [0.12*w,  0.55*h],   # kuyruk saÄŸ
-            [0.00*w,  0.60*h],   # kuyruk orta
-            [-0.12*w, 0.55*h],   # kuyruk sol
-            [-0.35*w, 0.52*h],   # sol yatay stabilize ucu
-            [-0.18*w, 0.42*h],   # gÃ¶vde sol (arka)
-            [-0.20*w, 0.08*h],   # sol kanat arkasÄ±
-            [-0.60*w, 0.02*h],   # sol kanat ucu
-            [-0.18*w,-0.15*h],   # gÃ¶vde sol (kanat Ã¶ncesi)
-            [-0.12*w,-0.45*h],   # gÃ¶vde sol (ileri)
+        # 2) PNG yoksa vektorel siluet cizer
+        length = float(size_px)
+        if length <= 0:
+            return
+
+        def _normalize_rgb(col):
+            if isinstance(col, (list, tuple, np.ndarray)):
+                vals = list(col)
+            else:
+                vals = [col, col, col]
+            if len(vals) < 3:
+                vals += [0] * (3 - len(vals))
+            return tuple(int(np.clip(float(v), 0, 255)) for v in vals[:3])
+
+        def _blend_rgb(src, target, alpha):
+            return tuple(int(np.clip(src[i] * alpha + target[i] * (1.0 - alpha), 0, 255)) for i in range(3))
+
+        base_color = _normalize_rgb(color)
+        outline_rgb = _normalize_rgb(outline if outline is not None else (0, 0, 0))
+        fuselage_color = _blend_rgb(base_color, (255, 255, 255), 0.75)
+        wing_color = _blend_rgb(base_color, (220, 220, 220), 0.45)
+        tail_color = _blend_rgb(base_color, (200, 200, 200), 0.5)
+        highlight_color = _blend_rgb(base_color, (255, 255, 255), 0.7)
+        canopy_color = (55, 65, 80)
+
+        fuselage_width = length * 0.12
+        nose_width = fuselage_width * 0.55
+        wing_span = length * 0.62
+        tail_span = length * 0.28
+
+        outline_pts = np.array([
+            [0.0, -0.60 * length],
+            [nose_width, -0.52 * length],
+            [fuselage_width, -0.34 * length],
+            [wing_span, -0.02 * length],
+            [wing_span * 0.95, 0.12 * length],
+            [fuselage_width * 0.95, 0.24 * length],
+            [tail_span, 0.44 * length],
+            [0.08 * length, 0.60 * length],
+            [0.0, 0.66 * length],
+            [-0.08 * length, 0.60 * length],
+            [-tail_span, 0.44 * length],
+            [-fuselage_width * 0.95, 0.24 * length],
+            [-wing_span * 0.95, 0.12 * length],
+            [-wing_span, -0.02 * length],
+            [-fuselage_width, -0.34 * length],
+            [-nose_width, -0.52 * length],
+        ], dtype=np.float32)
+
+        fuselage = np.array([
+            [0.0, -0.58 * length],
+            [nose_width * 0.9, -0.46 * length],
+            [fuselage_width * 0.7, -0.26 * length],
+            [fuselage_width * 0.6, 0.28 * length],
+            [0.0, 0.58 * length],
+            [-fuselage_width * 0.6, 0.28 * length],
+            [-fuselage_width * 0.7, -0.26 * length],
+            [-nose_width * 0.9, -0.46 * length],
+        ], dtype=np.float32)
+
+        wing_right = np.array([
+            [fuselage_width * 0.97, -0.025 * length],
+            [wing_span, 0.0 * length],
+            [wing_span * 0.97, 0.04 * length],
+            [fuselage_width * 0.94, 0.015 * length],
+        ], dtype=np.float32)
+        wing_left = wing_right.copy()
+        wing_left[:, 0] *= -1
+
+        wing_left = wing_right.copy()
+        wing_left[:, 0] *= -1
+
+        tail_right = np.array([
+            [fuselage_width * 0.55, 0.32 * length],
+            [tail_span, 0.40 * length],
+            [tail_span * 0.85, 0.48 * length],
+            [fuselage_width * 0.45, 0.44 * length],
+        ], dtype=np.float32)
+        tail_left = tail_right.copy()
+        tail_left[:, 0] *= -1
+
+        vertical_tail = np.array([
+            [0.0, 0.30 * length],
+            [fuselage_width * 0.28, 0.54 * length],
+            [0.0, 0.64 * length],
+            [-fuselage_width * 0.28, 0.54 * length],
         ], dtype=np.float32)
 
         cockpit = np.array([
-            [0.00*w, -0.52*h],
-            [0.09*w, -0.40*h],
-            [-0.09*w, -0.40*h],
+            [0.0, -0.48 * length],
+            [fuselage_width * 0.38, -0.38 * length],
+            [0.0, -0.30 * length],
+            [-fuselage_width * 0.38, -0.38 * length],
         ], dtype=np.float32)
 
-        # 0 derece = Kuzey (yukarÄ±) olacak ÅŸekilde hizala
         ang = float(heading_deg)
         rad = np.deg2rad(ang)
         c, s = np.cos(rad), np.sin(rad)
         R = np.array([[c, -s], [s, c]], dtype=np.float32)
 
-        pts_rot = (pts @ R.T);
-        cockpit_rot = (cockpit @ R.T)
-        pts_rot[:, 0] += cx;  pts_rot[:, 1] += cy
-        cockpit_rot[:, 0] += cx; cockpit_rot[:, 1] += cy
-        pts_i = pts_rot.astype(np.int32)
-        cp_i = cockpit_rot.astype(np.int32)
+        def _transform(points_array):
+            pts = np.array(points_array, dtype=np.float32)
+            if pts.size == 0:
+                return None
+            pts_rot = pts @ R.T
+            pts_rot[:, 0] += cx
+            pts_rot[:, 1] += cy
+            return pts_rot.astype(np.int32)
 
-        cv2.fillPoly(img, [pts_i], color)
-        cv2.fillPoly(img, [cp_i], (0, 0, 0))
+        outline_i = _transform(outline_pts)
+        if outline_i is None:
+            return
+        cv2.fillPoly(img, [outline_i], base_color)
+
+        overlays = [
+            (tail_right, tail_color),
+            (tail_left, tail_color),
+            (vertical_tail, tail_color),
+            (wing_right, wing_color),
+            (wing_left, wing_color),
+            (fuselage, fuselage_color),
+        ]
+        for shape, col in overlays:
+            pts_i = _transform(shape)
+            if pts_i is not None:
+                cv2.fillPoly(img, [pts_i], col)
+
+        cockpit_i = _transform(cockpit)
+        if cockpit_i is not None:
+            cv2.fillPoly(img, [cockpit_i], canopy_color)
+
+        detail_thickness = max(1, outline_thickness // 3) if outline_thickness else 1
+        wing_detail_thickness = max(1, outline_thickness // 4) if outline_thickness else 1
+
+        nose_point = _transform(np.array([[0.0, -0.60 * length]], dtype=np.float32))
+        if nose_point is not None and nose_point.shape[0] == 1:
+            cv2.circle(img, tuple(nose_point[0]), max(1, detail_thickness), highlight_color, thickness=-1, lineType=cv2.LINE_AA)
+
+        spine = _transform(np.array([[0.0, -0.50 * length], [0.0, 0.56 * length]], dtype=np.float32))
+        if spine is not None and spine.shape[0] == 2:
+            cv2.line(img, tuple(spine[0]), tuple(spine[1]), highlight_color, thickness=detail_thickness, lineType=cv2.LINE_AA)
+
+        wing_lines = [
+            np.array([[fuselage_width * 0.97, -0.003 * length], [wing_span * 0.97, 0.032 * length]], dtype=np.float32),
+            np.array([[-fuselage_width * 0.97, -0.003 * length], [-wing_span * 0.97, 0.032 * length]], dtype=np.float32),
+        ]
+        for line in wing_lines:
+            pts = _transform(line)
+            if pts is not None and pts.shape[0] == 2:
+                cv2.line(img, tuple(pts[0]), tuple(pts[1]), highlight_color, thickness=wing_detail_thickness, lineType=cv2.LINE_AA)
+
         if outline_thickness > 0:
-            cv2.polylines(img, [pts_i], isClosed=True, color=outline, thickness=outline_thickness, lineType=cv2.LINE_AA)
+            cv2.polylines(img, [outline_i], isClosed=True, color=outline_rgb, thickness=outline_thickness, lineType=cv2.LINE_AA)
+
     except Exception:
         try:
             cv2.circle(img, (cx, cy), 10, color, 2)
