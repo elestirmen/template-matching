@@ -2857,9 +2857,9 @@ if __name__ == '__main__':
                 f"VEL: ({speed_vx_mps:+.2f}, {speed_vy_mps:+.2f}) m/s",
             ]
             # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
-            _hud_font_scale = 6
-            _hud_thickness = 20
-            _hud_padding = 25
+            _hud_font_scale = 4.5
+            _hud_thickness = 14
+            _hud_padding = 20
             try:
                 _hud_sizes = [cv2.getTextSize(s, cv2.FONT_HERSHEY_SIMPLEX,
                               _hud_font_scale, _hud_thickness)[0] for s in hud_lines]
