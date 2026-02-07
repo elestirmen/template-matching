@@ -529,10 +529,10 @@ def parse_exif(image_path):
     mk = get_field(exif, 'MakerNote')
     if mk is not None:
         s = str(mk)
-        m = re.search(r'FlightDegree[^0-9]*([0-9]+)', s)
+        m = re.search(r'FlightDegree[^0-9+-]*([+-]?\d+(?:\.\d+)?)', s)
         if m:
             try:
-                yaw = int(m.group(1)) / 10.0
+                yaw = float(m.group(1)) / 10.0
             except Exception:
                 yaw = 0.0
 
@@ -548,6 +548,12 @@ def parse_exif(image_path):
         if coord is None:
             return None
         try:
+            if isinstance(ref, bytes):
+                ref = ref.decode(errors='ignore')
+            if isinstance(ref, str):
+                ref = ref.strip().upper()
+            else:
+                ref = str(ref).strip().upper()
             d = _to_float_ratio(coord[0])
             m = _to_float_ratio(coord[1])
             s = _to_float_ratio(coord[2])
@@ -562,7 +568,11 @@ def parse_exif(image_path):
     longitude = conv(lon_ref, lon_val)
 
     altitude = _to_float_ratio(alt_val)
-    if altitude is not None and alt_ref == 1:
+    if isinstance(alt_ref, (bytes, bytearray)) and len(alt_ref) > 0:
+        alt_ref = int(alt_ref[0])
+    # Bazi DJI veri setlerinde GPSAltitudeRef guvenilir degil olabiliyor.
+    # Varsayilan olarak isareti ters cevirmiyoruz; ihtiyac olursa env ile ac.
+    if altitude is not None and alt_ref == 1 and os.getenv("USE_GPS_ALT_REF_SIGN", "0") == "1":
         altitude = -altitude
 
     fl = get_field(exif, 'FocalLength')
@@ -1369,10 +1379,23 @@ if __name__ == '__main__':
     
     #haritalar klasÃ¶rÃ¼ndeki ilk gÃ¶rÃ¼ntÃ¼de DEM verileri vardÄ±r. ikinci gÃ¶rÃ¼ntÃ¼ ise normal rgb gÃ¶rÃ¼ntÃ¼dÃ¼r.
     # 1) Yol/klasÃ¶r hazÄ±rlÄ±ÄŸÄ±: haritalar (ana harita), model (Keras), parcalar (anlÄ±k gÃ¶rÃ¼ntÃ¼ler)
-    harita_yol=dirname+'/haritalar/'
-    harita_yol_list=os.listdir(harita_yol)
-    model_yol=dirname+'/model/'
-    model_list=os.listdir(model_yol)
+    harita_yol = os.path.join(dirname, 'haritalar')
+    harita_yol_list = [f for f in os.listdir(harita_yol) if os.path.isfile(os.path.join(harita_yol, f))]
+    model_yol = os.path.join(dirname, 'model')
+    model_list = [f for f in os.listdir(model_yol) if os.path.isfile(os.path.join(model_yol, f))]
+    if os.getenv("SORT_INPUTS", "0") == "1":
+        harita_yol_list = sorted(harita_yol_list)
+        model_list = sorted(model_list)
+    if not harita_yol_list:
+        raise RuntimeError(f"Harita dosyasi bulunamadi: {harita_yol}")
+    if not model_list:
+        raise RuntimeError(f"Model dosyasi bulunamadi: {model_yol}")
+    if len(harita_yol_list) != len(model_list):
+        print(
+            f"Uyari: harita/model sayisi farkli (harita={len(harita_yol_list)}, model={len(model_list)}). "
+            f"Ilk {min(len(harita_yol_list), len(model_list))} cift kullanilacak."
+        )
+    eslesme_sayisi = min(len(harita_yol_list), len(model_list))
     #ana_harita_elevation = "urgup_genis_elevations.tif"
     #ana_harita_elevation="urgup_gmap_30_cm_elevations_560.tif"
     #ana_harita_elevation = "ana_harita_urgup_30_cm_elevation_544.tif"
@@ -1394,7 +1417,7 @@ if __name__ == '__main__':
     from affine import Affine
  
     #fname = 'urgup_gmap_georef.tif'
-    fname = harita_yol+harita_yol_list[0]
+    fname = os.path.join(harita_yol, harita_yol_list[0])
     # Read raster (metadata only)
     with rasterio.open(fname) as r:
         T0 = r.transform  # upper-left pixel corner affine transform
@@ -1422,6 +1445,8 @@ if __name__ == '__main__':
     
     # 3) DEM rasterÄ±nÄ± (elevation) aÃ§
     filename = ana_harita_elevation
+    if not os.path.isabs(filename):
+        filename = os.path.join(dirname, filename)
             
     dataset = gdal.Open(filename)
     
@@ -1449,24 +1474,27 @@ if __name__ == '__main__':
     
     
     
-    for k in range(len(harita_yol_list)):
+    for k in range(eslesme_sayisi):
         yanlis_pozitif=0
         dogru_pozitif=0
         dogru_negatif=0
         yanlis_negatif=0
         uzaklik_hatalari = []
         
-        model_yolu=model_yol+model_list[k]                
+        model_yolu = os.path.join(model_yol, model_list[k])
         model = load_model(model_yolu)        
         
         
           
         dogru_tahmin=0
         yanlis_tahmin=0
-        ana_harita="haritalar/"+harita_yol_list[k]
+        ana_harita = os.path.join(harita_yol, harita_yol_list[k])
         # Referans haritayÄ± gri-ton olarak oku (Template Matching iÃ§in daha uygundur)
           
         t_img = cv2.imread(ana_harita,0)  #haritalar klasÃ¶rÃ¼ndeki ikinci gÃ¶rÃ¼ntÃ¼yÃ¼ okur
+        if t_img is None:
+            print("Harita okunamadi, atlaniyor:", ana_harita)
+            continue
         print(t_img.shape)
 
         # Open main map once per loop and reuse for pixel lookups
@@ -1482,20 +1510,14 @@ if __name__ == '__main__':
         
         #anlik_yol="parcalar/"
         
-        anlik_yol_list=os.listdir(anlik_yol)
-        
-        #anlik_goruntu=anlik_yol+anlik_yol_list[0]
-        
-        # DosyalarÄ± zamana gÃ¶re sÄ±rala (akÄ±ÅŸ sÄ±rasÄ±nÄ± korumak iÃ§in pratik)
-        anlik_yol_list = sorted( anlik_yol_list,
-                                key = lambda x: os.path.getmtime(os.path.join(anlik_yol, x))  # tarihe gÃ¶re klasÃ¶rdeki dosyalarÄ± sÄ±ralar
-                                )
-        # Liste elemanlarÄ±nÄ± tam yola Ã§evir (Ã¶rn. 'DJI_0001.JPG' -> '.../parcalar/DJI_0001.JPG')
-        try:
-            if anlik_yol_list and not os.path.isabs(anlik_yol_list[0]):
-                anlik_yol_list = [os.path.join(anlik_yol, x) for x in anlik_yol_list]
-        except Exception:
-            pass
+        anlik_yol_list = sorted(
+            [
+                os.path.join(anlik_yol, x)
+                for x in os.listdir(anlik_yol)
+                if os.path.isfile(os.path.join(anlik_yol, x))
+            ],
+            key=lambda p: os.path.getmtime(p),
+        )
         uzaklik=0
         fark=100
         irtifa_dizisi=[]
@@ -1516,64 +1538,43 @@ if __name__ == '__main__':
             img = t_img
             
             print(img.shape)
-            #anlik_goruntu = "parcalar/"+anlik_yol_list[i]  #klasÃ¶rdeki ilk gÃ¶rÃ¼ntÃ¼yÃ¼ getir
-            anlik_goruntu = anlik_yol+anlik_yol_list[i]  #klasÃ¶rdeki ilk gÃ¶rÃ¼ntÃ¼yÃ¼ getir
-            
-            # EÄŸer liste elemanÄ± zaten tam yol ise doÄŸrudan kullan
-            try:
-                if os.path.isabs(anlik_yol_list[i]):
-                    anlik_goruntu = anlik_yol_list[i]
-            except Exception:
-                pass
-
-            # Yol dÃ¼zeltme: liste elemanÄ± + klasÃ¶r ile doÄŸru tam yolu dene
-            try:
-                _cand = os.path.join(anlik_yol, os.path.basename(anlik_yol_list[i]))
-                if (not os.path.exists(anlik_goruntu)) and os.path.exists(_cand):
-                    anlik_goruntu = _cand
-            except Exception:
-                pass
-        
-            #exif bilgileri okunur
-            #####################################################
-            # GÃ¼venli yol birleÅŸtirme
-            if not os.path.isabs(anlik_goruntu):
-                anlik_goruntu = os.path.join(anlik_yol, os.path.basename(anlik_goruntu))
+            anlik_goruntu = anlik_yol_list[i]
             if not os.path.exists(anlik_goruntu):
                 print("dosya bulunamadÄ±:", anlik_goruntu)
                 continue
-            anlik_img=Image.open(anlik_goruntu)
-            exif = anlik_img._getexif()
-            
-            
-            
-            text = str(get_field(exif,'MakerNote'))
-            
-            x = int(text.find("FlightDegree"))          
-            
-            xx=text[x+20:x+25]
-            
-            #uÃ§uÅŸ yÃ¶nÃ¼ bulunurken virgÃ¼le kadarki kÄ±smÄ± alÄ±r ve saaÄ±ya Ã§evirir
-            virgulsirasi=xx.find(",")
-            if(virgulsirasi>0):
-                yaw=float(xx[0:virgulsirasi])/10
-            else:
-                yaw=float(xx)/10
-            
-            
-            GPSInfo =get_field(exif,'GPSInfo')
-            
-            altitude=float(GPSInfo[6])
-            FocalLength = float(get_field(exif,'FocalLength'))
-            gps_latitude_yon = GPSInfo[1]
-            gps_latitude = GPSInfo[2]
-            
-            gps_longitude_yon = GPSInfo[3]
-            gps_longitude = GPSInfo[4]
-            
-            gps_latitude,gps_longitude= (conversion(gps_latitude_yon,gps_latitude),conversion(gps_longitude_yon,gps_longitude))
-            ######################################################
-            kamera_model =get_field(exif,'Model')
+            exif_data = parse_exif(anlik_goruntu)
+            if exif_data is None:
+                print("EXIF okunamadi, atlaniyor:", anlik_goruntu)
+                continue
+
+            yaw = float(exif_data.get('yaw') or 0.0)
+            gps_latitude = exif_data.get('latitude')
+            gps_longitude = exif_data.get('longitude')
+            altitude = exif_data.get('altitude')
+            FocalLength = exif_data.get('focal_length')
+            kamera_model = exif_data.get('model')
+
+            if gps_latitude is None or gps_longitude is None:
+                print("GPS EXIF eksik, atlaniyor:", anlik_goruntu)
+                continue
+            if altitude is None:
+                print("Altitude EXIF eksik, atlaniyor:", anlik_goruntu)
+                continue
+
+            if FocalLength is None or float(FocalLength) <= 0:
+                try:
+                    FocalLength = float(os.getenv("DEFAULT_FOCAL_LENGTH_MM", "8.8"))
+                    print("Uyari: FocalLength EXIF eksik/gecersiz, varsayilan deger kullanildi:", FocalLength)
+                except Exception:
+                    print("FocalLength elde edilemedi, atlaniyor:", anlik_goruntu)
+                    continue
+
+            try:
+                with Image.open(anlik_goruntu) as im_meta:
+                    goruntu_piksel_genisligi, goruntu_piksel_yuksekligi = im_meta.size
+            except Exception:
+                print("Goruntu boyutu okunamadi, atlaniyor:", anlik_goruntu)
+                continue
            
             
            
@@ -1603,7 +1604,7 @@ if __name__ == '__main__':
                         ust= 0
                     if alt<0:
                         alt= 0
-                    cerceve=img[sol:sag,ust:alt]                
+                    cerceve=img[sol:sag,ust:alt]
                     konum=(knm[1],knm[0])
                 else:
                     sol=-int(cerceve_boyutu/2)+konum[1]
@@ -1623,31 +1624,35 @@ if __name__ == '__main__':
                 
                     
             else:
+                cerceve_boyutu=cerceve_boyutu_deger
+                sol=-int(cerceve_boyutu/2)+knm[0]
+                sag=+int(cerceve_boyutu/2)+knm[0]
+                ust=-int(cerceve_boyutu/2)+knm[1]
+                alt=+int(cerceve_boyutu/2)+knm[1]
                 
-                 cerceve_boyutu=cerceve_boyutu_deger
-                 sol=-int(cerceve_boyutu/2)+knm[0]
-                 sag=+int(cerceve_boyutu/2)+knm[0]
-                 ust=-int(cerceve_boyutu/2)+knm[1]
-                 alt=+int(cerceve_boyutu/2)+knm[1]
-                 
-                 if sol<0:
-                     sol=0
-                 if sag<0:
-                     sag= 0
-                 if ust<0:
-                     ust= 0
-                 if alt<0:
-                     alt= 0
-                 konum=(knm[1],knm[0])
-                     
-                 cerceve=img[sol:sag,ust:alt]
+                if sol<0:
+                    sol=0
+                if sag<0:
+                    sag= 0
+                if ust<0:
+                    ust= 0
+                if alt<0:
+                    alt= 0
+                konum=(knm[1],knm[0])
+                
+                cerceve=img[sol:sag,ust:alt]
             
             
             
             
-            # if cerceve.shape[0]==0 or cerceve.shape[1]==0:
-            #     print("cerceve alan dÄ±ÅŸÄ±na Ã§Ä±ktÄ±")
-            #     continue
+            sol = max(0, min(sol, img.shape[0]))
+            sag = max(0, min(sag, img.shape[0]))
+            ust = max(0, min(ust, img.shape[1]))
+            alt = max(0, min(alt, img.shape[1]))
+            if sag <= sol or alt <= ust:
+                print("cerceve gecersiz, atlaniyor")
+                continue
+            cerceve = img[sol:sag,ust:alt]
             
             
             
@@ -1670,50 +1675,52 @@ if __name__ == '__main__':
             dem_konum_sag_alt = piksel_bul_fast(dem_ds, ll_to_dem, sag_alt[1], sag_alt[0])
 
             
-            rakim=DEM_array[dem_konum[0],dem_konum[1]]
-            rakim_sol_ust=DEM_array[dem_konum_sol_ust[0],dem_konum_sol_ust[1]]
-            rakim_sag_alt=DEM_array[dem_konum_sag_alt[0],dem_konum_sag_alt[1]]
-            
-            
-            
-            
-            print(rakim)
-            
-            
-            
-            """
-            try:
-                rakim=DEM_array[knm[1],knm[0]]
-               
-            except:
-                print("dÄ±ÅŸarÄ±da")
+            def _in_dem_bounds(rc):
+                return 0 <= int(rc[0]) < DEM_array.shape[0] and 0 <= int(rc[1]) < DEM_array.shape[1]
+
+            if not (_in_dem_bounds(dem_konum) and _in_dem_bounds(dem_konum_sol_ust) and _in_dem_bounds(dem_konum_sag_alt)):
+                print("DEM disinda kalan koordinat, atlaniyor")
                 continue
-            """
-            rakim_duzeltme=26
-            if kamera_model=="L1D-20c":   
-                #spatial Ã§Ã¶zÃ¼nÃ¼rlÃ¼k elde etme
-                #camera_sensor_genislik=15.9 #mavic2pro iÃ§in 13.2  milimetre sensÃ¶r geniÅŸliÄŸi
-                camera_sensor_genislik = 13.2
-                camera_focal_lenght = FocalLength #mavic2pro iÃ§in 10.26 milimetre
-                ucus_yuksekligi = altitude - rakim   + rakim_duzeltme    #+33 #metre olarak yerden x"x""uÃ§uÅŸ yÃ¼ksekliÄŸi  35 dem dosyasÄ±ndaki hatadan dolayÄ±
-                goruntu_piksel_genisligi = 5472 #5472 #pipksel olarak resmin geniÅŸliÄŸi
-                goruntu_piksel_yuksekligi = 3648 # 3648 #pipksel olarak resmin geniÅŸliÄŸi
-                mekansal_cozunurluk = (camera_sensor_genislik*ucus_yuksekligi*100)/(camera_focal_lenght*goruntu_piksel_genisligi)  #mekansal Ã§Ã¶zÃ¼nÃ¼rlÃ¼k cantimeter/pixel olarak
-                goruntunun_gercek_uzunlugu = (mekansal_cozunurluk*goruntu_piksel_genisligi)/100 #metre olarak               
-                
-                olcek_scale_test=(mekansal_cozunurluk/29.85)    
-            
-            
-            elif kamera_model=="FC2204":   
-                #spatial Ã§Ã¶zÃ¼nÃ¼rlÃ¼k elde etme
-                camera_sensor_genislik=6.17 #mavic2zoom iÃ§in 6.17  milimetre sensÃ¶r geniÅŸliÄŸi
-                camera_focal_lenght= FocalLength  #mavic2zoom iÃ§in 4 milimetre
-                ucus_yuksekligi=altitude - rakim + rakim_duzeltme
-                goruntu_piksel_genisligi =4000 # 4000 #pipksel olarak resmin geniÅŸliÄŸi
-                goruntu_piksel_yuksekligi =3000 # 3000 #pipksel olarak resmin geniÅŸliÄŸi
-                mekansal_cozunurluk = (camera_sensor_genislik*ucus_yuksekligi*100)/(camera_focal_lenght*goruntu_piksel_genisligi)  #mekansal Ã§Ã¶zÃ¼nÃ¼rlÃ¼k cantimeter/pixel olarak
-                goruntunun_gercek_uzunlugu=(mekansal_cozunurluk*goruntu_piksel_genisligi)/100 #metre olarak             
-                olcek_scale_test=(mekansal_cozunurluk/29.85)
+
+            rakim = float(DEM_array[dem_konum[0],dem_konum[1]])
+            rakim_sol_ust = float(DEM_array[dem_konum_sol_ust[0],dem_konum_sol_ust[1]])
+            rakim_sag_alt = float(DEM_array[dem_konum_sag_alt[0],dem_konum_sag_alt[1]])
+
+            if (not np.isfinite(rakim)) or (not np.isfinite(rakim_sol_ust)) or (not np.isfinite(rakim_sag_alt)):
+                print("DEM degeri gecersiz, atlaniyor")
+                continue
+
+            print(rakim)
+
+            rakim_duzeltme = 26
+            camera_sensor_by_model = {
+                "L1D-20c": 13.2,  # Mavic 2 Pro
+                "FC2204": 6.17,   # Mavic 2 Zoom
+            }
+            camera_sensor_genislik = camera_sensor_by_model.get(kamera_model)
+            if camera_sensor_genislik is None:
+                camera_sensor_genislik = float(os.getenv("DEFAULT_SENSOR_WIDTH_MM", "13.2"))
+                print(f"Uyari: bilinmeyen kamera modeli ({kamera_model}), sensor genisligi fallback: {camera_sensor_genislik} mm")
+
+            camera_focal_lenght = float(FocalLength)
+            if camera_focal_lenght <= 0:
+                print("FocalLength gecersiz, atlaniyor:", camera_focal_lenght)
+                continue
+
+            if goruntu_piksel_genisligi <= 0:
+                print("Goruntu piksel genisligi gecersiz, atlaniyor")
+                continue
+
+            ucus_yuksekligi = altitude - rakim + rakim_duzeltme
+            if ucus_yuksekligi <= 0:
+                print("Ucus yuksekligi gecersiz, atlaniyor:", ucus_yuksekligi)
+                continue
+
+            mekansal_cozunurluk = (camera_sensor_genislik * ucus_yuksekligi * 100) / (camera_focal_lenght * goruntu_piksel_genisligi)
+            if mekansal_cozunurluk <= 0:
+                print("Mekansal cozum gecersiz, atlaniyor:", mekansal_cozunurluk)
+                continue
+            olcek_scale_test = (mekansal_cozunurluk / 29.85)
                 
                 
             print("kamera model= ",kamera_model)
@@ -1732,6 +1739,9 @@ if __name__ == '__main__':
             # Reading the image
             image = cv2.imread(anlik_goruntu,0)
             image_color = cv2.imread(anlik_goruntu, cv2.IMREAD_COLOR)
+            if image is None or image_color is None:
+                print("Anlik goruntu okunamadi, atlaniyor:", anlik_goruntu)
+                continue
             
             # dim=(1000,750)
             
@@ -1759,7 +1769,7 @@ if __name__ == '__main__':
             #cv2.imwrite("rotate_edilmis.jpg", rimage)
            
             
-            t=largest_rotated_rect(width,height, angle)
+            t = largest_rotated_rect(width, height, math.radians(angle))
             
             #cv2.imwrite("en_buyuk_ic_dortgen.jpg", t)
        
@@ -1778,17 +1788,27 @@ if __name__ == '__main__':
             height,width= (cr_image.shape[0],cr_image.shape[1])
             
             # ÃœÃ§ farklÄ± Ã¶lÃ§ek kullan: merkez, sol-Ã¼st ve saÄŸ-alt rakÄ±ma gÃ¶re dÃ¼zelt
-            rotated_image = cuda_resize_if_available(cr_image, (int(width*olcek_scale_test), int(height*olcek_scale_test)), interpolation=cv2.INTER_NEAREST)
-            rotated_image_color = cuda_resize_if_available(cr_image_color, (int(width*olcek_scale_test), int(height*olcek_scale_test)), interpolation=cv2.INTER_NEAREST)
-            
-            olcek_scale_sol_ust=olcek_scale_test*(rakim_sol_ust/rakim)
-            olcek_scale_sag_alt=olcek_scale_test*(rakim_sag_alt/rakim)
+            if abs(rakim) < 1e-9:
+                print("Rakim sifira cok yakin, atlaniyor")
+                continue
+
+            base_w = max(1, int(width * olcek_scale_test))
+            base_h = max(1, int(height * olcek_scale_test))
+            rotated_image = cuda_resize_if_available(cr_image, (base_w, base_h), interpolation=cv2.INTER_NEAREST)
+            rotated_image_color = cuda_resize_if_available(cr_image_color, (base_w, base_h), interpolation=cv2.INTER_NEAREST)
+
+            olcek_scale_sol_ust = olcek_scale_test * (rakim_sol_ust / rakim)
+            olcek_scale_sag_alt = olcek_scale_test * (rakim_sag_alt / rakim)
             
             #olcek_scale_sol_ust=olcek_scale_test*(rakim/rakim_sol_ust)
             #olcek_scale_sag_alt=olcek_scale_test*(rakim/rakim_sag_alt)
             
-            rotated_image_sol_ust = cuda_resize_if_available(cr_image, (int(width*olcek_scale_sol_ust), int(height*olcek_scale_sol_ust)), interpolation=cv2.INTER_NEAREST)
-            rotated_image_sag_alt = cuda_resize_if_available(cr_image, (int(width*olcek_scale_sag_alt), int(height*olcek_scale_sag_alt)), interpolation=cv2.INTER_NEAREST)
+            su_w = max(1, int(width * olcek_scale_sol_ust))
+            su_h = max(1, int(height * olcek_scale_sol_ust))
+            sa_w = max(1, int(width * olcek_scale_sag_alt))
+            sa_h = max(1, int(height * olcek_scale_sag_alt))
+            rotated_image_sol_ust = cuda_resize_if_available(cr_image, (su_w, su_h), interpolation=cv2.INTER_NEAREST)
+            rotated_image_sag_alt = cuda_resize_if_available(cr_image, (sa_w, sa_h), interpolation=cv2.INTER_NEAREST)
             
             
             #Ã§Ã¶zÃ¼nÃ¼rlÃ¼ÄŸÃ¼ 30 cm'ye ayarlanmÄ±ÅŸ gÃ¶rÃ¼ntÃ¼nÃ¼n orta noktasÄ± bulnur
@@ -1951,9 +1971,10 @@ if __name__ == '__main__':
                 #     top_left1 =min_loc1
                 # else:
                     
-            top_left1 = (max_loc1[0] + konum[0]-int(cerceve.shape[0]/2),max_loc1[1] + konum[1]-int(cerceve.shape[0]/2))
-            top_left2 = (max_loc2[0] + konum[0]-int(cerceve.shape[0]/2),max_loc2[1] + konum[1]-int(cerceve.shape[0]/2))
-            top_left3 = (max_loc3[0] + konum[0]-int(cerceve.shape[0]/2),max_loc3[1] + konum[1]-int(cerceve.shape[0]/2))
+            # max_loc = (x, y) ROI icindeki koordinattir; global konum icin ROI ofseti eklenir.
+            top_left1 = (max_loc1[0] + ust, max_loc1[1] + sol)
+            top_left2 = (max_loc2[0] + ust, max_loc2[1] + sol)
+            top_left3 = (max_loc3[0] + ust, max_loc3[1] + sol)
             
             
          
@@ -2033,6 +2054,10 @@ if __name__ == '__main__':
             # KesiÅŸim merkezinin koordinatÄ± (piksel cinsinden)
             konum_y=kare[0]+int(kare[2]/2)
             konum_x=kare[1]+int(kare[3]/2)
+            if konum_y < 0:
+                konum_y = 0
+            if konum_x < 0:
+                konum_x = 0
                 
             if konum_y>img.shape[1]:
                 konum_y=img.shape[1]-1
@@ -2097,8 +2122,12 @@ if __name__ == '__main__':
                
                 
                
-            if uzaklik>0.3 and benchmark==False:
-                konum=konum_once
+            if uzaklik > 0.3 and benchmark == False:
+                # Ilk karede geri donus noktasi (0,0) olmasin; EXIF konumuna don.
+                if i == 0:
+                    konum = (knm[1], knm[0])
+                else:
+                    konum = konum_once
                
           
                 
@@ -2232,21 +2261,29 @@ if __name__ == '__main__':
             pass
         uzaklik_hatalari = np.array(uzaklik_hatalari)
 
-        rmse_degeri = rmse(uzaklik_hatalari)
-        mae_degeri = mae(uzaklik_hatalari)
-        standart_sapma_degeri = standart_sapma(uzaklik_hatalari)
+        if uzaklik_hatalari.size > 0:
+            rmse_degeri = rmse(uzaklik_hatalari)
+            mae_degeri = mae(uzaklik_hatalari)
+            standart_sapma_degeri = standart_sapma(uzaklik_hatalari)
+        else:
+            rmse_degeri = float('nan')
+            mae_degeri = float('nan')
+            standart_sapma_degeri = float('nan')
         
         
         # Yeni verilen deÄŸerler iÃ§in tekrar hesaplama yapÄ±lÄ±yor
 
 
         
-        # Hassasiyet ve Geri Ã‡aÄŸÄ±rma hesaplamalarÄ±
-        hassasiyet_yeni = dogru_pozitif / (dogru_pozitif + yanlis_pozitif)
-        geri_cagirma_yeni = dogru_pozitif / (dogru_pozitif + yanlis_negatif)
+        # Hassasiyet ve Geri Cagirma hesaplamalari
+        def _safe_div(num, den, default=0.0):
+            return (num / den) if den else default
+
+        hassasiyet_yeni = _safe_div(dogru_pozitif, (dogru_pozitif + yanlis_pozitif))
+        geri_cagirma_yeni = _safe_div(dogru_pozitif, (dogru_pozitif + yanlis_negatif))
         
         # F Skoru hesaplama
-        f_skoru = 2 * (hassasiyet_yeni * geri_cagirma_yeni) / (hassasiyet_yeni + geri_cagirma_yeni)
+        f_skoru = _safe_div(2 * (hassasiyet_yeni * geri_cagirma_yeni), (hassasiyet_yeni + geri_cagirma_yeni))
         
 
         
@@ -2263,7 +2300,7 @@ if __name__ == '__main__':
         print("dogru tahmin = ",dogru_tahmin)
         print("yanlÄ±ÅŸ tahmin = ",yanlis_tahmin)
         print("yanlÄ±ÅŸ pozitif = ",yanlis_pozitif)
-        yuzde=dogru_tahmin/(dogru_tahmin+yanlis_tahmin)
+        yuzde = _safe_div(dogru_tahmin, (dogru_tahmin + yanlis_tahmin))
         yuzde=yuzde*100
         print("doÄŸruluk yÃ¼zdesi: {:.2f}".format(yuzde))
         
@@ -2273,12 +2310,16 @@ if __name__ == '__main__':
         except Exception as _e:
             print("sonuclar dosyaya yazÄ±lÄ±rken hata:", _e)
 
-        try:
-            dem_ds.close()
-        except Exception:
-            pass
-        try:
-            del dataset
-        except Exception:
-            pass
+        if os.getenv("WAIT_PER_MODEL", "0") == "1":
+            input("pause")
+
+    try:
+        dem_ds.close()
+    except Exception:
+        pass
+    try:
+        del dataset
+    except Exception:
+        pass
+    if os.getenv("WAIT_ON_EXIT", "0") == "1":
         input("pause")
