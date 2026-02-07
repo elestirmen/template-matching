@@ -55,13 +55,16 @@ RUN_CFG = {
     "DRAW_TRAJECTORY": True,
     "TRAJECTORY_DRAW_POINTS": True,
     "TRAJECTORY_MAX_POINTS": 0,   # 0: sinirsiz
-    "TRAJECTORY_LINE_THICKNESS": 10,
-    "TRAJECTORY_POINT_RADIUS": 8,
+    "TRAJECTORY_LINE_THICKNESS": 15,
+    "TRAJECTORY_POINT_RADIUS": 20,
 
     # Runtime UI butonlari (konum penceresinde tikla-ac/kapa)
     "UI_BUTTONS_ENABLED": True,
-    "UI_BUTTON_FONT_SCALE": 0.8,
+    "UI_BUTTON_FONT_SCALE": 1.0,
     "UI_BUTTON_THICKNESS": 2,
+    "UI_BUTTON_SCALE": 0.5,
+    "UI_WINDOW_WIDTH": 1000,
+    "UI_WINDOW_HEIGHT": 1000,
     "SHOW_INNER_FRAME": True,
     "SHOW_TM_BOXES": True,
 
@@ -84,8 +87,11 @@ TRAJECTORY_MAX_POINTS = int(RUN_CFG.get("TRAJECTORY_MAX_POINTS", 0))
 TRAJECTORY_LINE_THICKNESS = int(RUN_CFG.get("TRAJECTORY_LINE_THICKNESS", 10))
 TRAJECTORY_POINT_RADIUS = int(RUN_CFG.get("TRAJECTORY_POINT_RADIUS", 8))
 UI_BUTTONS_ENABLED = bool(RUN_CFG.get("UI_BUTTONS_ENABLED", True))
-UI_BUTTON_FONT_SCALE = float(RUN_CFG.get("UI_BUTTON_FONT_SCALE", 0.8))
-UI_BUTTON_THICKNESS = int(RUN_CFG.get("UI_BUTTON_THICKNESS", 2))
+UI_BUTTON_FONT_SCALE = float(RUN_CFG.get("UI_BUTTON_FONT_SCALE", 1.0))
+UI_BUTTON_THICKNESS = int(RUN_CFG.get("UI_BUTTON_THICKNESS", 3))
+UI_BUTTON_SCALE = float(RUN_CFG.get("UI_BUTTON_SCALE", 1.0))
+UI_WINDOW_WIDTH = int(RUN_CFG.get("UI_WINDOW_WIDTH", 1280))
+UI_WINDOW_HEIGHT = int(RUN_CFG.get("UI_WINDOW_HEIGHT", 960))
 SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", True))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
 
@@ -159,7 +165,7 @@ def _show_image_fit(win_name, img, max_frac=0.95):
             pass
 
 
-def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="SaÄŸ",
+def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="SaÃ„Å¸",
                           target_height=900, apply_colormap_right=True):
     """Create a labeled side-by-side visualization from two grayscale images.
 
@@ -350,11 +356,11 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
         return None
 
 # -----------------------------------------------------------------------------
-# YardÄ±mcÄ± fonksiyonlar gruplarÄ±
-# - CUDA kontrolÃ¼ ve hÄ±zlandÄ±rÄ±lmÄ±ÅŸ iÅŸlemler (resize / template matching)
-# - EXIF/GPS okuma ve dÃ¶nÃ¼ÅŸÃ¼mler (WGS84 <-> UTM, piksel <-> koordinat)
-# - Basit geometri ve metrikler (kesiÅŸim, RMSE/MAE/std, Haversine)
-# - GÃ¶rsel arayÃ¼z yardÄ±mcÄ±larÄ± (HUD paneli, Ã¶lÃ§ek Ã§ubuÄŸu, iÅŸaret Ã§izimi)
+# YardÃ„Â±mcÃ„Â± fonksiyonlar gruplarÃ„Â±
+# - CUDA kontrolÃƒÂ¼ ve hÃ„Â±zlandÃ„Â±rÃ„Â±lmÃ„Â±Ã…Å¸ iÃ…Å¸lemler (resize / template matching)
+# - EXIF/GPS okuma ve dÃƒÂ¶nÃƒÂ¼Ã…Å¸ÃƒÂ¼mler (WGS84 <-> UTM, piksel <-> koordinat)
+# - Basit geometri ve metrikler (kesiÃ…Å¸im, RMSE/MAE/std, Haversine)
+# - GÃƒÂ¶rsel arayÃƒÂ¼z yardÃ„Â±mcÃ„Â±larÃ„Â± (HUD paneli, ÃƒÂ¶lÃƒÂ§ek ÃƒÂ§ubuÃ„Å¸u, iÃ…Å¸aret ÃƒÂ§izimi)
 # -----------------------------------------------------------------------------
 
 # import rasterio as rio
@@ -440,18 +446,18 @@ import pandas as pd
 
 def dosyaya_yaz(sonuclar, dogru_tahmin, yanlis_tahmin):
     
-    # Veri Ã§erÃ§evesini oluÅŸtur
+    # Veri ÃƒÂ§erÃƒÂ§evesini oluÃ…Å¸tur
     df = pd.DataFrame(sonuclar, columns=['goruntu', 'sonuc', 'gercek_latitude', 'gercek_longitude', 'tahmini_latitude', 'tahmini_longitude','ucus_yuksekligi'])
     
-    # EÄŸer her bir hÃ¼cre bir liste iÃ§eriyorsa, bu listelerin ilk elemanÄ±nÄ± al
+    # EÃ„Å¸er her bir hÃƒÂ¼cre bir liste iÃƒÂ§eriyorsa, bu listelerin ilk elemanÃ„Â±nÃ„Â± al
     for column in df.columns:
         df[column] = df[column].apply(lambda x: x[0] if isinstance(x, list) else x)
 
-    # Metin dosyasÄ±na yaz
+    # Metin dosyasÃ„Â±na yaz
     with open("sonuclar.txt", "w") as sonuclar_dosya:
         sonuclar_dosya.write(df.to_string())
     
-    # CSV dosyasÄ±na kaydet
+    # CSV dosyasÃ„Â±na kaydet
     df.to_csv("sonuclar.csv", index=False)
 
 
@@ -462,7 +468,7 @@ def get_field (exif,field) :
      if TAGS.get(k) == field:
         return v
  
- #gos coordinatÄ±nÄ± decimal sisteme Ã§evirir
+ #gos coordinatÃ„Â±nÃ„Â± decimal sisteme ÃƒÂ§evirir
 def conversion(yon,coord):
     direction = {'N':1, 'S':-1, 'E': 1, 'W':-1}  
     
@@ -791,32 +797,107 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
 def _build_runtime_buttons():
     """Return clickable button definitions for runtime visibility toggles."""
     return [
-        {"key": "trajectory", "label": "Trajektori", "rect": (20, 20, 260, 54)},
-        {"key": "inner_frame", "label": "Ic Cerceve", "rect": (20, 84, 260, 54)},
-        {"key": "tm_boxes", "label": "TM RGB Kutu", "rect": (20, 148, 260, 54)},
+        {"key": "trajectory", "label": "Trajektori", "hotkey": "T", "rect": (20, 20, 260, 54)},
+        {"key": "inner_frame", "label": "Ic Cerceve", "hotkey": "I", "rect": (20, 84, 260, 54)},
+        {"key": "tm_boxes", "label": "TM RGB Kutu", "hotkey": "R", "rect": (20, 148, 260, 54)},
     ]
 
 
-def _draw_runtime_buttons(img, ui_state, buttons, font_scale=0.8, thickness=2):
-    """Draw ON/OFF buttons onto the current frame."""
+def _draw_runtime_buttons(
+    img,
+    ui_state,
+    buttons,
+    font_scale=1.0,
+    thickness=3,
+    ui_scale=1.0,
+    display_size=(1280, 960),
+):
+    """Draw adaptive ON/OFF buttons onto the current frame."""
     if img is None or not buttons:
         return
+    try:
+        h_img, w_img = img.shape[:2]
+    except Exception:
+        return
+
+    try:
+        dw = max(1, int(display_size[0]))
+        dh = max(1, int(display_size[1]))
+    except Exception:
+        dw, dh = 1280, 960
+
+    # Keep on-screen apparent button size readable even when the source image is huge.
+    view_scale = max(float(w_img) / float(dw), float(h_img) / float(dh), 1.0)
+    view_scale *= max(0.25, float(ui_scale))
+
+    margin = max(12, int(round(20 * view_scale)))
+    gap = max(8, int(round(12 * view_scale)))
+    bw = max(220, int(round(360 * view_scale)))
+    bh = max(44, int(round(70 * view_scale)))
+    panel_pad = max(8, int(round(14 * view_scale)))
+    header_h = max(26, int(round(38 * view_scale)))
+    bw = min(bw, max(160, w_img - 2 * margin))
+    status_w = max(70, int(round(110 * view_scale)))
+
+    x0 = margin
+    y0 = margin
+    panel_w = bw + (2 * panel_pad)
+    panel_h = header_h + (2 * panel_pad) + (len(buttons) * bh) + (max(0, len(buttons) - 1) * gap)
+    _draw_alpha_panel(img, x0 - panel_pad, y0 - panel_pad, x0 - panel_pad + panel_w, y0 - panel_pad + panel_h, color=(0, 0, 0), alpha=0.48)
+    cv2.rectangle(
+        img,
+        (x0 - panel_pad, y0 - panel_pad),
+        (x0 - panel_pad + panel_w, y0 - panel_pad + panel_h),
+        (255, 255, 255),
+        max(1, int(round(2 * view_scale))),
+    )
+
+    title_scale = max(0.7, float(font_scale) * 0.9 * view_scale)
+    title_thick = max(1, int(round(float(thickness) * view_scale)))
+    title_pos = (x0 + int(round(12 * view_scale)), y0 + int(round(header_h * 0.75)))
+    cv2.putText(img, "GORUNUM KONTROLLERI", (title_pos[0] + 3, title_pos[1] + 3), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (0, 0, 0), title_thick + 2, cv2.LINE_AA)
+    cv2.putText(img, "GORUNUM KONTROLLERI", title_pos, cv2.FONT_HERSHEY_SIMPLEX, title_scale, (255, 255, 255), title_thick, cv2.LINE_AA)
+
+    y = y0 + header_h
+    txt_scale = max(0.75, float(font_scale) * 0.92 * view_scale)
+    txt_thick = max(1, int(round(float(thickness) * view_scale)))
+
     for b in buttons:
-        x, y, w, h = b["rect"]
         key = b["key"]
         is_on = bool(ui_state.get(key, False))
-        fill = (50, 140, 60) if is_on else (70, 70, 70)
-        edge = (0, 255, 0) if is_on else (180, 180, 180)
-        label = f"{b['label']}: {'ON' if is_on else 'OFF'}"
+        label = str(b.get("label", key))
+        hotkey = str(b.get("hotkey", "")).strip()
+        status = "ON" if is_on else "OFF"
 
-        _draw_alpha_panel(img, x, y, x + w, y + h, color=(0, 0, 0), alpha=0.35)
-        cv2.rectangle(img, (x, y), (x + w, y + h), fill, thickness=-1)
-        cv2.rectangle(img, (x, y), (x + w, y + h), edge, thickness=max(1, int(thickness)))
-        cv2.putText(
-            img, label, (x + 12, y + int(h * 0.65)),
-            cv2.FONT_HERSHEY_SIMPLEX, float(font_scale), (255, 255, 255),
-            max(1, int(thickness)), cv2.LINE_AA
-        )
+        fill = (70, 165, 75) if is_on else (65, 70, 95)
+        edge = (80, 255, 80) if is_on else (110, 150, 255)
+        status_fill = (20, 120, 20) if is_on else (40, 40, 135)
+
+        b["rect"] = (x0, y, bw, bh)
+        _draw_alpha_panel(img, x0, y, x0 + bw, y + bh, color=(0, 0, 0), alpha=0.24)
+        cv2.rectangle(img, (x0, y), (x0 + bw, y + bh), fill, thickness=-1)
+        cv2.rectangle(img, (x0, y), (x0 + bw, y + bh), edge, thickness=max(1, int(round(2 * view_scale))))
+
+        sx1 = x0 + bw - status_w - max(6, int(round(8 * view_scale)))
+        sx2 = x0 + bw - max(6, int(round(8 * view_scale)))
+        sy1 = y + max(4, int(round(6 * view_scale)))
+        sy2 = y + bh - max(4, int(round(6 * view_scale)))
+        cv2.rectangle(img, (sx1, sy1), (sx2, sy2), status_fill, thickness=-1)
+        cv2.rectangle(img, (sx1, sy1), (sx2, sy2), (255, 255, 255), thickness=max(1, int(round(2 * view_scale))))
+
+        label_text = f"{label} [{hotkey}]" if hotkey else label
+        lx = x0 + max(10, int(round(14 * view_scale)))
+        ly = y + int(round(bh * 0.66))
+        cv2.putText(img, label_text, (lx + 2, ly + 2), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (0, 0, 0), txt_thick + 2, cv2.LINE_AA)
+        cv2.putText(img, label_text, (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (255, 255, 255), txt_thick, cv2.LINE_AA)
+
+        (stw, sth), _ = cv2.getTextSize(status, cv2.FONT_HERSHEY_SIMPLEX, txt_scale, txt_thick)
+        tx = sx1 + max(2, (status_w - stw) // 2)
+        ty = sy1 + max(sth + 2, ((sy2 - sy1) + sth) // 2)
+        cv2.putText(img, status, (tx + 2, ty + 2), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (0, 0, 0), txt_thick + 2, cv2.LINE_AA)
+        cv2.putText(img, status, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (255, 255, 255), txt_thick, cv2.LINE_AA)
+
+        y += (bh + gap)
 
 
 def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
@@ -1231,7 +1312,7 @@ else:
 from math import radians, sin, cos, sqrt, atan2
 
 def calculate_coordinates(latitude, longitude, d_lat, d_long):
-    R = 6378137  # YarÄ±Ã§apÄ± metre cinsinden olan WGS-84 elipsoiti
+    R = 6378137  # YarÃ„Â±ÃƒÂ§apÃ„Â± metre cinsinden olan WGS-84 elipsoiti
     
     new_latitude = latitude + (d_lat / R) * (180 / 3.14159265358979323846)
     new_longitude = longitude + (d_long / (R * cos(3.14159265358979323846 * latitude / 180))) * (180 / 3.14159265358979323846)
@@ -1239,15 +1320,15 @@ def calculate_coordinates(latitude, longitude, d_lat, d_long):
     return new_latitude, new_longitude
 
 def find_corner_coordinates(center_latitude, center_longitude, pixel_distance, GSD):
-    # GSD (Ground Sample Distance): Metre cinsinden piksel baÅŸÄ±na dÃ¼ÅŸen gerÃ§ek dÃ¼nya uzunluÄŸu
-    # pixel_distance: KaÃ§ piksel uzaklÄ±kta yeni bir nokta oluÅŸturulacaÄŸÄ±
+    # GSD (Ground Sample Distance): Metre cinsinden piksel baÃ…Å¸Ã„Â±na dÃƒÂ¼Ã…Å¸en gerÃƒÂ§ek dÃƒÂ¼nya uzunluÃ„Å¸u
+    # pixel_distance: KaÃƒÂ§ piksel uzaklÃ„Â±kta yeni bir nokta oluÃ…Å¸turulacaÃ„Å¸Ã„Â±
     
     distance = pixel_distance * GSD  # Metre cinsinden toplam mesafe
     
-    # Sol Ã¼st kÃ¶ÅŸe koordinatlarÄ±
+    # Sol ÃƒÂ¼st kÃƒÂ¶Ã…Å¸e koordinatlarÃ„Â±
     new_latitude1, new_longitude1 = calculate_coordinates(center_latitude, center_longitude, -distance, -distance)
     
-    # SaÄŸ alt kÃ¶ÅŸe koordinatlarÄ±
+    # SaÃ„Å¸ alt kÃƒÂ¶Ã…Å¸e koordinatlarÃ„Â±
     new_latitude2, new_longitude2 = calculate_coordinates(center_latitude, center_longitude, distance, distance)
     
     return (new_latitude1, new_longitude1), (new_latitude2, new_longitude2)
@@ -1289,7 +1370,7 @@ def match(img,template):
             res = g_res.download()
             return res
         except Exception as e:
-            print("CUDA template matching kullanÄ±lamadÄ±, CPU'ya dÃ¼ÅŸÃ¼lÃ¼yor:", e)
+            print("CUDA template matching kullanÃ„Â±lamadÃ„Â±, CPU'ya dÃƒÂ¼Ã…Å¸ÃƒÂ¼lÃƒÂ¼yor:", e)
             _CUDA_TM_DISABLED = True
 
     # CPU fallback
@@ -1428,28 +1509,28 @@ def match_three(img, templates):
             pass
         return tuple(results)
     except Exception as e:
-        print("CUDA TM kullanÄ±lmadÄ± (hata), CPU'ya dÃ¼ÅŸÃ¼lÃ¼yor:", e)
+        print("CUDA TM kullanÃ„Â±lmadÃ„Â± (hata), CPU'ya dÃƒÂ¼Ã…Å¸ÃƒÂ¼lÃƒÂ¼yor:", e)
         return tuple(cv2.matchTemplate(img, t, method, None) for t in templates)
     
 # RMSE hesaplama fonksiyonu
 def rmse(errors):
-    squared_errors = errors ** 2                     # hatalarÄ±n karesini al
-    mean_squared_errors = squared_errors.mean()     # karelerin ortalamasÄ±nÄ± al
-    rmse_val = np.sqrt(mean_squared_errors)          # OrtalamanÄ±n karekÃ¶kÃ¼nÃ¼ al
+    squared_errors = errors ** 2                     # hatalarÃ„Â±n karesini al
+    mean_squared_errors = squared_errors.mean()     # karelerin ortalamasÃ„Â±nÃ„Â± al
+    rmse_val = np.sqrt(mean_squared_errors)          # OrtalamanÃ„Â±n karekÃƒÂ¶kÃƒÂ¼nÃƒÂ¼ al
     return rmse_val
 
 
 # MAE hesaplama fonksiyonu
 def mae(errors):
-    absolute_errors = np.abs(errors)                # hatalarÄ±n mutlak deÄŸerini al
-    mean_absolute_errors = absolute_errors.mean()   # mutlak hatalarÄ±n ortalamasÄ±nÄ± al
+    absolute_errors = np.abs(errors)                # hatalarÃ„Â±n mutlak deÃ„Å¸erini al
+    mean_absolute_errors = absolute_errors.mean()   # mutlak hatalarÃ„Â±n ortalamasÃ„Â±nÃ„Â± al
     return mean_absolute_errors
 
 def standart_sapma(data):
-    mean = np.mean(data)                     # OrtalamayÄ± hesapla
-    squared_diff = (data - mean) ** 2        # Ortalama ile farklarÄ±n karesini al
-    mean_squared_diff = np.mean(squared_diff)  # Kare farklarÄ±nÄ±n ortalamasÄ±nÄ± al
-    std_dev = np.sqrt(mean_squared_diff)     # OrtalamanÄ±n karekÃ¶kÃ¼nÃ¼ al
+    mean = np.mean(data)                     # OrtalamayÃ„Â± hesapla
+    squared_diff = (data - mean) ** 2        # Ortalama ile farklarÃ„Â±n karesini al
+    mean_squared_diff = np.mean(squared_diff)  # Kare farklarÃ„Â±nÃ„Â±n ortalamasÃ„Â±nÃ„Â± al
+    std_dev = np.sqrt(mean_squared_diff)     # OrtalamanÃ„Â±n karekÃƒÂ¶kÃƒÂ¼nÃƒÂ¼ al
     return std_dev
 
 
@@ -1608,7 +1689,7 @@ if __name__ == '__main__':
     
     
     
-    # haritadaki piksellerin gps koordinatlarÄ± bulunur ve koordinatlar olarak ayrÄ± bri dosya olarak diske kaydedilir. bir kez Ã§alÄ±ÅŸtÄ±rÄ±lmasÄ± yeterlidir
+    # haritadaki piksellerin gps koordinatlarÃ„Â± bulunur ve koordinatlar olarak ayrÃ„Â± bri dosya olarak diske kaydedilir. bir kez ÃƒÂ§alÃ„Â±Ã…Å¸tÃ„Â±rÃ„Â±lmasÃ„Â± yeterlidir
     ###############################################################################
     #%%
     
@@ -1640,9 +1721,9 @@ if __name__ == '__main__':
     # print(koordinatlar[1][10][10])
     ###############################################################################
     
-    #DEM verileri aktarÄ±lÄ±r
+    #DEM verileri aktarÃ„Â±lÃ„Â±r
     
-    # 3) DEM rasterÄ±nÄ± (elevation) aÃ§
+    # 3) DEM rasterÃ„Â±nÃ„Â± (elevation) aÃƒÂ§
     filename = ana_harita_elevation
     if not os.path.isabs(filename):
         filename = os.path.join(dirname, filename)
@@ -1650,7 +1731,7 @@ if __name__ == '__main__':
     dataset = gdal.Open(filename)
     
     gt = dataset.GetGeoTransform()
-    band = dataset.GetRasterBand(1)  #5. bant elevation bandÄ±
+    band = dataset.GetRasterBand(1)  #5. bant elevation bandÃ„Â±
     
     DEM_array = band.ReadAsArray()
     # RasterIO dataset and transformer for DEM pixel lookup
@@ -1662,7 +1743,7 @@ if __name__ == '__main__':
     #%%
     
     
-    # 4) BaÅŸlangÄ±Ã§ durumlarÄ± ve toplayÄ±cÄ±lar
+    # 4) BaÃ…Å¸langÃ„Â±ÃƒÂ§ durumlarÃ„Â± ve toplayÃ„Â±cÃ„Â±lar
     cerceve_boyutu=cerceve_boyutu_deger
     sonuclar = []
     
@@ -1699,9 +1780,9 @@ if __name__ == '__main__':
         dogru_tahmin=0
         yanlis_tahmin=0
         ana_harita = harita_path_list[k]
-        # Referans haritayÄ± gri-ton olarak oku (Template Matching iÃ§in daha uygundur)
+        # Referans haritayÃ„Â± gri-ton olarak oku (Template Matching iÃƒÂ§in daha uygundur)
           
-        t_img = cv2.imread(ana_harita,0)  #haritalar klasÃ¶rÃ¼ndeki ikinci gÃ¶rÃ¼ntÃ¼yÃ¼ okur
+        t_img = cv2.imread(ana_harita,0)  #haritalar klasÃƒÂ¶rÃƒÂ¼ndeki ikinci gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼yÃƒÂ¼ okur
         if t_img is None:
             print("Harita okunamadi, atlaniyor:", ana_harita)
             continue
@@ -1718,7 +1799,7 @@ if __name__ == '__main__':
         uzaklik=0
         fark=100
         irtifa_dizisi=[]
-        # 7) Her anlÄ±k gÃ¶rÃ¼ntÃ¼ iÃ§in dÃ¶ngÃ¼
+        # 7) Her anlÃ„Â±k gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼ iÃƒÂ§in dÃƒÂ¶ngÃƒÂ¼
         for i in range(len(anlik_yol_list)):
             
             yanlis_pozitif_kontrol = 0            
@@ -1737,7 +1818,7 @@ if __name__ == '__main__':
             print(img.shape)
             anlik_goruntu = anlik_yol_list[i]
             if not os.path.exists(anlik_goruntu):
-                print("dosya bulunamadÄ±:", anlik_goruntu)
+                print("dosya bulunamadÃ„Â±:", anlik_goruntu)
                 continue
             exif_data = parse_exif(anlik_goruntu)
             if exif_data is None:
@@ -1776,7 +1857,7 @@ if __name__ == '__main__':
             
            
             # Use pre-opened map and transformer for fast lookups
-            # Harita Ã¼zerinde EXIF koordinatÄ±na karÅŸÄ±lÄ±k gelen pikseli bul
+            # Harita ÃƒÂ¼zerinde EXIF koordinatÃ„Â±na karÃ…Å¸Ã„Â±lÃ„Â±k gelen pikseli bul
             knm = piksel_bul_fast(map_ds, ll_to_map, gps_longitude, gps_latitude)
             
 
@@ -1784,7 +1865,7 @@ if __name__ == '__main__':
             
                        
                 
-            # Ä°lk karede EXIF konumuna yakÄ±n Ã§evrede, sonraki karelerde bir Ã¶nceki tahmine yakÄ±n Ã§evrede ara
+            # Ã„Â°lk karede EXIF konumuna yakÃ„Â±n ÃƒÂ§evrede, sonraki karelerde bir ÃƒÂ¶nceki tahmine yakÃ„Â±n ÃƒÂ§evrede ara
             if benchmark==False:
                 
                 if i==0:
@@ -1854,17 +1935,17 @@ if __name__ == '__main__':
             
             
             if knm[0]<272 or knm[0]>img.shape[0]-272:
-                print("dÄ±ÅŸarÄ±da")
+                print("dÃ„Â±Ã…Å¸arÃ„Â±da")
                 continue
             elif knm[1]<272 or knm[1]>img.shape[1]-272:
-                print("dÄ±ÅŸarÄ±da")
+                print("dÃ„Â±Ã…Å¸arÃ„Â±da")
                 continue
             
             
             
             sol_ust, sag_alt = find_corner_coordinates(gps_latitude, gps_longitude, 100, 0.30)            
             
-            #anlÄ±k gÃ¶rÃ¼ntÃ¼nÃ¼n ana haritada karÅŸÄ±lÄ±k geldiÄŸi rakÄ±m deÄŸeri bulunur
+            #anlÃ„Â±k gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n ana haritada karÃ…Å¸Ã„Â±lÃ„Â±k geldiÃ„Å¸i rakÃ„Â±m deÃ„Å¸eri bulunur
             
             dem_konum = piksel_bul_fast(dem_ds, ll_to_dem, gps_longitude, gps_latitude)
             
@@ -1923,7 +2004,7 @@ if __name__ == '__main__':
             print("kamera model= ",kamera_model)
             print("focal lenght = ",FocalLength)
             print("altitude = : ",altitude)
-            print("rakÄ±m =: ",rakim)
+            print("rakÃ„Â±m =: ",rakim)
             print("ucus_yuksekligi = :",ucus_yuksekligi)
             print("yaw = :",yaw)
             
@@ -1932,7 +2013,7 @@ if __name__ == '__main__':
             
             #################################################################################################
             
-            # 7.1) AnlÄ±k gÃ¶rÃ¼ntÃ¼yÃ¼ oku ve yaw/Ã¶lÃ§ek ile dÃ¶ndÃ¼rmeye hazÄ±rla
+            # 7.1) AnlÃ„Â±k gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼yÃƒÂ¼ oku ve yaw/ÃƒÂ¶lÃƒÂ§ek ile dÃƒÂ¶ndÃƒÂ¼rmeye hazÃ„Â±rla
             # Reading the image
             image = cv2.imread(anlik_goruntu,0)
             image_color = cv2.imread(anlik_goruntu, cv2.IMREAD_COLOR)
@@ -1950,8 +2031,8 @@ if __name__ == '__main__':
             #center = (int(width/2), int(height/2))
             
             # #using cv2.getRotationMatrix2D() to get the rotation matrix
-            # #scale parametresi ile gÃ¶rÃ¼ntÃ¼nÃ¼n spartial Ã§Ã¶zÃ¼nÃ¼rlÃ¼ÄŸÃ¼ 60 cm'ye ayarlanÄ±r
-            # #angle ile gÃ¶rÃ¼ntÃ¼nÃ¼n yav deÄŸerinin tam tersine rotate edilir ve gÃ¶rÃ¼ntÃ¼ kuzeye dÃ¶ndÃ¼rÃ¼lÃ¼r.
+            # #scale parametresi ile gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n spartial ÃƒÂ§ÃƒÂ¶zÃƒÂ¼nÃƒÂ¼rlÃƒÂ¼Ã„Å¸ÃƒÂ¼ 60 cm'ye ayarlanÃ„Â±r
+            # #angle ile gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n yav deÃ„Å¸erinin tam tersine rotate edilir ve gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼ kuzeye dÃƒÂ¶ndÃƒÂ¼rÃƒÂ¼lÃƒÂ¼r.
             # rotate_matrix = cv2.getRotationMatrix2D(center=center, angle=(-1*yaw), scale=olcek_scale)
             
             
@@ -1984,7 +2065,7 @@ if __name__ == '__main__':
             
             height,width= (cr_image.shape[0],cr_image.shape[1])
             
-            # ÃœÃ§ farklÄ± Ã¶lÃ§ek kullan: merkez, sol-Ã¼st ve saÄŸ-alt rakÄ±ma gÃ¶re dÃ¼zelt
+            # ÃƒÅ“ÃƒÂ§ farklÃ„Â± ÃƒÂ¶lÃƒÂ§ek kullan: merkez, sol-ÃƒÂ¼st ve saÃ„Å¸-alt rakÃ„Â±ma gÃƒÂ¶re dÃƒÂ¼zelt
             if abs(rakim) < 1e-9:
                 print("Rakim sifira cok yakin, atlaniyor")
                 continue
@@ -2008,36 +2089,36 @@ if __name__ == '__main__':
             rotated_image_sag_alt = cuda_resize_if_available(cr_image, (sa_w, sa_h), interpolation=cv2.INTER_NEAREST)
             
             
-            #Ã§Ã¶zÃ¼nÃ¼rlÃ¼ÄŸÃ¼ 30 cm'ye ayarlanmÄ±ÅŸ gÃ¶rÃ¼ntÃ¼nÃ¼n orta noktasÄ± bulnur
+            #ÃƒÂ§ÃƒÂ¶zÃƒÂ¼nÃƒÂ¼rlÃƒÂ¼Ã„Å¸ÃƒÂ¼ 30 cm'ye ayarlanmÃ„Â±Ã…Å¸ gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n orta noktasÃ„Â± bulnur
             height, width = rotated_image.shape[:2]
             # get the center coordinates of the image to create the 2D rotation matrix
             center = (int(width/2), int(height/2))
             
-            fark=np.minimum(center[0],center[1])-272    # 544'lÄ±k frame'in elde edilen dikdÃ¶rtgenin dÄ±ÅŸÄ±na taÅŸmamasÄ± iÃ§in yazÄ±ldÄ± 
+            fark=np.minimum(center[0],center[1])-272    # 544'lÃ„Â±k frame'in elde edilen dikdÃƒÂ¶rtgenin dÃ„Â±Ã…Å¸Ã„Â±na taÃ…Å¸mamasÃ„Â± iÃƒÂ§in yazÃ„Â±ldÃ„Â± 
             if fark>200:
                 fark=200
             elif fark<0:
-                print("merkezi dÄ±ÅŸarÄ±da")
+                print("merkezi dÃ„Â±Ã…Å¸arÃ„Â±da")
                 continue
            
             
             y1 = center[1]-PATCH_HALF-fark; y2 = center[1]+PATCH_HALF-fark
             x1 = center[0]-PATCH_HALF-fark; x2 = center[0]+PATCH_HALF-fark
             if not is_valid_slice(rotated_image_sol_ust, x1, y1, x2, y2):
-                print("rotated_part1 sÄ±nÄ±r dÄ±ÅŸÄ±nda")
+                print("rotated_part1 sÃ„Â±nÃ„Â±r dÃ„Â±Ã…Å¸Ã„Â±nda")
                 continue
             rotated_part1 = rotated_image_sol_ust[y1:y2, x1:x2]
             y1 = center[1]-PATCH_HALF; y2 = center[1]+PATCH_HALF
             x1 = center[0]-PATCH_HALF; x2 = center[0]+PATCH_HALF
             if not is_valid_slice(rotated_image, x1, y1, x2, y2):
-                print("rotated_part2 sÄ±nÄ±r dÄ±ÅŸÄ±nda")
+                print("rotated_part2 sÃ„Â±nÃ„Â±r dÃ„Â±Ã…Å¸Ã„Â±nda")
                 continue
             rotated_part2 = rotated_image[y1:y2, x1:x2]
             rotated_part2_color = rotated_image_color[y1:y2, x1:x2]
             y1 = center[1]-PATCH_HALF+fark; y2 = center[1]+PATCH_HALF+fark
             x1 = center[0]-PATCH_HALF+fark; x2 = center[0]+PATCH_HALF+fark
             if not is_valid_slice(rotated_image_sag_alt, x1, y1, x2, y2):
-                print("rotated_part3 sÄ±nÄ±r dÄ±ÅŸÄ±nda")
+                print("rotated_part3 sÃ„Â±nÃ„Â±r dÃ„Â±Ã…Å¸Ã„Â±nda")
                 continue
             rotated_part3 = rotated_image_sag_alt[y1:y2, x1:x2]
             
@@ -2050,7 +2131,7 @@ if __name__ == '__main__':
                 _ = cv2.waitKey(1) 
             
             
-            # 7.2) Template listesi (3 Ã¶lÃ§ek)
+            # 7.2) Template listesi (3 ÃƒÂ¶lÃƒÂ§ek)
             template=[]
             
             template.append(rotated_part1)
@@ -2069,7 +2150,7 @@ if __name__ == '__main__':
             # model = load_model(model_yolu)
             
             # Batch preprocess and predict for the 3 templates
-            # 7.3) Model giriÅŸ Ã¶n iÅŸlemleri (resize/equalize/normalize)
+            # 7.3) Model giriÃ…Å¸ ÃƒÂ¶n iÃ…Å¸lemleri (resize/equalize/normalize)
             pre_list = []
             for j in range(3):
                 t_resized = cv2.resize(template[j], (PATCH_SIZE, PATCH_SIZE), interpolation=cv2.INTER_NEAREST)
@@ -2112,21 +2193,21 @@ if __name__ == '__main__':
             except Exception:
                 pass
 
-            # Show: AnlÄ±k (orijinal) ve Ä°ÅŸlenmiÅŸ (model Ã§Ä±ktÄ±sÄ±) yan yana
+            # Show: AnlÃ„Â±k (orijinal) ve Ã„Â°Ã…Å¸lenmiÃ…Å¸ (model ÃƒÂ§Ã„Â±ktÃ„Â±sÃ„Â±) yan yana
             try:
                 vis_pair = _compose_side_by_side(
                     image,
                     template[1],
-                    left_title="AnlÄ±k",
-                    right_title="Ä°ÅŸlenmiÅŸ (Model)",
+                    left_title="AnlÃ„Â±k",
+                    right_title="Ã„Â°Ã…Å¸lenmiÃ…Å¸ (Model)",
                     target_height=900,
                     apply_colormap_right=True,
                 )
                 if False and vis_pair is not None:
                     # _show_image_fit disabled: using Crop vs Model window instead
                     # _show_image_fit("Anlik-Islenmis (GENIS)", vis_pair, max_frac=0.98)
-                    cv2.namedWindow("AnlÄ±k vs Ä°ÅŸlenmiÅŸ", cv2.WINDOW_NORMAL)
-                    cv2.imshow("AnlÄ±k vs Ä°ÅŸlenmiÅŸ", vis_pair)
+                    cv2.namedWindow("AnlÃ„Â±k vs Ã„Â°Ã…Å¸lenmiÃ…Å¸", cv2.WINDOW_NORMAL)
+                    cv2.imshow("AnlÃ„Â±k vs Ã„Â°Ã…Å¸lenmiÃ…Å¸", vis_pair)
             except Exception:
                 pass
                 
@@ -2146,14 +2227,14 @@ if __name__ == '__main__':
             #           'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
             
             
-            #paralel programlama ile aynÄ± anda 3 templatematching yapÄ±lÄ±r
+            #paralel programlama ile aynÃ„Â± anda 3 templatematching yapÃ„Â±lÃ„Â±r
             inputs=[(cerceve,template[0]),(cerceve,template[1]),(cerceve,template[2])]
             # Template matching (sequential to avoid IPC overhead)
             res1, res2, res3 = match_three(cerceve, [template[0], template[1], template[2]])
-            # Not: CUDA varsa tek seferde gÃ¶rÃ¼ntÃ¼ yÃ¼klenip Ã¼Ã§ eÅŸleÅŸme GPUâ€™da yapÄ±lÄ±r; aksi halde CPU.
+            # Not: CUDA varsa tek seferde gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼ yÃƒÂ¼klenip ÃƒÂ¼ÃƒÂ§ eÃ…Å¸leÃ…Å¸me GPUÃ¢â‚¬â„¢da yapÃ„Â±lÃ„Â±r; aksi halde CPU.
             #methods =['cv2.TM_CCOEFF']
             #for meth in methods:
-                #method  = eval(meth)    #stringleri fonksiyona Ã§eviren fonksiyona
+                #method  = eval(meth)    #stringleri fonksiyona ÃƒÂ§eviren fonksiyona
                 # res1= cv2.matchTemplate(img, template[0], method, None)
                 # res2= cv2.matchTemplate(img, template[1], method, None)
                 # res3= cv2.matchTemplate(img, template[2], method, None)
@@ -2187,7 +2268,7 @@ if __name__ == '__main__':
                  
             
                  
-            # ÃœÃ§ aday dikdÃ¶rtgenin (x,y,w,h) biÃ§iminde paketlenmesi
+            # ÃƒÅ“ÃƒÂ§ aday dikdÃƒÂ¶rtgenin (x,y,w,h) biÃƒÂ§iminde paketlenmesi
             a=(top_left1[0],top_left1[1],w,h)
             b=(top_left2[0],top_left2[1],w,h)
             c=(top_left3[0],top_left3[1],w,h)
@@ -2204,7 +2285,7 @@ if __name__ == '__main__':
                 cerceve_boyutu+=100
                 
                  
-                 #konum bulmak iÃ§in kesiÅŸimler ve kesiÅŸim karelerinin koordinatlarÄ± bulunuyor
+                 #konum bulmak iÃƒÂ§in kesiÃ…Å¸imler ve kesiÃ…Å¸im karelerinin koordinatlarÃ„Â± bulunuyor
             kesisim_ab = intersection(a, b);
             kesisim_bc = intersection(b, c);
             kesisim_ac = intersection(a, c);
@@ -2238,7 +2319,7 @@ if __name__ == '__main__':
                 dogru_pozitif_kontrol+=1
                         
             else:
-                print("kesiÅŸim yok")
+                print("kesiÃ…Å¸im yok")
                 kare=(0,0,0,0)
                 kare=b
                 cerceve_boyutu+=500
@@ -2248,7 +2329,7 @@ if __name__ == '__main__':
             
             
             
-            # KesiÅŸim merkezinin koordinatÄ± (piksel cinsinden)
+            # KesiÃ…Å¸im merkezinin koordinatÃ„Â± (piksel cinsinden)
             konum_y=kare[0]+int(kare[2]/2)
             konum_x=kare[1]+int(kare[3]/2)
             if konum_y < 0:
@@ -2273,9 +2354,9 @@ if __name__ == '__main__':
             #konum = (kare[0]+int(kare[2]/2),kare[1]+int(kare[3]/2))
             
             """
-                gps_longtidye ce gps_latitde deÄŸiÅŸkenleri anlÄ±k gÃ¶rÃ¼ntÃ¼nÃ¼n korrdinatlarÄ±nÄ± verir
-                koordinatlar[1][konum[0]][konum[1]] ise modelin tahmin ettiÄŸi konumun koordinatlarÄ±nÄ± verir
-                ve aralarÄ±ndaki uzaklÄ±k hesaplanÄ±r.    
+                gps_longtidye ce gps_latitde deÃ„Å¸iÃ…Å¸kenleri anlÃ„Â±k gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n korrdinatlarÃ„Â±nÃ„Â± verir
+                koordinatlar[1][konum[0]][konum[1]] ise modelin tahmin ettiÃ„Å¸i konumun koordinatlarÃ„Â±nÃ„Â± verir
+                ve aralarÃ„Â±ndaki uzaklÃ„Â±k hesaplanÃ„Â±r.    
             """
             long_tahmin, lat_tahmin = rc_to_ll(konum[1], konum[0])
             
@@ -2297,7 +2378,7 @@ if __name__ == '__main__':
             
             
             
-            # BaÅŸarÄ± eÅŸiÄŸi: 70 metre (0.07 km). Duruma gÃ¶re TP/FP/TN/FN sayaÃ§larÄ± gÃ¼ncellenir.
+            # BaÃ…Å¸arÃ„Â± eÃ…Å¸iÃ„Å¸i: 70 metre (0.07 km). Duruma gÃƒÂ¶re TP/FP/TN/FN sayaÃƒÂ§larÃ„Â± gÃƒÂ¼ncellenir.
             if(uzaklik<=0.07):
                 if yanlis_negatif_kontrol>0:
                     yanlis_negatif+=1
@@ -2330,7 +2411,7 @@ if __name__ == '__main__':
                 
             
                 
-            # dosyaya_yaz(sonuclar,dogru_tahmin,yanlis_tahmin)  # DÃ¶ngÃ¼ sonunda bir defa yazÄ±lacak
+            # dosyaya_yaz(sonuclar,dogru_tahmin,yanlis_tahmin)  # DÃƒÂ¶ngÃƒÂ¼ sonunda bir defa yazÃ„Â±lacak
                 
             centerOfCircle=konum    
                     
@@ -2395,12 +2476,12 @@ if __name__ == '__main__':
                         cv2.circle(img, p, rp, (0, 255, 0), -1, lineType=cv2.LINE_AA)
 
             cv2.circle(img, centerOfCircle, radius, (0,255,255), 25)   #tahmini konumu veren nokta
-            cv2.circle(img,(knm[1],knm[0]),radius,(0,255,0), 25)                   #gerÃ§ek konumu gÃ¶steren nokta
+            cv2.circle(img,(knm[1],knm[0]),radius,(0,255,0), 25)                   #gerÃƒÂ§ek konumu gÃƒÂ¶steren nokta
                     #plt.figure()
                     
                 
                     # plt.imshow(img)
-                    # plt.title("Tespit edilen SonuÃ§"), plt.axis("on")
+                    # plt.title("Tespit edilen SonuÃƒÂ§"), plt.axis("on")
                     # plt.suptitle(meth)
                     # plt.pause(0.0001)
             #res = cv2.resize(img, dsize=(766*2,1595*2), interpolation=cv2.INTER_CUBIC)
@@ -2422,7 +2503,7 @@ if __name__ == '__main__':
                 resalt= 0
                 
             
-            # UÃ§ak simgesini (gerÃ§ek konum ve heading ile) Ã§iz
+            # UÃƒÂ§ak simgesini (gerÃƒÂ§ek konum ve heading ile) ÃƒÂ§iz
             try:
                 draw_plane_icon_v2(img, (knm[1], knm[0]), yaw, size_px=220, color=(255,0,255), outline=(0,0,0), outline_thickness=10)
             except Exception:
@@ -2434,7 +2515,7 @@ if __name__ == '__main__':
                 
             window_name = 'Image'
 
-            # 7.4) HUD: baÅŸlÄ±k (yaw), uÃ§uÅŸ yÃ¼ksekliÄŸi ve hatayÄ± gÃ¶ster; Ã¶lÃ§ek Ã§ubuÄŸu ve hedef iÅŸaretleri Ã§iz
+            # 7.4) HUD: baÃ…Å¸lÃ„Â±k (yaw), uÃƒÂ§uÃ…Å¸ yÃƒÂ¼ksekliÃ„Å¸i ve hatayÃ„Â± gÃƒÂ¶ster; ÃƒÂ¶lÃƒÂ§ek ÃƒÂ§ubuÃ„Å¸u ve hedef iÃ…Å¸aretleri ÃƒÂ§iz
             hud_lines = [
                 f"HDG: {yaw:.1f} deg",
                 f"ALT: {int(ucus_yuksekligi)} m",
@@ -2480,12 +2561,14 @@ if __name__ == '__main__':
                         runtime_ui_buttons,
                         font_scale=UI_BUTTON_FONT_SCALE,
                         thickness=UI_BUTTON_THICKNESS,
+                        ui_scale=UI_BUTTON_SCALE,
+                        display_size=(UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT),
                     )
                 except Exception:
                     pass
 
             cv2.namedWindow("konum", cv2.WINDOW_NORMAL)  
-            cv2.resizeWindow("konum", 1000, 1000)
+            cv2.resizeWindow("konum", UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT)
             if UI_BUTTONS_ENABLED and (not runtime_ui_cb_set):
                 try:
                     cv2.setMouseCallback("konum", _runtime_buttons_mouse_cb, runtime_ui_ctx)
@@ -2493,14 +2576,21 @@ if __name__ == '__main__':
                 except Exception:
                     pass
             cv2.imshow("konum", res)
-            _ = cv2.waitKey(1)   #â˜ºekrana verilen haritayÄ± anlÄ±k gÃ¶rebilmek iÃ§in yazÄ±lÄ±r
+            key = cv2.waitKey(1) & 0xFF
+            if UI_BUTTONS_ENABLED:
+                if key in (ord('t'), ord('T')):
+                    runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
+                elif key in (ord('i'), ord('I')):
+                    runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", True))
+                elif key in (ord('r'), ord('R')):
+                    runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
             
                 # cv2.rectangle(img, top_left, bottom_right,(255,0,0),35)
                 # plt.figure()
                 # plt.subplot(121), plt.imshow(res, cmap = "gray")
-                # plt.title("EÅŸleÅŸen SonuÃ§"), plt.axis("on")
+                # plt.title("EÃ…Å¸leÃ…Å¸en SonuÃƒÂ§"), plt.axis("on")
                 # plt.subplot(122), plt.imshow(img)
-                # plt.title("Tespit edilen SonuÃ§"), plt.axis("on")
+                # plt.title("Tespit edilen SonuÃƒÂ§"), plt.axis("on")
                 # plt.suptitle(meth)
                 # img = cv2.imread(harita,0)
         
@@ -2512,10 +2602,10 @@ if __name__ == '__main__':
             print("Kodun calisma suresi___________________________________________:", "{:.2f}".format(calisma_suresi), "saniye")
             
 
-            print((i+1),"/",(len(anlik_yol_list)),"     dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) +",  dogru pozitif: "+str(dogru_pozitif)+",  yanlÄ±ÅŸ pozitif: "+str(yanlis_pozitif)+",  dogru negatif: "+str(dogru_negatif)+",  yanlÄ±ÅŸ negatif: "+str(yanlis_negatif)+"\n")
+            print((i+1),"/",(len(anlik_yol_list)),"     dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) +",  dogru pozitif: "+str(dogru_pozitif)+",  yanlÃ„Â±Ã…Å¸ pozitif: "+str(yanlis_pozitif)+",  dogru negatif: "+str(dogru_negatif)+",  yanlÃ„Â±Ã…Å¸ negatif: "+str(yanlis_negatif)+"\n")
          
         
-        # 8) DÃ¶ngÃ¼ sonu: kaynaklarÄ± serbest bÄ±rak, hata metriklerini hesapla ve Ã§Ä±ktÄ± dosyalarÄ±na yaz
+        # 8) DÃƒÂ¶ngÃƒÂ¼ sonu: kaynaklarÃ„Â± serbest bÃ„Â±rak, hata metriklerini hesapla ve ÃƒÂ§Ã„Â±ktÃ„Â± dosyalarÃ„Â±na yaz
         # Close map dataset for this loop to free resources
         try:
             map_ds.close()
@@ -2533,7 +2623,7 @@ if __name__ == '__main__':
             standart_sapma_degeri = float('nan')
         
         
-        # Yeni verilen deÄŸerler iÃ§in tekrar hesaplama yapÄ±lÄ±yor
+        # Yeni verilen deÃ„Å¸erler iÃƒÂ§in tekrar hesaplama yapÃ„Â±lÃ„Â±yor
 
 
         
@@ -2553,24 +2643,24 @@ if __name__ == '__main__':
 
        # sonuclar = np.vstack((sonuclar,dogru_tahmin, yanlis_tahmin)).T
        # print(sonuclar)
-        sonuclar_=anlik_yol[-20:]+" "+str(model_list[k])+",  dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) + ",  RMSE DeÄŸeri: ,"+str(rmse_degeri)+ ",  MAE DeÄŸeri: ,"+str(mae_degeri)+",  standart sapma DeÄŸeri: ,"+str(standart_sapma_degeri)+",  dogru pozitif: ,"+str(dogru_pozitif)+",  yanlÄ±ÅŸ pozitif: ,"+str(yanlis_pozitif)+",  dogru negatif: ,"+str(dogru_negatif)+",  yanlÄ±ÅŸ negatif: ,"+str(yanlis_negatif)+", f skoru: ,"+str(f_skoru)+"\n"
+        sonuclar_=anlik_yol[-20:]+" "+str(model_list[k])+",  dogru_tahmin: ,"+str(dogru_tahmin)+",  yanlis_tahmin: ,"+str(yanlis_tahmin) + ",  RMSE DeÃ„Å¸eri: ,"+str(rmse_degeri)+ ",  MAE DeÃ„Å¸eri: ,"+str(mae_degeri)+",  standart sapma DeÃ„Å¸eri: ,"+str(standart_sapma_degeri)+",  dogru pozitif: ,"+str(dogru_pozitif)+",  yanlÃ„Â±Ã…Å¸ pozitif: ,"+str(yanlis_pozitif)+",  dogru negatif: ,"+str(dogru_negatif)+",  yanlÃ„Â±Ã…Å¸ negatif: ,"+str(yanlis_negatif)+", f skoru: ,"+str(f_skoru)+"\n"
      
         sonuclar_dosya.write(sonuclar_)
         sonuclar_dosya.close()
       
             
         print("dogru tahmin = ",dogru_tahmin)
-        print("yanlÄ±ÅŸ tahmin = ",yanlis_tahmin)
-        print("yanlÄ±ÅŸ pozitif = ",yanlis_pozitif)
+        print("yanlÃ„Â±Ã…Å¸ tahmin = ",yanlis_tahmin)
+        print("yanlÃ„Â±Ã…Å¸ pozitif = ",yanlis_pozitif)
         yuzde = _safe_div(dogru_tahmin, (dogru_tahmin + yanlis_tahmin))
         yuzde=yuzde*100
-        print("doÄŸruluk yÃ¼zdesi: {:.2f}".format(yuzde))
+        print("doÃ„Å¸ruluk yÃƒÂ¼zdesi: {:.2f}".format(yuzde))
         
-        # DÃ¶ngÃ¼ sonu: sonuÃ§larÄ± bir defa yaz
+        # DÃƒÂ¶ngÃƒÂ¼ sonu: sonuÃƒÂ§larÃ„Â± bir defa yaz
         try:
             dosyaya_yaz(sonuclar, dogru_tahmin, yanlis_tahmin)
         except Exception as _e:
-            print("sonuclar dosyaya yazÄ±lÄ±rken hata:", _e)
+            print("sonuclar dosyaya yazÃ„Â±lÃ„Â±rken hata:", _e)
 
         if bool(RUN_CFG.get("WAIT_PER_MODEL", False)):
             input("pause")
@@ -2585,4 +2675,5 @@ if __name__ == '__main__':
         pass
     if bool(RUN_CFG.get("WAIT_ON_EXIT", False)):
         input("pause")
+
 
