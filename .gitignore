@@ -1,3 +1,16 @@
-﻿*
+﻿# Varsayilan: her seyi ignore et
+*
+
+# Takip edilmesini istediklerimiz
 !.gitignore
 !template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_fonksiyonlar_icinde_cursor.py
+!*.md
+!*.MD
+!**/.gitkeep
+
+# Klasorlerin repoda gorunebilmesi icin klasorleri serbest birak
+!*/
+
+# Gecici/onbellek klasorleri yine de ignore
+__pycache__/
+.ruff_cache/

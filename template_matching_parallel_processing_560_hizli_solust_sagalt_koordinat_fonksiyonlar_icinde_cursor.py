@@ -1,19 +1,75 @@
 ﻿"""
-Bu betik, anlÄ±k (drone) gÃ¶rÃ¼ntÃ¼lerini referans ortofoto/harita Ã¼zerinde konumlandÄ±rÄ±r.
+Bu betik, IHA/drone goruntulerini referans harita uzerinde konumlandirir.
 
-Ã–zet akÄ±ÅŸ:
-- EXIF'ten yaw (uÃ§uÅŸ baÅŸÄ±), GPS, odak uzaklÄ±ÄŸÄ± ve irtifa bilgisi okunur.
-- DEM (sayÄ±sal yÃ¼kseklik modeli) ile farklÄ± noktalardaki rakÄ±m farkÄ± dikkate alÄ±narak Ã¼Ã§ Ã¶lÃ§ekli ÅŸablon oluÅŸturulur.
-- Keras modeli ile bu ÅŸablonlardan Ã¶zellik/olasÄ±lÄ±k haritalarÄ± Ã¼retilir.
-- Template Matching ile ana haritada en iyi eÅŸleÅŸmeler bulunur; Ã¼Ã§ eÅŸleÅŸmenin kesiÅŸiminden konum Ã§Ä±karÄ±lÄ±r.
-- Hata metrikleri (RMSE/MAE/std) ve sÄ±nÄ±flandÄ±rma istatistikleri (TP/FP/TN/FN, F-skor) hesaplanÄ±r ve dosyaya yazÄ±lÄ±r.
-- Ä°steÄŸe baÄŸlÄ± CUDA hÄ±zlandÄ±rmasÄ± ile bazÄ± adÄ±mlar GPU'da Ã§alÄ±ÅŸtÄ±rÄ±lÄ±r.
+Ozet akis:
+- EXIF: yaw, GPS, focal length ve altitude okunur.
+- DEM: yukseklik farkina gore 3 farkli olcek uretilir.
+- Keras ciktilari template matching icin kullanilir.
+- En iyi 3 eslesmenin kesisiminden konum bulunur.
+- RMSE/MAE/std ve siniflandirma metrikleri yazdirilir.
 
-KlasÃ¶rler:
-- `haritalar/`: Ana haritalar (DEM ve ortofoto)
-- `model/`: Keras modelleri (544x544 giriÅŸli, kenar kÄ±rpmalÄ± Ã§Ä±kÄ±ÅŸ)
-- `parcalar/`: AnlÄ±k gÃ¶rÃ¼ntÃ¼ler (EXIF iÃ§eren JPG/PNG)
+Klasorler:
+- haritalar/: ana harita rasterlari
+- model/: keras model dosyalari
+- parcalar/: anlik goruntu klasoru
 """
+# -----------------------------------------------------------------------------
+# RUN_CFG: Tum calisma parametrelerini bu bloktan yonetebilirsiniz.
+# Bu bolumu dosyanin en ustunde tutuyoruz ki erisim kolay olsun.
+# -----------------------------------------------------------------------------
+RUN_CFG = {
+    # Genel calisma modu
+    "BENCHMARK": False,
+    "DEBUG": False,
+
+    # Model/patch ayarlari
+    "PATCH_SIZE": 544,
+    "PRED_BORDER": 16,
+
+    # Template matching hizlandirma
+    "USE_PYRAMID": True,
+    "COARSE_SCALE": 0.5,
+    "ROI_PAD_FACTOR": 0.4,
+
+    # Arama cercevesi boyutu
+    "CERCEVE_BOYUTU_NORMAL": 2048,
+    "CERCEVE_BOYUTU_BENCHMARK": 5000,
+
+    # Veri yollari
+    "HARITA_DIR": "haritalar",
+    "MODEL_DIR": "model",
+    "ANLIK_DIR": "parcalar",
+    "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",
+
+    # Isterseniz dogrudan dosya secin (bos birakirsaniz klasordeki tum dosyalar kullanilir)
+    "HARITA_DOSYALARI": [],  # ornek: ["map1.tif", "map2.tif"]
+    "MODEL_DOSYALARI": [],   # ornek: ["m1.h5", "m2.h5"]
+    "SORT_INPUTS": False,
+
+    # EXIF/camera fallback
+    "DEFAULT_FOCAL_LENGTH_MM": 8.8,
+    "DEFAULT_SENSOR_WIDTH_MM": 13.2,
+    "USE_GPS_ALT_REF_SIGN": False,
+
+    # Calisma sonu bekleme
+    "WAIT_PER_MODEL": False,
+    "WAIT_ON_EXIT": False,
+}
+
+benchmark = bool(RUN_CFG["BENCHMARK"])
+DEBUG = bool(RUN_CFG["DEBUG"])
+PATCH_SIZE = int(RUN_CFG["PATCH_SIZE"])
+PATCH_HALF = PATCH_SIZE // 2
+PRED_BORDER = int(RUN_CFG["PRED_BORDER"])
+USE_PYRAMID = bool(RUN_CFG["USE_PYRAMID"])
+COARSE_SCALE = float(RUN_CFG["COARSE_SCALE"])
+ROI_PAD_FACTOR = float(RUN_CFG["ROI_PAD_FACTOR"])
+
+if benchmark:
+    cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
+else:
+    cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_NORMAL"])
+
 import os
 os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = str(2**40)
 import cv2
@@ -36,6 +92,7 @@ from affine import Affine
 from pyproj import Transformer
 import concurrent.futures
 warnings.filterwarnings("ignore")
+dirname = os.path.dirname(os.path.abspath(__file__))
 
 def _get_screen_size():
     """Return (screen_width, screen_height) or a safe fallback."""
@@ -572,7 +629,7 @@ def parse_exif(image_path):
         alt_ref = int(alt_ref[0])
     # Bazi DJI veri setlerinde GPSAltitudeRef guvenilir degil olabiliyor.
     # Varsayilan olarak isareti ters cevirmiyoruz; ihtiyac olursa env ile ac.
-    if altitude is not None and alt_ref == 1 and os.getenv("USE_GPS_ALT_REF_SIGN", "0") == "1":
+    if altitude is not None and alt_ref == 1 and bool(RUN_CFG.get("USE_GPS_ALT_REF_SIGN", False)):
         altitude = -altitude
 
     fl = get_field(exif, 'FocalLength')
@@ -1115,29 +1172,63 @@ def rotated_rect(w, h, angle):
 
 #%%
 
-#simulasyon olarak Ã§alÄ±ÅŸmasÄ± iÃ§in true olarak ayarlayÄ±n, Benchmark iÃ§in false olarak ayarlayÄ±n
+# Parametreleri asagidaki RUN_CFG bolumunden ayarlayin.
 # -----------------------------------------------------------------------------
-# Global ayarlar ve sabitler
-# - benchmark: GÃ¶rsel ve adÄ±m adÄ±m akÄ±ÅŸ yerine daha yalÄ±n/performans denemesi
-# - PATCH_SIZE/PRED_BORDER: Modelin beklediÄŸi giriÅŸ ve Ã§Ä±ktÄ± kenar kÄ±rpma miktarÄ±
-# - USE_PYRAMID/COARSE_SCALE/ROI_PAD_FACTOR: Template Matching'i hÄ±zlandÄ±rma parametreleri
+# RUN_CFG: Tum calisma parametrelerini bu bloktan yonetebilirsiniz.
+# Burada degistirdiginiz degerler tum script'e uygulanir.
 # -----------------------------------------------------------------------------
-benchmark=False
+RUN_CFG = {
+    # Genel calisma modu
+    "BENCHMARK": False,
+    "DEBUG": False,
 
-# Global debug and sizing constants
-DEBUG = False
-PATCH_SIZE = 544
+    # Model/patch ayarlari
+    "PATCH_SIZE": 544,
+    "PRED_BORDER": 16,
+
+    # Template matching hizlandirma
+    "USE_PYRAMID": True,
+    "COARSE_SCALE": 0.5,
+    "ROI_PAD_FACTOR": 2.0,
+
+    # Arama cercevesi boyutu
+    "CERCEVE_BOYUTU_NORMAL": 2048,
+    "CERCEVE_BOYUTU_BENCHMARK": 5000,
+
+    # Veri yollari
+    "HARITA_DIR": "haritalar",
+    "MODEL_DIR": "model",
+    "ANLIK_DIR": "parcalar",
+    "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",
+
+    # Isterseniz dogrudan dosya secin (bos birakirsaniz klasordeki tum dosyalar kullanilir)
+    "HARITA_DOSYALARI": [],  # ornek: ["map1.tif", "map2.tif"]
+    "MODEL_DOSYALARI": [],   # ornek: ["m1.h5", "m2.h5"]
+    "SORT_INPUTS": False,
+
+    # EXIF/camera fallback
+    "DEFAULT_FOCAL_LENGTH_MM": 8.8,
+    "DEFAULT_SENSOR_WIDTH_MM": 13.2,
+    "USE_GPS_ALT_REF_SIGN": False,
+
+    # Calisma sonu bekleme
+    "WAIT_PER_MODEL": False,
+    "WAIT_ON_EXIT": False,
+}
+
+benchmark = bool(RUN_CFG["BENCHMARK"])
+DEBUG = bool(RUN_CFG["DEBUG"])
+PATCH_SIZE = int(RUN_CFG["PATCH_SIZE"])
 PATCH_HALF = PATCH_SIZE // 2
-PRED_BORDER = 16
-# CPU optimization flags
-USE_PYRAMID = True
-COARSE_SCALE = 0.5
-ROI_PAD_FACTOR = 2.0
+PRED_BORDER = int(RUN_CFG["PRED_BORDER"])
+USE_PYRAMID = bool(RUN_CFG["USE_PYRAMID"])
+COARSE_SCALE = float(RUN_CFG["COARSE_SCALE"])
+ROI_PAD_FACTOR = float(RUN_CFG["ROI_PAD_FACTOR"])
 
-if benchmark==True:
-    cerceve_boyutu_deger=5000
+if benchmark:
+    cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
 else:
-    cerceve_boyutu_deger=2048
+    cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_NORMAL"])
 
 
 
@@ -1257,36 +1348,48 @@ def match_three(img, templates):
             if resH <= 0 or resW <= 0:
                 return np.empty((0, 0), dtype=np.float32)
 
-            # Coarse downscale
+            # Coarse downscale (local search seed)
             s = COARSE_SCALE
-            a_small = cv2.resize(a, (int(W * s), int(H * s)), interpolation=cv2.INTER_AREA)
-            b_small = cv2.resize(b, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
-            res_small = cv2.matchTemplate(a_small, b_small, method, None)
-            _, _, _, max_loc_small = cv2.minMaxLoc(res_small)
+            small_W = max(1, int(W * s))
+            small_H = max(1, int(H * s))
+            small_w = max(1, int(w * s))
+            small_h = max(1, int(h * s))
 
-            # Map back to full-res match coordinates
-            cx = int(max_loc_small[0] / s)
-            cy = int(max_loc_small[1] / s)
+            # If coarse scale is not feasible, keep search local around center.
+            if small_w > small_W or small_h > small_H:
+                cx = resW // 2
+                cy = resH // 2
+            else:
+                a_small = cv2.resize(a, (small_W, small_H), interpolation=cv2.INTER_AREA)
+                b_small = cv2.resize(b, (small_w, small_h), interpolation=cv2.INTER_AREA)
+                res_small = cv2.matchTemplate(a_small, b_small, method, None)
+                if res_small.size == 0:
+                    cx = resW // 2
+                    cy = resH // 2
+                else:
+                    _, _, _, max_loc_small = cv2.minMaxLoc(res_small)
+                    # Map back to full-res match coordinates
+                    cx = int(max_loc_small[0] / s) if s > 0 else (resW // 2)
+                    cy = int(max_loc_small[1] / s) if s > 0 else (resH // 2)
 
             # ROI around coarse location in res-space
-            pad = int(max(w, h) * ROI_PAD_FACTOR)
+            pad = max(8, int(max(w, h) * ROI_PAD_FACTOR))
             x1 = max(0, cx - pad)
             y1 = max(0, cy - pad)
             x2 = min(resW - 1, cx + pad)
             y2 = min(resH - 1, cy + pad)
+
+            # Ensure at least one candidate position; do not fall back to full search.
+            if x2 < x1:
+                x1 = x2 = max(0, min(cx, resW - 1))
+            if y2 < y1:
+                y1 = y2 = max(0, min(cy, resH - 1))
 
             # Corresponding image region for refined match
             img_x1 = x1
             img_y1 = y1
             img_x2 = x2 + w - 1
             img_y2 = y2 + h - 1
-            img_x2 = min(img_x2, W - 1)
-            img_y2 = min(img_y2, H - 1)
-
-            # Ensure valid region
-            if img_x2 - img_x1 + 1 < w or img_y2 - img_y1 + 1 < h:
-                # Fallback to direct if ROI is degenerate
-                return cv2.matchTemplate(a, b, method, None)
 
             a_roi = a[img_y1:img_y2 + 1, img_x1:img_x2 + 1]
             res_roi = cv2.matchTemplate(a_roi, b, method, None)
@@ -1334,11 +1437,6 @@ def match_three(img, templates):
         print("CUDA TM kullanÄ±lmadÄ± (hata), CPU'ya dÃ¼ÅŸÃ¼lÃ¼yor:", e)
         return tuple(cv2.matchTemplate(img, t, method, None) for t in templates)
     
-
-
-dirname = os.path.dirname(os.path.abspath(__file__))
-
-
 # RMSE hesaplama fonksiyonu
 def rmse(errors):
     squared_errors = errors ** 2                     # hatalarÄ±n karesini al
@@ -1377,33 +1475,74 @@ if __name__ == '__main__':
     except Exception:
         pass
     
-    #haritalar klasÃ¶rÃ¼ndeki ilk gÃ¶rÃ¼ntÃ¼de DEM verileri vardÄ±r. ikinci gÃ¶rÃ¼ntÃ¼ ise normal rgb gÃ¶rÃ¼ntÃ¼dÃ¼r.
-    # 1) Yol/klasÃ¶r hazÄ±rlÄ±ÄŸÄ±: haritalar (ana harita), model (Keras), parcalar (anlÄ±k gÃ¶rÃ¼ntÃ¼ler)
-    harita_yol = os.path.join(dirname, 'haritalar')
-    harita_yol_list = [f for f in os.listdir(harita_yol) if os.path.isfile(os.path.join(harita_yol, f))]
-    model_yol = os.path.join(dirname, 'model')
-    model_list = [f for f in os.listdir(model_yol) if os.path.isfile(os.path.join(model_yol, f))]
-    if os.getenv("SORT_INPUTS", "0") == "1":
-        harita_yol_list = sorted(harita_yol_list)
-        model_list = sorted(model_list)
-    if not harita_yol_list:
+    # 1) Yol/klasor hazirligi: harita, model, anlik goruntu ve DEM
+    harita_yol = RUN_CFG["HARITA_DIR"]
+    if not os.path.isabs(harita_yol):
+        harita_yol = os.path.join(dirname, harita_yol)
+
+    model_yol = RUN_CFG["MODEL_DIR"]
+    if not os.path.isabs(model_yol):
+        model_yol = os.path.join(dirname, model_yol)
+
+    anlik_yol = RUN_CFG["ANLIK_DIR"]
+    if not os.path.isabs(anlik_yol):
+        anlik_yol = os.path.join(dirname, anlik_yol)
+
+    harita_secili = RUN_CFG.get("HARITA_DOSYALARI", [])
+    if harita_secili:
+        harita_path_list = [
+            (p if os.path.isabs(p) else os.path.join(harita_yol, p))
+            for p in harita_secili
+        ]
+    else:
+        harita_path_list = [
+            os.path.join(harita_yol, f)
+            for f in os.listdir(harita_yol)
+            if os.path.isfile(os.path.join(harita_yol, f))
+        ]
+
+    model_secili = RUN_CFG.get("MODEL_DOSYALARI", [])
+    if model_secili:
+        model_path_list = [
+            (p if os.path.isabs(p) else os.path.join(model_yol, p))
+            for p in model_secili
+        ]
+    else:
+        model_path_list = [
+            os.path.join(model_yol, f)
+            for f in os.listdir(model_yol)
+            if os.path.isfile(os.path.join(model_yol, f))
+        ]
+
+    if bool(RUN_CFG.get("SORT_INPUTS", False)):
+        harita_path_list = sorted(harita_path_list)
+        model_path_list = sorted(model_path_list)
+
+    harita_olmayan = [p for p in harita_path_list if not os.path.isfile(p)]
+    model_olmayan = [p for p in model_path_list if not os.path.isfile(p)]
+    for p in harita_olmayan:
+        print("Uyari: harita dosyasi bulunamadi, atlandi:", p)
+    for p in model_olmayan:
+        print("Uyari: model dosyasi bulunamadi, atlandi:", p)
+    harita_path_list = [p for p in harita_path_list if os.path.isfile(p)]
+    model_path_list = [p for p in model_path_list if os.path.isfile(p)]
+
+    if not harita_path_list:
         raise RuntimeError(f"Harita dosyasi bulunamadi: {harita_yol}")
-    if not model_list:
+    if not model_path_list:
         raise RuntimeError(f"Model dosyasi bulunamadi: {model_yol}")
-    if len(harita_yol_list) != len(model_list):
+
+    if len(harita_path_list) != len(model_path_list):
         print(
-            f"Uyari: harita/model sayisi farkli (harita={len(harita_yol_list)}, model={len(model_list)}). "
-            f"Ilk {min(len(harita_yol_list), len(model_list))} cift kullanilacak."
+            f"Uyari: harita/model sayisi farkli (harita={len(harita_path_list)}, model={len(model_path_list)}). "
+            f"Ilk {min(len(harita_path_list), len(model_path_list))} cift kullanilacak."
         )
-    eslesme_sayisi = min(len(harita_yol_list), len(model_list))
-    #ana_harita_elevation = "urgup_genis_elevations.tif"
-    #ana_harita_elevation="urgup_gmap_30_cm_elevations_560.tif"
-    #ana_harita_elevation = "ana_harita_urgup_30_cm_elevation_544.tif"
-    #ana_harita_elevation="ana_harita_karlik_30_cm_bingmap_elevations_576.tif"
-    #ana_harita_elevation = "urgup_genel_genis_kendi_uretimim_elevation.tif"
-    #ana_harita_elevation = "urgup_genis_karma_srtm_kendi_uretimim_elevation_mean.tif"
-    ana_harita_elevation = "ana_harita_urgup_30_cm_utm_elevation.tif"
-    #ana_harita_elevation = "karlik_30_cm_bingmap_utm_elevation.tif"
+    eslesme_sayisi = min(len(harita_path_list), len(model_path_list))
+
+    model_list = [os.path.basename(p) for p in model_path_list]
+    harita_yol_list = [os.path.basename(p) for p in harita_path_list]
+
+    ana_harita_elevation = RUN_CFG["DEM_PATH"]
     
     
     
@@ -1417,7 +1556,7 @@ if __name__ == '__main__':
     from affine import Affine
  
     #fname = 'urgup_gmap_georef.tif'
-    fname = os.path.join(harita_yol, harita_yol_list[0])
+    fname = harita_path_list[0]
     # Read raster (metadata only)
     with rasterio.open(fname) as r:
         T0 = r.transform  # upper-left pixel corner affine transform
@@ -1481,14 +1620,14 @@ if __name__ == '__main__':
         yanlis_negatif=0
         uzaklik_hatalari = []
         
-        model_yolu = os.path.join(model_yol, model_list[k])
+        model_yolu = model_path_list[k]
         model = load_model(model_yolu)        
         
         
           
         dogru_tahmin=0
         yanlis_tahmin=0
-        ana_harita = os.path.join(harita_yol, harita_yol_list[k])
+        ana_harita = harita_path_list[k]
         # Referans haritayÄ± gri-ton olarak oku (Template Matching iÃ§in daha uygundur)
           
         t_img = cv2.imread(ana_harita,0)  #haritalar klasÃ¶rÃ¼ndeki ikinci gÃ¶rÃ¼ntÃ¼yÃ¼ okur
@@ -1504,11 +1643,7 @@ if __name__ == '__main__':
           
         kenarx=int(t_img.shape[0]/512)
         
-        #parcalar klasÃ¶rÃ¼ndeki anlÄ±k gÃ¶rÃ¼ntÃ¼leri getirir
-        # 6) parcalar klasÃ¶rÃ¼ndeki anlÄ±k gÃ¶rÃ¼ntÃ¼leri getirir
-        anlik_yol = os.getenv("ANLIK_YOL", os.path.join(dirname, 'parcalar'))
-        
-        #anlik_yol="parcalar/"
+        # 6) Anlik goruntu klasorundeki dosyalari getir
         
         anlik_yol_list = sorted(
             [
@@ -1563,7 +1698,7 @@ if __name__ == '__main__':
 
             if FocalLength is None or float(FocalLength) <= 0:
                 try:
-                    FocalLength = float(os.getenv("DEFAULT_FOCAL_LENGTH_MM", "8.8"))
+                    FocalLength = float(RUN_CFG.get("DEFAULT_FOCAL_LENGTH_MM", 8.8))
                     print("Uyari: FocalLength EXIF eksik/gecersiz, varsayilan deger kullanildi:", FocalLength)
                 except Exception:
                     print("FocalLength elde edilemedi, atlaniyor:", anlik_goruntu)
@@ -1699,7 +1834,7 @@ if __name__ == '__main__':
             }
             camera_sensor_genislik = camera_sensor_by_model.get(kamera_model)
             if camera_sensor_genislik is None:
-                camera_sensor_genislik = float(os.getenv("DEFAULT_SENSOR_WIDTH_MM", "13.2"))
+                camera_sensor_genislik = float(RUN_CFG.get("DEFAULT_SENSOR_WIDTH_MM", 13.2))
                 print(f"Uyari: bilinmeyen kamera modeli ({kamera_model}), sensor genisligi fallback: {camera_sensor_genislik} mm")
 
             camera_focal_lenght = float(FocalLength)
@@ -2310,7 +2445,7 @@ if __name__ == '__main__':
         except Exception as _e:
             print("sonuclar dosyaya yazÄ±lÄ±rken hata:", _e)
 
-        if os.getenv("WAIT_PER_MODEL", "0") == "1":
+        if bool(RUN_CFG.get("WAIT_PER_MODEL", False)):
             input("pause")
 
     try:
@@ -2321,5 +2456,6 @@ if __name__ == '__main__':
         del dataset
     except Exception:
         pass
-    if os.getenv("WAIT_ON_EXIT", "0") == "1":
+    if bool(RUN_CFG.get("WAIT_ON_EXIT", False)):
         input("pause")
+
