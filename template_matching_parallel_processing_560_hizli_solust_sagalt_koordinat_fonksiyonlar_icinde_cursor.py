@@ -56,7 +56,7 @@ RUN_CFG = {
     "MODEL_DOSYALARI": [],   # Ornek: ["m1.h5", "m2.h5"]
     "SORT_INPUTS": False,    # True: giris listeleri siralanir (eslestirme sirasi sabitlenir).
 
-    # EXIF/camera fallback
+    # EXIF/kamera yedek degerleri
     "DEFAULT_FOCAL_LENGTH_MM": 8.8,  # EXIF focal length yoksa kullanilir.
     "DEFAULT_SENSOR_WIDTH_MM": 13.2, # Kamera modeli bilinmiyorsa sensor fallback.
     "USE_GPS_ALT_REF_SIGN": False,   # True ise altitude ref isareti uygulanir.
@@ -140,7 +140,7 @@ warnings.filterwarnings("ignore")
 dirname = os.path.dirname(os.path.abspath(__file__))
 
 def _get_screen_size():
-    """Return (screen_width, screen_height) or a safe fallback."""
+    """Ekran boyutunu (genislik, yukseklik) dondurur; hata olursa guvenli varsayilan verir."""
     try:
         import ctypes
         user32 = ctypes.windll.user32
@@ -159,7 +159,7 @@ def _get_screen_size():
             return 1920, 1080
 
 def _show_image_fit(win_name, img, max_frac=0.95):
-    """Show image in a resizable window sized to fit the screen while keeping aspect ratio."""
+    """Goruntuyu oranini bozmadan ekrana sigacak boyutta pencereye yerlestirip gosterir."""
     try:
         h, w = img.shape[:2]
         sw, sh = _get_screen_size()
@@ -182,18 +182,19 @@ def _show_image_fit(win_name, img, max_frac=0.95):
 
 def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="SaÃ„Å¸",
                           target_height=900, apply_colormap_right=True):
-    """Create a labeled side-by-side visualization from two grayscale images.
+    """Iki goruntuyu yan yana birlestirip basliklariyla birlikte gosterim icin hazirlar.
 
-    - Resizes both images to the same target height while preserving aspect.
-    - Converts to BGR and adds titles on top-left.
-    - Optionally applies a colormap to the right image to emphasize details.
-    Returns a BGR image suitable for cv2.imshow.
+    - Iki goruntu ayni hedef yukseklige oran korunarak yeniden boyutlandirilir.
+    - Gerekirse gri goruntu BGR'a cevrilir.
+    - Basliklar sol ustte okunakli sekilde cizilir.
+    - Sag goruntuya istenirse colormap uygulanir.
+    Donen sonuc cv2.imshow icin dogrudan kullanilabilir (BGR).
     """
     try:
         if left_gray is None or right_gray is None:
             return None
 
-        # Ensure 2D grayscale arrays
+        # Girisleri 2B gri goruntu formatina indir.
         if left_gray.ndim == 3:
             if left_gray.shape[2] == 3:
                 left_gray = cv2.cvtColor(left_gray, cv2.COLOR_BGR2GRAY)
@@ -205,7 +206,7 @@ def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="
             else:
                 right_gray = right_gray.squeeze()
 
-        # Convert to 8-bit if needed
+        # Gerekirse 8-bit araligina normalize et.
         if left_gray.dtype != np.uint8:
             lmin, lmax = float(np.min(left_gray)), float(np.max(left_gray))
             if lmax > lmin:
@@ -219,7 +220,7 @@ def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="
             else:
                 right_gray = np.zeros_like(right_gray, dtype=np.uint8)
 
-        # Resize to target height with preserved aspect ratio
+        # Hedef yukseklige oran bozulmadan yeniden boyutlandir.
         def _resize_to_h(img, H):
             h, w = img.shape[:2]
             if h <= 0 or w <= 0:
@@ -234,7 +235,7 @@ def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="
         if L is None or R is None:
             return None
 
-        # Optional colormap on right
+        # Istendiyse sag goruntuya colormap uygula.
         if apply_colormap_right:
             try:
                 Rc = cv2.applyColorMap(R, cv2.COLORMAP_VIRIDIS)
@@ -245,7 +246,7 @@ def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="
 
         Lc = cv2.cvtColor(L, cv2.COLOR_GRAY2BGR)
 
-        # Add simple titles
+        # Basit ve okunakli baslik yazilari ekle.
         def _title(img, text):
             try:
                 cv2.putText(img, str(text), (25, 60), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 255, 255), 4, cv2.LINE_AA)
@@ -260,7 +261,7 @@ def _compose_side_by_side(left_gray, right_gray, left_title="Sol", right_title="
         try:
             vis = cv2.hconcat([Lc, Rc])
         except Exception:
-            # Fallback manual concat if hconcat unavailable
+            # hconcat calismazsa manuel birlestirme yap.
             H = max(Lc.shape[0], Rc.shape[0])
             W = Lc.shape[1] + Rc.shape[1]
             vis = np.zeros((H, W, 3), dtype=np.uint8)
@@ -278,7 +279,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
         if top_gray is None or bottom_gray is None:
             return None
 
-        # Normalize shapes: keep top as color if provided; ensure bottom is single-channel
+        # Kanal normalizasyonu: ust renkli kalabilir, alt tek kanal olur.
         top_is_color = (top_gray.ndim == 3 and top_gray.shape[2] == 3)
         if not top_is_color and top_gray.ndim == 3:
             top_gray = top_gray.squeeze()
@@ -288,7 +289,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
             else:
                 bottom_gray = bottom_gray.squeeze()
 
-        # Convert to 8-bit if needed
+        # Gerekirse 8-bit araligina normalize et.
         if top_gray.dtype != np.uint8:
             if top_is_color:
                 tmin, tmax = float(np.min(top_gray)), float(np.max(top_gray))
@@ -309,7 +310,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
             else:
                 bottom_gray = np.zeros_like(bottom_gray, dtype=np.uint8)
 
-        # Resize to same target width
+        # Iki goruntuyu da ayni hedef genislige getir.
         def _resize_to_w(img, W):
             h, w = img.shape[:2]
             if h <= 0 or w <= 0:
@@ -323,7 +324,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
         if T is None or B is None:
             return None
 
-        # Optional colormap on bottom
+        # Istendiyse alt goruntuya colormap uygula.
         if apply_colormap_bottom:
             try:
                 Bc = cv2.applyColorMap(B, cv2.COLORMAP_VIRIDIS)
@@ -336,7 +337,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
         else:
             Tc = cv2.cvtColor(T, cv2.COLOR_GRAY2BGR)
 
-        # Create caption bars (text outside the image)
+        # Metni goruntunun disinda tutmak icin baslik barlari olustur.
         cap_h = int(max(30, min(200, caption_height)))
         W = target_width
         top_bar = np.zeros((cap_h, W, 3), dtype=np.uint8)
@@ -355,7 +356,7 @@ def _compose_top_bottom(top_gray, bottom_gray, top_title="Crop", bottom_title="M
         top_bar = _draw_caption(top_bar, top_title)
         bottom_bar = _draw_caption(bottom_bar, bottom_title)
 
-        # Assemble with optional gap between images
+        # Iki parcayi araya bosluk koyarak (opsiyonel) birlestir.
         gap_h = int(max(0, min(200, gap)))
         gap_bar = np.zeros((gap_h, W, 3), dtype=np.uint8) if gap_h > 0 else None
 
@@ -493,28 +494,28 @@ def conversion(yon,coord):
 
 def piksel_bul(path, longitude, latitude):
     """
-    Find the row and column of a geographic coordinate in a raster file.
-    
-    Parameters:
-    path (str): The path to the raster file.
-    longitude (float): The longitude of the geographic coordinate.
-    latitude (float): The latitude of the geographic coordinate.
-    
-    Returns:
-    tuple: A tuple containing the row and column indices.
+    Verilen cografi koordinatin raster dosyasindaki piksel konumunu (satir, sutun) bulur.
+
+    Parametreler:
+    - path (str): Raster dosyasi yolu.
+    - longitude (float): Boylam (WGS84).
+    - latitude (float): Enlem (WGS84).
+
+    Donus:
+    - tuple: (row, col) yani (satir, sutun) indisleri.
     """
-    # Open the raster file
+    # Raster dosyasini ac.
     with rio.open(path) as image_data:
-        # Get the CRS for the raster file
+        # Rasterin koordinat referans sistemini (CRS) al.
         to_crs = image_data.crs
 
-        # Initialize the transformer with high precision
+        # WGS84 -> raster CRS donusumu icin donusturucu olustur.
         transformer = Transformer.from_crs("EPSG:4326", to_crs, always_xy=True)
         
-        # Transform the coordinates
+        # Koordinati raster CRS'ine cevir.
         new_x, new_y = transformer.transform(longitude, latitude)
         
-        # Get the row and column index
+        # Donusen koordinatin satir/sutun karsiligini bul.
         row, col = image_data.index(new_x, new_y)
         
     return row, col
@@ -524,8 +525,10 @@ def piksel_bul(path, longitude, latitude):
 
 def piksel_bul_fast(image_data, transformer, longitude, latitude):
     """
-    Fast pixel lookup using pre-opened rasterio dataset and pre-built transformer.
-    Returns (row, col).
+    Onceden acilmis rasterio nesnesi ve hazir transformer ile hizli piksel sorgusu yapar.
+
+    Donus:
+    - (row, col)
     """
     new_x, new_y = transformer.transform(longitude, latitude)
     row, col = image_data.index(new_x, new_y)
@@ -538,24 +541,24 @@ def quick_distance(Lat1, Long1, Lat2, Long2):
     
 def quick_distance_utm(Lat1, Long1, Lat2, Long2):
     """
-    Calculate the approximate distance between two points in UTM Zone 36.
-    
-    Parameters:
-    - Lat1, Long1: Latitude and Longitude of the first point in decimal degrees.
-    - Lat2, Long2: Latitude and Longitude of the second point in decimal degrees.
-    
-    Returns:
-    - float: The approximate distance between the two points in meters.
+    Iki nokta arasindaki mesafeyi UTM Zone 36 uzerinden yaklasik olarak hesaplar.
+
+    Parametreler:
+    - Lat1, Long1: 1. noktanin enlem-boylami (ondalik derece)
+    - Lat2, Long2: 2. noktanin enlem-boylami (ondalik derece)
+
+    Donus:
+    - float: Mesafe (metre)
     """
     
-    # Create a Transformer object for WGS84 to UTM Zone 36 conversion
+    # WGS84 -> UTM Zone 36 donusumu icin transformer olustur.
     transformer = Transformer.from_crs("EPSG:4326", "EPSG:32636", always_xy=True)
     
-    # Convert the coordinates to UTM Zone 36
+    # Iki noktayi UTM koordinatlarina cevir.
     easting1, northing1 = transformer.transform(Long1, Lat1)
     easting2, northing2 = transformer.transform(Long2, Lat2)
     
-    # Calculate the approximate distance using UTM coordinates
+    # UTM duzleminde Oklid mesafesi hesapla.
     x = easting2 - easting1
     y = northing2 - northing1
     
@@ -565,27 +568,27 @@ def quick_distance_utm(Lat1, Long1, Lat2, Long2):
     
 def latlon_to_utm(latitude, longitude, zone_number=None, hemisphere=None):
     """
-    Convert Latitude and Longitude to UTM coordinates.
-    
-    Parameters:
-    - latitude (float): The latitude in decimal degrees.
-    - longitude (float): The longitude in decimal degrees.
-    - zone_number (int, optional): UTM zone number. If None, it will be calculated based on longitude.
-    - hemisphere (str, optional): 'N' for Northern Hemisphere, 'S' for Southern Hemisphere. If None, it will be calculated based on latitude.
-    
-    Returns:
-    - tuple: A tuple containing UTM Easting, UTM Northing, Zone Number, and Hemisphere.
+    Enlem-boylam koordinatini UTM koordinatina cevirir.
+
+    Parametreler:
+    - latitude (float): Enlem (ondalik derece)
+    - longitude (float): Boylam (ondalik derece)
+    - zone_number (int, optional): UTM zonu. Verilmezse boylama gore otomatik hesaplanir.
+    - hemisphere (str, optional): 'N' veya 'S'. Verilmezse enleme gore otomatik belirlenir.
+
+    Donus:
+    - tuple: (easting, northing, zone_number, hemisphere)
     """
     
-    # Calculate the UTM zone number if not provided
+    # UTM zonu verilmediyse boylama gore hesapla.
     if zone_number is None:
         zone_number = int((longitude + 180) / 6) + 1
     
-    # Determine the hemisphere if not provided
+    # Yarim kure bilgisi verilmediyse enleme gore belirle.
     if hemisphere is None:
         hemisphere = 'N' if latitude >= 0 else 'S'
     
-    # Select EPSG code by hemisphere
+    # Yarim kureye gore EPSG kodu sec.
     epsg = 32600 + zone_number if hemisphere.upper() == 'N' else 32700 + zone_number
     tfm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
     easting, northing = tfm.transform(longitude, latitude)
@@ -594,13 +597,13 @@ def latlon_to_utm(latitude, longitude, zone_number=None, hemisphere=None):
 
 from math import sin, cos, sqrt, atan2, radians
 
-# ----------------------------
-# Helpers: EXIF, cropping, CRS
-# ----------------------------
+# ---------------------------------------
+# Yardimci fonksiyonlar: EXIF, kirpma, CRS
+# ---------------------------------------
 
 def _to_float_ratio(val):
     try:
-        # PIL may return tuples like (num, den)
+        # PIL bazi EXIF alanlarini (pay, payda) olarak dondurebilir.
         if isinstance(val, tuple) and len(val) == 2:
             num, den = val
             den = den or 1
@@ -610,9 +613,12 @@ def _to_float_ratio(val):
         return None
 
 def parse_exif(image_path):
-    """Parse EXIF safely; returns dict with keys:
-    yaw, latitude, longitude, altitude, focal_length, model, timestamp.
-    Returns None on failure.
+    """EXIF verisini guvenli sekilde okur.
+
+    Donen sozluk anahtarlari:
+    - yaw, latitude, longitude, altitude, focal_length, model, timestamp
+
+    Okuma basarisiz olursa None dondurur.
     """
     import re
     try:
@@ -718,7 +724,7 @@ def parse_exif(image_path):
     }
 
 def make_rc_to_ll(dataset):
-    """Create a pixel(row,col)->(lon,lat) converter for a rasterio dataset."""
+    """Rasterio veri seti icin piksel(satir,sutun) -> (lon,lat) donusturucu uretir."""
     T1 = dataset.transform * Affine.translation(0.5, 0.5)
     to_wgs = Transformer.from_crs(dataset.crs, "EPSG:4326", always_xy=True)
     def rc_to_ll(row, col):
@@ -731,21 +737,21 @@ def is_valid_slice(img, x1, y1, x2, y2):
     return x1 >= 0 and y1 >= 0 and x2 <= img.shape[1] and y2 <= img.shape[0]
 
 def haversine_distance(lat1, lon1, lat2, lon2):
-    # Earth radius in kilometers
+    # Dunya yaricapi (km)
     R = 6371.0
     
-    # Convert latitude and longitude from degrees to radians
+    # Derece -> radyan donusumu
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     
-    # Compute differences in latitude and longitude
+    # Enlem-boylam farklari
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     
-    # Haversine formula
+    # Haversine formulu
     a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     
-    # Distance
+    # Son mesafe (km)
     distance = R * c
     
     return distance
@@ -753,7 +759,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 
 """
-UI helpers: panels, scale bar, minimal HUD
+UI yardimcilari: panel, olcek cubugu, sade HUD
 """
 # ---------------------------------------------------------------------------
 # UI renk paleti -- tum UI elemanlari bu paleti kullanir
@@ -779,7 +785,7 @@ UI_COLORS = {
 
 
 def _draw_alpha_panel(img, x0, y0, x1, y1, color=(0, 0, 0), alpha=0.5):
-    """Draw a filled rectangle with alpha blending onto img in-place (ROI-only)."""
+    """Goruntu uzerine yari seffaf dolu dikdortgen cizer (yalnizca ilgili ROI bolgesinde)."""
     x0 = max(0, min(int(x0), img.shape[1] - 1))
     x1 = max(0, min(int(x1), img.shape[1] - 1))
     y0 = max(0, min(int(y0), img.shape[0] - 1))
@@ -837,7 +843,7 @@ def _draw_toggle_switch(img, x, y, w, h, is_on, view_scale=1.0):
     else:
         cx = x + r + knob_pad
     cv2.circle(img, (cx, y + r), r - knob_pad, knob, -1)
-    # Ince border
+    # Ince kenar cizgisi
     border_t = max(1, int(round(1.5 * view_scale)))
     cv2.rectangle(img, (x + r, y), (x + w - r, y + h), (200, 200, 210), border_t)
     cv2.circle(img, (x + r, y + r), r, (200, 200, 210), border_t)
@@ -859,11 +865,12 @@ def draw_info_panel(img, lines, top_left=(25, 150), font=cv2.FONT_HERSHEY_SIMPLE
                     font_scale=6, thickness=20, text_color=None,
                     bg_color=None, alpha=0.55, padding=25, line_gap=None,
                     corner_radius=0):
-    """Draw a semi-transparent info panel with multiple text lines.
+    """Birden fazla satiri yari seffaf bilgi paneli olarak cizer.
 
-    lines: list of strings to show, one per line
-    top_left: baseline of the first text line (x, y)
-    corner_radius: >0 ise rounded panel cizer
+    Parametreler:
+    - lines: Gosterilecek metin listesi (her eleman bir satir)
+    - top_left: Ilk satirin taban noktasi (x, y)
+    - corner_radius: >0 ise kose yaricapli panel cizilir
     """
     if not lines:
         return
@@ -907,10 +914,10 @@ def draw_info_panel(img, lines, top_left=(25, 150), font=cv2.FONT_HERSHEY_SIMPLE
 def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=35,
                    color=(255, 255, 255), text_color=(255, 255, 255),
                    font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=3, thickness=8):
-    """Draw a metric scale bar in the bottom-right corner.
+    """Sag alt kosede metrik olcek cubugu cizer.
 
-    cpp_cm_per_px: centimeters per pixel (float). If None/0, function does nothing.
-    scale_meters: length of the scale bar in meters.
+    - cpp_cm_per_px: piksel basina santimetre. None/0 ise cizim yapilmaz.
+    - scale_meters: cubuk uzunlugu (metre).
     """
     try:
         cpp = float(cpp_cm_per_px)
@@ -927,10 +934,10 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
     x2 = min(w - 1, x1 + bar_w)
     y2 = min(h - 1, y1 + bar_height)
 
-    # Background for readability
+    # Okunabilirligi artirmak icin yariseffaf arka plan.
     _draw_alpha_panel(img, x1 - 25, y1 - 80, x2 + 25, y2 + 25, color=(0, 0, 0), alpha=0.5)
     cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness=-1)
-    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), thickness=max(2, thickness // 2))  # border
+    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), thickness=max(2, thickness // 2))  # Kenar
 
     label = f"{int(scale_meters)} m"
     (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
@@ -940,7 +947,7 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
 
 
 def _build_runtime_buttons():
-    """Return clickable button definitions for runtime visibility toggles."""
+    """Calisma sirasinda ac/kapa icin tiklanabilir buton tanimlarini dondurur."""
     return [
         {"key": "_panel_collapsed", "label": "", "hotkey": "H",
          "rect": (20, 20, 44, 44), "is_collapse": True},
@@ -960,7 +967,7 @@ def _draw_runtime_buttons(
     ui_scale=1.0,
     display_size=(1280, 960),
 ):
-    """Draw modern, adaptive ON/OFF toggle buttons onto the current frame.
+    """Mevcut kare uzerine modern ve olceklenebilir ac/kapa butonlarini cizer.
 
     Ozellikler:
     - Rounded-corner panel ve butonlar
@@ -1151,7 +1158,7 @@ def _draw_runtime_buttons(
 
 
 def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
-    """Mouse callback for runtime toggle buttons (hover + click + collapse).
+    """Runtime butonlari icin mouse callback (hover + tiklama + panel daraltma).
 
     NOT: OpenCV WINDOW_NORMAL modunda mouse koordinatlarini otomatik olarak
     goruntu piksel koordinatlarina cevirir, bu yuzden ek donusum gerekmez.
@@ -1166,7 +1173,7 @@ def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
     # OpenCV zaten goruntu koordinatlarini verir -- dogrudan kullan
     mx, my = x, y
 
-    # -- Hover tracking (her mouse hareketi) --
+    # -- Hover takibi (her fare hareketinde aktif ogeyi guncelle) --
     if event == cv2.EVENT_MOUSEMOVE:
         ui_state["_hover_key"] = None
         for b in buttons:
@@ -1353,28 +1360,28 @@ def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
 
 def rotate_image(image, angle):
     """
-    Rotates an OpenCV 2 / NumPy image about it's centre by the given angle
-    (in degrees). The returned image will be large enough to hold the entire
-    new image, with a black background
+    Verilen goruntuyu merkezinden belirtilen aci kadar (derece) dondurur.
+    Donen goruntu, tum dondurulmus icerigi sigdiracak kadar buyuktur.
+    Bos kalan alanlar siyah arka plan olarak kalir.
     """
 
-    # Get the image size
-    # No that's not an error - NumPy stores image matricies backwards
+    # Goruntu boyutunu al.
+    # NumPy diziliminde siralama (genislik, yukseklik) degil (yukseklik, genislik) oldugu icin ters okunur.
     image_size = (image.shape[1], image.shape[0])
     image_center = tuple(np.array(image_size) / 2)
 
-    # Convert the OpenCV 3x2 rotation matrix to 3x3
+    # OpenCV'nin 2x3 donusum matrisini 3x3 homojen forma genislet.
     rot_mat = np.vstack(
         [cv2.getRotationMatrix2D(image_center, angle, 1.0), [0, 0, 1]]
     )
 
     rot_mat_notranslate = np.matrix(rot_mat[0:2, 0:2])
 
-    # Shorthand for below calcs
+    # Asagidaki hesaplarda kullanilacak yari boyutlar.
     image_w2 = image_size[0] * 0.5
     image_h2 = image_size[1] * 0.5
 
-    # Obtain the rotated coordinates of the image corners
+    # Kose noktalarinin donmus konumlarini hesapla.
     rotated_coords = [
         (np.array([-image_w2,  image_h2]) * rot_mat_notranslate).A[0],
         (np.array([ image_w2,  image_h2]) * rot_mat_notranslate).A[0],
@@ -1382,7 +1389,7 @@ def rotate_image(image, angle):
         (np.array([ image_w2, -image_h2]) * rot_mat_notranslate).A[0]
     ]
 
-    # Find the size of the new image
+    # Yeni goruntunun ihtiyac duyulan boyutlarini bul.
     x_coords = [pt[0] for pt in rotated_coords]
     x_pos = [x for x in x_coords if x > 0]
     x_neg = [x for x in x_coords if x < 0]
@@ -1399,17 +1406,17 @@ def rotate_image(image, angle):
     new_w = int(abs(right_bound - left_bound))
     new_h = int(abs(top_bound - bot_bound))
 
-    # We require a translation matrix to keep the image centred
+    # Goruntuyu merkezde tutmak icin ek oteleme matrisi gerekir.
     trans_mat = np.matrix([
         [1, 0, int(new_w * 0.5 - image_w2)],
         [0, 1, int(new_h * 0.5 - image_h2)],
         [0, 0, 1]
     ])
 
-    # Compute the tranform for the combined rotation and translation
+    # Donme + oteleme birlesik affine donusumunu hesapla.
     affine_mat = (np.matrix(trans_mat) * np.matrix(rot_mat))[0:2, :]
 
-    # Apply the transform (prefer CUDA if available)
+    # Donusumu uygula (mumkunse CUDA, degilse CPU).
     try:
         _gpu = hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0 and hasattr(cv2.cuda, 'warpAffine')
     except Exception:
@@ -1431,13 +1438,10 @@ def rotate_image(image, angle):
 
 def largest_rotated_rect(w, h, angle):
     """
-    Given a rectangle of size wxh that has been rotated by 'angle' (in
-    radians), computes the width and height of the largest possible
-    axis-aligned rectangle within the rotated rectangle.
+    wxh boyutunda bir dikdortgen 'angle' kadar donduruldugunde, iceride kalacak
+    en buyuk eksenlere paralel dikdortgenin boyutunu hesaplar.
 
-    Original JS code by 'Andri' and Magnus Hoff from Stack Overflow
-
-    Converted to Python by Aaron Snoswell
+    Not: Bu geometri formulu Stack Overflow'daki bir yaklasimdan turetilmistir.
     """
 
     quadrant = int(math.floor(angle / (math.pi / 2))) & 3
@@ -1467,8 +1471,7 @@ def largest_rotated_rect(w, h, angle):
 
 def crop_around_center(image, width, height):
     """
-    Given a NumPy / OpenCV 2 image, crops it to the given width and height,
-    around it's centre point
+    Verilen goruntuyu, merkez noktasi etrafinda belirtilen genislik/yukseklige kirpar.
     """
 
     image_size = (image.shape[1], image.shape[0])
@@ -1490,13 +1493,8 @@ def crop_around_center(image, width, height):
 
 def rotated_rect(w, h, angle):
     """
-    Given a rectangle of size wxh that has been rotated by 'angle' (in
-    radians), computes the width and height of the largest possible
-    axis-aligned rectangle within the rotated rectangle.
-
-    Original JS code by 'Andri' and Magnus Hoff from Stack Overflow
-
-    Converted to Python by Aaron Snoswell
+    wxh boyutunda bir dikdortgenin donmesi sonrasi,
+    iceride kalacak en buyuk eksenlere paralel dikdortgeni hesaplar.
     """
     angle = math.radians(angle)
     quadrant = int(math.floor(angle / (math.pi / 2))) & 3
@@ -1575,7 +1573,7 @@ RUN_CFG = {
     "MODEL_DOSYALARI": [],   # Ornek: ["m1.h5", "m2.h5"]
     "SORT_INPUTS": False,    # True: dosya sirasi deterministik olur.
 
-    # EXIF/camera fallback:
+    # EXIF/kamera yedek degerleri:
     # EXIF eksik/bozuk oldugunda bu degerler devreye girer.
     "DEFAULT_FOCAL_LENGTH_MM": 8.8,
     "DEFAULT_SENSOR_WIDTH_MM": 13.2,
@@ -1634,10 +1632,10 @@ def find_corner_coordinates(center_latitude, center_longitude, pixel_distance, G
 
 
 def match(img,template):
-    # Prefer CUDA if available and enabled, otherwise fall back to CPU
+    # CUDA uygunsa once GPU'da dene; basarisiz olursa CPU'ya geri don.
     method = cv2.TM_CCOEFF_NORMED
 
-    # Lazy-init CUDA flags on first call
+    # CUDA durum bayraklarini ilk cagride bir kez baslat.
     global _CUDA_TM_INITIALIZED, _CUDA_TM_AVAILABLE, _CUDA_TM_DISABLED
     try:
         _CUDA_TM_INITIALIZED
@@ -1655,13 +1653,13 @@ def match(img,template):
 
     if _CUDA_TM_AVAILABLE and not _CUDA_TM_DISABLED and img.dtype == np.uint8 and template.dtype == np.uint8 and img.ndim == 2 and template.ndim == 2:
         try:
-            # Upload to GPU
+            # Giris goruntusu ve template'i GPU'ya yukle.
             g_img = cv2.cuda_GpuMat()
             g_tmpl = cv2.cuda_GpuMat()
             g_img.upload(img)
             g_tmpl.upload(template)
 
-            # Determine src type
+            # Kaynak tipini belirle (tek kanalli 8-bit).
             src_type = cv2.CV_8UC1 if hasattr(cv2, 'CV_8UC1') else cv2.CV_8U
             tm = cv2.cuda.createTemplateMatching(src_type, method)
             g_res = tm.match(g_img, g_tmpl)
@@ -1671,7 +1669,7 @@ def match(img,template):
             print("CUDA template matching kullanÃ„Â±lamadÃ„Â±, CPU'ya dÃƒÂ¼Ã…Å¸ÃƒÂ¼lÃƒÂ¼yor:", e)
             _CUDA_TM_DISABLED = True
 
-    # CPU fallback
+    # CPU yedek yol.
     res = cv2.matchTemplate(img, template, method, None)
     return res
 
@@ -1691,14 +1689,18 @@ def _init_cuda_tm_state():
         _CUDA_TM_INITIALIZED = True
 
 def match_three(img, templates):
-    """Run template matching for three templates.
-    If CUDA is available, upload img once and run three matches on GPU.
-    Returns (res1, res2, res3).
+    """Uc template icin template matching yapar.
+
+    - CUDA varsa goruntu bir kez GPU'ya yuklenir ve uc eslestirme GPU'da yapilir.
+    - CUDA yoksa/uygun degilse CPU yoluna dusulur.
+
+    Donus:
+    - (res1, res2, res3)
     """
     method = cv2.TM_CCOEFF_NORMED
     _init_cuda_tm_state()
 
-    # CPU fallback path
+    # CPU yedek yol.
     if not _CUDA_TM_AVAILABLE or any(t.ndim != 2 or t.dtype != np.uint8 for t in templates) or img.ndim != 2 or img.dtype != np.uint8:
         try:
             if not getattr(match_three, "_logged_backend", False):
@@ -1714,21 +1716,21 @@ def match_three(img, templates):
             return cv2.matchTemplate(a, b, method, None)
 
         def _match_pyramid(a, b):
-            # Full result shape
+            # Sonuc haritasinin tam boyutu.
             H, W = a.shape[:2]
             h, w = b.shape[:2]
             resH, resW = (H - h + 1, W - w + 1)
             if resH <= 0 or resW <= 0:
                 return np.empty((0, 0), dtype=np.float32)
 
-            # Coarse downscale (local search seed)
+            # Kaba asama: kucuk olcekte arama tohumu (ilk tahmin).
             s = COARSE_SCALE
             small_W = max(1, int(W * s))
             small_H = max(1, int(H * s))
             small_w = max(1, int(w * s))
             small_h = max(1, int(h * s))
 
-            # If coarse scale is not feasible, keep search local around center.
+            # Kaba olcek teknik olarak uygun degilse merkez civarinda yerel arama yap.
             if small_w > small_W or small_h > small_H:
                 cx = resW // 2
                 cy = resH // 2
@@ -1741,24 +1743,24 @@ def match_three(img, templates):
                     cy = resH // 2
                 else:
                     _, _, _, max_loc_small = cv2.minMaxLoc(res_small)
-                    # Map back to full-res match coordinates
+                    # Kaba olcek koordinatini tam cozunurluge geri haritala.
                     cx = int(max_loc_small[0] / s) if s > 0 else (resW // 2)
                     cy = int(max_loc_small[1] / s) if s > 0 else (resH // 2)
 
-            # ROI around coarse location in res-space
+            # Kaba konumun etrafinda ROI (sonuc uzayinda).
             pad = max(8, int(max(w, h) * ROI_PAD_FACTOR))
             x1 = max(0, cx - pad)
             y1 = max(0, cy - pad)
             x2 = min(resW - 1, cx + pad)
             y2 = min(resH - 1, cy + pad)
 
-            # Ensure at least one candidate position; do not fall back to full search.
+            # En az bir aday pozisyon oldugundan emin ol; tum haritada tam aramaya donme.
             if x2 < x1:
                 x1 = x2 = max(0, min(cx, resW - 1))
             if y2 < y1:
                 y1 = y2 = max(0, min(cy, resH - 1))
 
-            # Corresponding image region for refined match
+            # Ince arama icin goruntu uzerindeki karsilik gelen bolge.
             img_x1 = x1
             img_y1 = y1
             img_x2 = x2 + w - 1
@@ -1767,7 +1769,7 @@ def match_three(img, templates):
             a_roi = a[img_y1:img_y2 + 1, img_x1:img_x2 + 1]
             res_roi = cv2.matchTemplate(a_roi, b, method, None)
 
-            # Paste into full-sized result with very low value outside
+            # ROI disina cok dusuk skor yazarak tam boy sonuc haritasi olustur.
             res_full = np.empty((resH, resW), dtype=res_roi.dtype)
             res_full.fill(-1e9)
             res_full[y1:y2 + 1, x1:x2 + 1] = res_roi
@@ -1782,12 +1784,12 @@ def match_three(img, templates):
                 futs = [ex.submit(_match_direct, img_c, t) for t in tmps_c]
                 return tuple(f.result() for f in futs)
 
-    # GPU path
+    # GPU yol.
     try:
         g_img = cv2.cuda_GpuMat()
         g_img.upload(img)
         src_type = cv2.CV_8U
-        # Cache TemplateMatching object
+        # TemplateMatching nesnesini onbellekle (tekrar olusturma maliyetini azalt).
         if not hasattr(match_three, "_tm") or match_three._tm is None:
             match_three._tm = cv2.cuda.createTemplateMatching(src_type, method)
         tm = match_three._tm
@@ -1798,7 +1800,7 @@ def match_three(img, templates):
             g_tmpl.upload(t)
             g_res = tm.match(g_img, g_tmpl)
             results.append(g_res.download())
-        # Log once which backend used
+        # Hangi backend'in kullanildigini bir kez logla.
         try:
             if not getattr(match_three, "_logged_backend", False):
                 print("TemplateMatching backend: CUDA")
@@ -1842,7 +1844,7 @@ def standart_sapma(data):
 
 
 def _normalize_ext_set(exts):
-    """Return normalized lowercase extension set like {'.jpg', '.h5'}."""
+    """Uzanti listesini normalize edip kucuk harf setine cevirir (orn. {'.jpg', '.h5'})."""
     out = set()
     for e in (exts or []):
         if not isinstance(e, str):
@@ -1863,7 +1865,7 @@ def _ext_allowed(path, allowed_exts):
 
 
 def _list_files_filtered(folder, allowed_exts):
-    """List files in a folder filtered by extension; ignore unrelated files."""
+    """Klasordeki dosyalari uzantiya gore filtreleyip listeler; alakasiz dosyalari dislar."""
     if not os.path.isdir(folder):
         return []
     files = []
@@ -1878,7 +1880,7 @@ def _list_files_filtered(folder, allowed_exts):
 
 
 def _filter_candidates(paths, allowed_exts, label):
-    """Validate explicit file candidates, skipping missing or wrong-extension files."""
+    """Acikca verilen aday dosyalari dogrular; olmayan/yanlis uzantili dosyalari atlar."""
     kept = []
     for p in paths:
         if not os.path.isfile(p):
@@ -1892,7 +1894,7 @@ def _filter_candidates(paths, allowed_exts, label):
 
 
 if __name__ == '__main__': 
-    # Log CUDA environment once
+    # CUDA ortam bilgilerini bir kez logla (GPU/driver gorunurlugu icin).
     try:
         log_cuda_info_once()
     except Exception:
@@ -2000,14 +2002,14 @@ if __name__ == '__main__':
  
     #fname = 'urgup_gmap_georef.tif'
     fname = harita_path_list[0]
-    # Read raster (metadata only)
+    # Rasteri sadece metadata ile ac (tam veriyi bellege almadan).
     with rasterio.open(fname) as r:
-        T0 = r.transform  # upper-left pixel corner affine transform
+        T0 = r.transform  # Sol-ust piksel kosesinin affine donusumu.
         T1 = T0 * Affine.translation(0.5, 0.5)
         to_wgs = Transformer.from_crs(r.crs, "EPSG:4326", always_xy=True)
     
     def koordinat_bul(row,col):
-        # Convert pixel (row,col) to lon/lat using affine + CRS
+        # Piksel (satir,sutun) konumunu affine + CRS ile lon/lat'a cevir.
         x, y = (col, row) * T1
         lon, lat = to_wgs.transform(x, y)
         return (np.array([lon]), np.array([lat]))
@@ -2036,7 +2038,7 @@ if __name__ == '__main__':
     band = dataset.GetRasterBand(1)  #5. bant elevation bandÃ„Â±
     
     DEM_array = band.ReadAsArray()
-    # RasterIO dataset and transformer for DEM pixel lookup
+    # DEM uzerinde hizli piksel sorgusu icin RasterIO dataset + CRS donusturucu.
     dem_ds = rio.open(filename)
     ll_to_dem = Transformer.from_crs("EPSG:4326", dem_ds.crs, always_xy=True)
     
@@ -2107,7 +2109,7 @@ if __name__ == '__main__':
             continue
         print(t_img.shape)
 
-        # Open main map once per loop and reuse for pixel lookups
+        # Ana haritayi her dongude bir kez ac; piksel sorgularinda tekrar kullan.
         map_ds = rio.open(ana_harita)
         ll_to_map = Transformer.from_crs("EPSG:4326", map_ds.crs, always_xy=True)
         rc_to_ll = make_rc_to_ll(map_ds)
@@ -2180,7 +2182,7 @@ if __name__ == '__main__':
            
             
            
-            # Use pre-opened map and transformer for fast lookups
+            # Hiz icin daha once acilan harita dataset'i ve donusturucuyu kullan.
             # Harita ÃƒÂ¼zerinde EXIF koordinatÃ„Â±na karÃ…Å¸Ã„Â±lÃ„Â±k gelen pikseli bul
             knm = piksel_bul_fast(map_ds, ll_to_map, gps_longitude, gps_latitude)
             
@@ -2338,7 +2340,7 @@ if __name__ == '__main__':
             #################################################################################################
             
             # 7.1) AnlÃ„Â±k gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼yÃƒÂ¼ oku ve yaw/ÃƒÂ¶lÃƒÂ§ek ile dÃƒÂ¶ndÃƒÂ¼rmeye hazÃ„Â±rla
-            # Reading the image
+            # Goruntuyu diskten oku (gri + renkli kopya).
             image = cv2.imread(anlik_goruntu,0)
             image_color = cv2.imread(anlik_goruntu, cv2.IMREAD_COLOR)
             if image is None or image_color is None:
@@ -2349,18 +2351,18 @@ if __name__ == '__main__':
             
             # image = cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
             
-            # dividing height and width by 2 to get the center of the image
+            # Merkez hesabinda kullanmak icin goruntu boyutunu al.
             height, width = image.shape[:2]
-            # #get the center coordinates of the image to create the 2D rotation matrix
+            # #2B donusum matrisi icin merkez koordinatini hesapla
             #center = (int(width/2), int(height/2))
             
-            # #using cv2.getRotationMatrix2D() to get the rotation matrix
+            # #cv2.getRotationMatrix2D ile donus matrisi olusturma ornegi
             # #scale parametresi ile gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n spartial ÃƒÂ§ÃƒÂ¶zÃƒÂ¼nÃƒÂ¼rlÃƒÂ¼Ã„Å¸ÃƒÂ¼ 60 cm'ye ayarlanÃ„Â±r
             # #angle ile gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n yav deÃ„Å¸erinin tam tersine rotate edilir ve gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼ kuzeye dÃƒÂ¶ndÃƒÂ¼rÃƒÂ¼lÃƒÂ¼r.
             # rotate_matrix = cv2.getRotationMatrix2D(center=center, angle=(-1*yaw), scale=olcek_scale)
             
             
-            # #rotate the image using cv2.warpAffine
+            # #cv2.warpAffine ile dondurme ornegi
             # rotated_image = cv2.warpAffine(src=image, M=rotate_matrix, dsize=(width, height), borderValue=(255,255,255))
             
             
@@ -2415,7 +2417,7 @@ if __name__ == '__main__':
             
             #ÃƒÂ§ÃƒÂ¶zÃƒÂ¼nÃƒÂ¼rlÃƒÂ¼Ã„Å¸ÃƒÂ¼ 30 cm'ye ayarlanmÃ„Â±Ã…Å¸ gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼nÃƒÂ¼n orta noktasÃ„Â± bulnur
             height, width = rotated_image.shape[:2]
-            # get the center coordinates of the image to create the 2D rotation matrix
+            # Kesenin merkezini bul (patch kirpma noktasi bu merkezden hesaplanir).
             center = (int(width/2), int(height/2))
             
             fark=np.minimum(center[0],center[1])-272    # 544'lÃ„Â±k frame'in elde edilen dikdÃƒÂ¶rtgenin dÃ„Â±Ã…Å¸Ã„Â±na taÃ…Å¸mamasÃ„Â± iÃƒÂ§in yazÃ„Â±ldÃ„Â± 
@@ -2473,7 +2475,7 @@ if __name__ == '__main__':
             
             # model = load_model(model_yolu)
             
-            # Batch preprocess and predict for the 3 templates
+            # 3 template'i toplu (batch) hazirla ve tek seferde modelden gecir.
             # 7.3) Model giriÃ…Å¸ ÃƒÂ¶n iÃ…Å¸lemleri (resize/equalize/normalize)
             pre_list = []
             for j in range(3):
@@ -2500,7 +2502,7 @@ if __name__ == '__main__':
             if DEBUG:
                 cv2.imshow("model uygulanmis", template[1])
                 _ = cv2.waitKey(1) 
-            # Show center crop and its neural output side-by-side
+            # Merkez crop ile model cikisini alt-ust karsilastirmali goster.
             try:
                 vis_crop = _compose_top_bottom(
                     rotated_part2_color,
@@ -2517,7 +2519,7 @@ if __name__ == '__main__':
             except Exception:
                 pass
 
-            # Show: AnlÃ„Â±k (orijinal) ve Ã„Â°Ã…Å¸lenmiÃ…Å¸ (model ÃƒÂ§Ã„Â±ktÃ„Â±sÃ„Â±) yan yana
+            # Anlik (orijinal) ve islenmis (model cikisi) goruntuyu yan yana hazirla.
             try:
                 vis_pair = _compose_side_by_side(
                     image,
@@ -2528,7 +2530,7 @@ if __name__ == '__main__':
                     apply_colormap_right=True,
                 )
                 if False and vis_pair is not None:
-                    # _show_image_fit disabled: using Crop vs Model window instead
+                    # _show_image_fit burada kapali; karsilastirma icin Crop vs Model penceresi kullaniliyor.
                     # _show_image_fit("Anlik-Islenmis (GENIS)", vis_pair, max_frac=0.98)
                     cv2.namedWindow("AnlÃ„Â±k vs Ã„Â°Ã…Å¸lenmiÃ…Å¸", cv2.WINDOW_NORMAL)
                     cv2.imshow("AnlÃ„Â±k vs Ã„Â°Ã…Å¸lenmiÃ…Å¸", vis_pair)
@@ -2553,7 +2555,7 @@ if __name__ == '__main__':
             
             #paralel programlama ile aynÃ„Â± anda 3 templatematching yapÃ„Â±lÃ„Â±r
             inputs=[(cerceve,template[0]),(cerceve,template[1]),(cerceve,template[2])]
-            # Template matching (sequential to avoid IPC overhead)
+            # Template matching'i tek fonksiyonda yap: IPC tasima maliyeti dusuk kalir.
             res1, res2, res3 = match_three(cerceve, [template[0], template[1], template[2]])
             # Not: CUDA varsa tek seferde gÃƒÂ¶rÃƒÂ¼ntÃƒÂ¼ yÃƒÂ¼klenip ÃƒÂ¼ÃƒÂ§ eÃ…Å¸leÃ…Å¸me GPUÃ¢â‚¬â„¢da yapÃ„Â±lÃ„Â±r; aksi halde CPU.
             #methods =['cv2.TM_CCOEFF']
@@ -2747,21 +2749,28 @@ if __name__ == '__main__':
             pred_pt = (int(centerOfCircle[0]), int(centerOfCircle[1]))
             real_pt = (int(knm[1]), int(knm[0]))
 
+            # mekansal_cozunurluk birimi cm/px oldugu icin m/px'e cevir.
+            # Bu deger buyudukce ayni piksel hareketi daha yuksek hiz (m/s) uretir.
             m_per_px = max(0.0, float(mekansal_cozunurluk) / 100.0)
             speed_vx_mps = 0.0
             speed_vy_mps = 0.0
             speed_mps = 0.0
             if prev_pred_pt_for_speed is not None:
                 dt = 0.0
+                # Tercih edilen zaman farki: EXIF timestamp farki.
+                # EXIF yoksa/asiri kucukse duvar saati farkina geri don.
                 if frame_timestamp is not None and prev_speed_ts is not None:
                     dt = float(frame_timestamp - prev_speed_ts)
                 if dt <= 1e-6 and prev_speed_wall_ts is not None:
                     dt = float(time.time() - prev_speed_wall_ts)
                 if dt > 1e-6 and m_per_px > 0:
+                    # Ardisik tahmin merkezleri arasindaki piksel farki.
                     dx_px = float(pred_pt[0] - prev_pred_pt_for_speed[0])
                     dy_px = float(pred_pt[1] - prev_pred_pt_for_speed[1])
+                    # Hiz bilesenleri: (piksel farki * metre/piksel) / saniye.
                     speed_vx_mps = (dx_px * m_per_px) / dt
                     speed_vy_mps = (dy_px * m_per_px) / dt
+                    # Toplam hiz buyuklugu (2B vektor normu).
                     speed_mps = math.hypot(speed_vx_mps, speed_vy_mps)
 
             prev_pred_pt_for_speed = pred_pt
@@ -2920,14 +2929,14 @@ if __name__ == '__main__':
                 corner_radius=18,
             )
 
-            # Add a 100 m scale bar if spatial resolution is known (cm/px)
+            # Mekansal cozum biliniyorsa 100 m olcek cubugunu ciz.
             try:
                 draw_scale_bar(res, mekansal_cozunurluk, scale_meters=100, margin=80, bar_height=40,
                                color=(255,255,255), text_color=(255,255,255), font_scale=3, thickness=8)
             except Exception:
                 pass
 
-            # Subtle center crosshair for orientation
+            # Yonu kolay okumak icin merkezde hafif bir nisangah isareti ciz.
             try:
                 cv2.drawMarker(res, (res.shape[1]//2, res.shape[0]//2), (255,255,255),
                                markerType=cv2.MARKER_CROSS, markerSize=120, thickness=8, line_type=cv2.LINE_AA)
@@ -3000,7 +3009,7 @@ if __name__ == '__main__':
          
         
         # 8) DÃƒÂ¶ngÃƒÂ¼ sonu: kaynaklarÃ„Â± serbest bÃ„Â±rak, hata metriklerini hesapla ve ÃƒÂ§Ã„Â±ktÃ„Â± dosyalarÃ„Â±na yaz
-        # Close map dataset for this loop to free resources
+        # Kaynak sizintisini onlemek icin bu dongude acilan harita dataset'ini kapat.
         try:
             map_ds.close()
         except Exception:
