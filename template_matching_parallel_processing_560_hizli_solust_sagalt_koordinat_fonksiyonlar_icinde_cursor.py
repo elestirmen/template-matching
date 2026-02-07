@@ -713,29 +713,122 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 """
 UI helpers: panels, scale bar, minimal HUD
 """
+# ---------------------------------------------------------------------------
+# UI renk paleti -- tum UI elemanlari bu paleti kullanir
+# ---------------------------------------------------------------------------
+UI_COLORS = {
+    "panel_bg":       (30, 30, 40),
+    "panel_border":   (80, 80, 100),
+    "btn_on":         (76, 175, 80),
+    "btn_off":        (70, 75, 90),
+    "btn_hover_on":   (100, 200, 105),
+    "btn_hover_off":  (90, 95, 115),
+    "toggle_on":      (76, 175, 80),
+    "toggle_off":     (120, 120, 130),
+    "toggle_knob":    (255, 255, 255),
+    "text_primary":   (240, 240, 245),
+    "text_secondary": (170, 175, 190),
+    "text_shadow":    (0, 0, 0),
+    "accent":         (66, 133, 244),
+    "header_bg":      (45, 48, 65),
+    "collapse_btn":   (55, 60, 80),
+    "collapse_hover": (80, 85, 110),
+}
+
+
 def _draw_alpha_panel(img, x0, y0, x1, y1, color=(0, 0, 0), alpha=0.5):
-    """Draw a filled rectangle with alpha blending onto img in-place."""
-    x0 = max(0, min(int(x0), img.shape[1]-1))
-    x1 = max(0, min(int(x1), img.shape[1]-1))
-    y0 = max(0, min(int(y0), img.shape[0]-1))
-    y1 = max(0, min(int(y1), img.shape[0]-1))
+    """Draw a filled rectangle with alpha blending onto img in-place (ROI-only)."""
+    x0 = max(0, min(int(x0), img.shape[1] - 1))
+    x1 = max(0, min(int(x1), img.shape[1] - 1))
+    y0 = max(0, min(int(y0), img.shape[0] - 1))
+    y1 = max(0, min(int(y1), img.shape[0] - 1))
     if x1 <= x0 or y1 <= y0:
         return
-    overlay = img.copy()
-    cv2.rectangle(overlay, (x0, y0), (x1, y1), color, thickness=-1)
-    cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, dst=img)
+    roi = img[y0:y1, x0:x1]
+    overlay = roi.copy()
+    cv2.rectangle(overlay, (0, 0), (x1 - x0, y1 - y0), color, thickness=-1)
+    cv2.addWeighted(overlay, alpha, roi, 1 - alpha, 0, dst=roi)
+
+
+def _draw_rounded_rect(img, x0, y0, x1, y1, radius, color, thickness=-1):
+    """Yuvarlatilmis koseli dikdortgen cizer."""
+    r = max(0, min(int(radius), (x1 - x0) // 2, (y1 - y0) // 2))
+    if r < 2:
+        cv2.rectangle(img, (x0, y0), (x1, y1), color, thickness)
+        return
+    # Iki dikdortgen + 4 kose dairesi
+    cv2.rectangle(img, (x0 + r, y0), (x1 - r, y1), color, thickness)
+    cv2.rectangle(img, (x0, y0 + r), (x1, y1 - r), color, thickness)
+    cv2.circle(img, (x0 + r, y0 + r), r, color, thickness)
+    cv2.circle(img, (x1 - r, y0 + r), r, color, thickness)
+    cv2.circle(img, (x0 + r, y1 - r), r, color, thickness)
+    cv2.circle(img, (x1 - r, y1 - r), r, color, thickness)
+
+
+def _draw_alpha_rounded_panel(img, x0, y0, x1, y1, radius, color=(0, 0, 0), alpha=0.5):
+    """Yuvarlatilmis koseli yari-seffaf panel cizer (ROI-only)."""
+    x0 = max(0, min(int(x0), img.shape[1] - 1))
+    x1 = max(0, min(int(x1), img.shape[1] - 1))
+    y0 = max(0, min(int(y0), img.shape[0] - 1))
+    y1 = max(0, min(int(y1), img.shape[0] - 1))
+    if x1 <= x0 or y1 <= y0:
+        return
+    roi = img[y0:y1, x0:x1]
+    overlay = roi.copy()
+    _draw_rounded_rect(overlay, 0, 0, x1 - x0, y1 - y0, radius, color, thickness=-1)
+    cv2.addWeighted(overlay, alpha, roi, 1 - alpha, 0, dst=roi)
+
+
+def _draw_toggle_switch(img, x, y, w, h, is_on, view_scale=1.0):
+    """iOS tarzi toggle switch cizer."""
+    r = h // 2
+    bg = UI_COLORS["toggle_on"] if is_on else UI_COLORS["toggle_off"]
+    knob = UI_COLORS["toggle_knob"]
+    # Kapsul arka plan
+    cv2.rectangle(img, (x + r, y), (x + w - r, y + h), bg, -1)
+    cv2.circle(img, (x + r, y + r), r, bg, -1)
+    cv2.circle(img, (x + w - r, y + r), r, bg, -1)
+    # Beyaz top (knob)
+    knob_pad = max(3, int(round(4 * view_scale)))
+    if is_on:
+        cx = x + w - r - knob_pad
+    else:
+        cx = x + r + knob_pad
+    cv2.circle(img, (cx, y + r), r - knob_pad, knob, -1)
+    # Ince border
+    border_t = max(1, int(round(1.5 * view_scale)))
+    cv2.rectangle(img, (x + r, y), (x + w - r, y + h), (200, 200, 210), border_t)
+    cv2.circle(img, (x + r, y + r), r, (200, 200, 210), border_t)
+    cv2.circle(img, (x + w - r, y + r), r, (200, 200, 210), border_t)
+
+
+def _draw_text_with_shadow(img, text, pos, font, scale, color, thickness,
+                            shadow_color=None, shadow_offset=2):
+    """Golge efektli metin cizer."""
+    if shadow_color is None:
+        shadow_color = UI_COLORS["text_shadow"]
+    so = max(1, int(shadow_offset))
+    cv2.putText(img, text, (pos[0] + so, pos[1] + so), font, scale,
+                shadow_color, thickness + 1, cv2.LINE_AA)
+    cv2.putText(img, text, pos, font, scale, color, thickness, cv2.LINE_AA)
 
 
 def draw_info_panel(img, lines, top_left=(25, 150), font=cv2.FONT_HERSHEY_SIMPLEX,
-                    font_scale=6, thickness=20, text_color=(255, 255, 255),
-                    bg_color=(0, 0, 0), alpha=0.5, padding=25, line_gap=None):
+                    font_scale=6, thickness=20, text_color=None,
+                    bg_color=None, alpha=0.55, padding=25, line_gap=None,
+                    corner_radius=0):
     """Draw a semi-transparent info panel with multiple text lines.
 
     lines: list of strings to show, one per line
     top_left: baseline of the first text line (x, y)
+    corner_radius: >0 ise rounded panel cizer
     """
     if not lines:
         return
+    if text_color is None:
+        text_color = UI_COLORS["text_primary"]
+    if bg_color is None:
+        bg_color = UI_COLORS["panel_bg"]
     try:
         sizes = [cv2.getTextSize(str(s), font, font_scale, thickness)[0] for s in lines]
     except Exception:
@@ -750,13 +843,23 @@ def draw_info_panel(img, lines, top_left=(25, 150), font=cv2.FONT_HERSHEY_SIMPLE
     panel_h = line_gap * len(lines) + padding
     panel_x0 = max(0, x - padding)
     panel_y0 = max(0, y - max_h - padding)
-    panel_x1 = min(img.shape[1]-1, panel_x0 + panel_w)
-    panel_y1 = min(img.shape[0]-1, panel_y0 + panel_h)
-    _draw_alpha_panel(img, panel_x0, panel_y0, panel_x1, panel_y1, color=bg_color, alpha=alpha)
+    panel_x1 = min(img.shape[1] - 1, panel_x0 + panel_w)
+    panel_y1 = min(img.shape[0] - 1, panel_y0 + panel_h)
+    cr = int(corner_radius)
+    if cr > 2:
+        _draw_alpha_rounded_panel(img, panel_x0, panel_y0, panel_x1, panel_y1,
+                                  radius=cr, color=bg_color, alpha=alpha)
+        border_t = max(1, thickness // 8)
+        _draw_rounded_rect(img, panel_x0, panel_y0, panel_x1, panel_y1, cr,
+                           UI_COLORS["panel_border"], border_t)
+    else:
+        _draw_alpha_panel(img, panel_x0, panel_y0, panel_x1, panel_y1,
+                          color=bg_color, alpha=alpha)
 
     for i, s in enumerate(lines):
         org = (int(x), int(y + i * line_gap))
-        cv2.putText(img, str(s), org, font, font_scale, text_color, thickness, cv2.LINE_AA)
+        _draw_text_with_shadow(img, str(s), org, font, font_scale,
+                               text_color, thickness)
 
 
 def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=35,
@@ -797,9 +900,11 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
 def _build_runtime_buttons():
     """Return clickable button definitions for runtime visibility toggles."""
     return [
-        {"key": "trajectory", "label": "Trajektori", "hotkey": "T", "rect": (20, 20, 260, 54)},
-        {"key": "inner_frame", "label": "Ic Cerceve", "hotkey": "I", "rect": (20, 84, 260, 54)},
-        {"key": "tm_boxes", "label": "TM RGB Kutu", "hotkey": "R", "rect": (20, 148, 260, 54)},
+        {"key": "_panel_collapsed", "label": "", "hotkey": "H",
+         "rect": (20, 20, 44, 44), "is_collapse": True},
+        {"key": "trajectory",   "label": "Trajektori",   "hotkey": "T", "rect": (20, 20, 260, 54)},
+        {"key": "inner_frame",  "label": "Ic Cerceve",   "hotkey": "I", "rect": (20, 84, 260, 54)},
+        {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 148, 260, 54)},
     ]
 
 
@@ -812,7 +917,15 @@ def _draw_runtime_buttons(
     ui_scale=1.0,
     display_size=(1280, 960),
 ):
-    """Draw adaptive ON/OFF buttons onto the current frame."""
+    """Draw modern, adaptive ON/OFF toggle buttons onto the current frame.
+
+    Ozellikler:
+    - Rounded-corner panel ve butonlar
+    - iOS tarzi toggle switch
+    - Hover efekti (fare ile ustune gelince renk degisir)
+    - Collapse/expand (panel kucultme/buyutme)
+    - Tutarli renk paleti (UI_COLORS)
+    """
     if img is None or not buttons:
         return
     try:
@@ -826,93 +939,212 @@ def _draw_runtime_buttons(
     except Exception:
         dw, dh = 1280, 960
 
-    # Keep on-screen apparent button size readable even when the source image is huge.
     view_scale = max(float(w_img) / float(dw), float(h_img) / float(dh), 1.0)
     view_scale *= max(0.25, float(ui_scale))
 
     margin = max(12, int(round(20 * view_scale)))
-    gap = max(8, int(round(12 * view_scale)))
+    gap = max(6, int(round(10 * view_scale)))
     bw = max(220, int(round(360 * view_scale)))
-    bh = max(44, int(round(70 * view_scale)))
-    panel_pad = max(8, int(round(14 * view_scale)))
-    header_h = max(26, int(round(38 * view_scale)))
+    bh = max(44, int(round(64 * view_scale)))
+    panel_pad = max(10, int(round(16 * view_scale)))
+    header_h = max(30, int(round(42 * view_scale)))
     bw = min(bw, max(160, w_img - 2 * margin))
-    status_w = max(70, int(round(110 * view_scale)))
+    corner_r = max(6, int(round(12 * view_scale)))
+    btn_r = max(4, int(round(8 * view_scale)))
+
+    # Toggle switch boyutlari
+    toggle_w = max(50, int(round(80 * view_scale)))
+    toggle_h = max(22, int(round(32 * view_scale)))
+    toggle_margin = max(8, int(round(12 * view_scale)))
 
     x0 = margin
     y0 = margin
-    panel_w = bw + (2 * panel_pad)
-    panel_h = header_h + (2 * panel_pad) + (len(buttons) * bh) + (max(0, len(buttons) - 1) * gap)
-    _draw_alpha_panel(img, x0 - panel_pad, y0 - panel_pad, x0 - panel_pad + panel_w, y0 - panel_pad + panel_h, color=(0, 0, 0), alpha=0.48)
-    cv2.rectangle(
-        img,
-        (x0 - panel_pad, y0 - panel_pad),
-        (x0 - panel_pad + panel_w, y0 - panel_pad + panel_h),
-        (255, 255, 255),
-        max(1, int(round(2 * view_scale))),
-    )
 
-    title_scale = max(0.7, float(font_scale) * 0.9 * view_scale)
-    title_thick = max(1, int(round(float(thickness) * view_scale)))
-    title_pos = (x0 + int(round(12 * view_scale)), y0 + int(round(header_h * 0.75)))
-    cv2.putText(img, "GORUNUM KONTROLLERI", (title_pos[0] + 3, title_pos[1] + 3), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (0, 0, 0), title_thick + 2, cv2.LINE_AA)
-    cv2.putText(img, "GORUNUM KONTROLLERI", title_pos, cv2.FONT_HERSHEY_SIMPLEX, title_scale, (255, 255, 255), title_thick, cv2.LINE_AA)
+    is_collapsed = bool(ui_state.get("_panel_collapsed", False))
+    hover_key = ui_state.get("_hover_key", None)
 
-    y = y0 + header_h
-    txt_scale = max(0.75, float(font_scale) * 0.92 * view_scale)
-    txt_thick = max(1, int(round(float(thickness) * view_scale)))
-
+    # -- Sadece collapse butonu olan toggle butonunu bul --
+    collapse_btn = None
+    content_buttons = []
     for b in buttons:
+        if b.get("is_collapse"):
+            collapse_btn = b
+        else:
+            content_buttons.append(b)
+
+    # ==================== COLLAPSED gorunum ====================
+    if is_collapsed:
+        cb_size = max(36, int(round(50 * view_scale)))
+        cb_x0 = x0
+        cb_y0 = y0
+        cb_x1 = cb_x0 + cb_size
+        cb_y1 = cb_y0 + cb_size
+
+        is_cb_hover = (hover_key == "_panel_collapsed")
+        cb_fill = UI_COLORS["collapse_hover"] if is_cb_hover else UI_COLORS["collapse_btn"]
+
+        _draw_alpha_rounded_panel(img, cb_x0, cb_y0, cb_x1, cb_y1,
+                                  radius=btn_r, color=UI_COLORS["panel_bg"], alpha=0.65)
+        _draw_rounded_rect(img, cb_x0, cb_y0, cb_x1, cb_y1, btn_r, cb_fill, thickness=-1)
+        _draw_rounded_rect(img, cb_x0, cb_y0, cb_x1, cb_y1, btn_r,
+                           UI_COLORS["panel_border"],
+                           max(1, int(round(2 * view_scale))))
+
+        if collapse_btn is not None:
+            collapse_btn["rect"] = (cb_x0, cb_y0, cb_size, cb_size)
+
+        # Hamburger ikonu (3 yatay cizgi)
+        bar_w = int(cb_size * 0.5)
+        bar_h = max(2, int(round(3 * view_scale)))
+        bar_x = cb_x0 + (cb_size - bar_w) // 2
+        bar_gap = max(4, int(round(6 * view_scale)))
+        bar_y_center = cb_y0 + cb_size // 2
+        for dy in (-bar_gap, 0, bar_gap):
+            by = bar_y_center + dy - bar_h // 2
+            cv2.rectangle(img, (bar_x, by), (bar_x + bar_w, by + bar_h),
+                          UI_COLORS["text_primary"], -1)
+        return
+
+    # ==================== EXPANDED gorunum ====================
+    panel_w = bw + (2 * panel_pad)
+    panel_h = (header_h + (2 * panel_pad) +
+               (len(content_buttons) * bh) +
+               (max(0, len(content_buttons) - 1) * gap))
+
+    px0 = x0 - panel_pad
+    py0 = y0 - panel_pad
+    px1 = px0 + panel_w
+    py1 = py0 + panel_h
+
+    # Panel arka plan (rounded, yari-seffaf)
+    _draw_alpha_rounded_panel(img, px0, py0, px1, py1,
+                              radius=corner_r, color=UI_COLORS["panel_bg"], alpha=0.60)
+    _draw_rounded_rect(img, px0, py0, px1, py1, corner_r,
+                       UI_COLORS["panel_border"],
+                       max(1, int(round(2 * view_scale))))
+
+    # -- Header bolumu --
+    hdr_y1 = py0 + header_h + panel_pad
+    _draw_alpha_rounded_panel(img, px0, py0, px1, hdr_y1,
+                              radius=corner_r, color=UI_COLORS["header_bg"], alpha=0.35)
+
+    title_scale = max(0.55, float(font_scale) * 0.75 * view_scale)
+    title_thick = max(1, int(round(float(thickness) * 0.8 * view_scale)))
+    title_x = x0 + int(round(8 * view_scale))
+    title_y = y0 + int(round(header_h * 0.6))
+    _draw_text_with_shadow(img, "GORUNUM", (title_x, title_y),
+                           cv2.FONT_HERSHEY_SIMPLEX, title_scale,
+                           UI_COLORS["accent"], title_thick, shadow_offset=2)
+
+    # -- Collapse butonu (header sag ust) --
+    if collapse_btn is not None:
+        cb_size = max(28, int(round(36 * view_scale)))
+        cb_x0 = px1 - cb_size - max(4, int(round(6 * view_scale)))
+        cb_y0_c = py0 + max(4, int(round(6 * view_scale)))
+        cb_x1 = cb_x0 + cb_size
+        cb_y1 = cb_y0_c + cb_size
+
+        is_cb_hover = (hover_key == "_panel_collapsed")
+        cb_fill = UI_COLORS["collapse_hover"] if is_cb_hover else UI_COLORS["collapse_btn"]
+
+        _draw_rounded_rect(img, cb_x0, cb_y0_c, cb_x1, cb_y1, btn_r // 2,
+                           cb_fill, thickness=-1)
+        _draw_rounded_rect(img, cb_x0, cb_y0_c, cb_x1, cb_y1, btn_r // 2,
+                           UI_COLORS["panel_border"],
+                           max(1, int(round(1.5 * view_scale))))
+
+        collapse_btn["rect"] = (cb_x0, cb_y0_c, cb_size, cb_size)
+
+        # Minimize ikonu (yatay cizgi)
+        line_w = int(cb_size * 0.5)
+        line_h = max(2, int(round(3 * view_scale)))
+        lx = cb_x0 + (cb_size - line_w) // 2
+        ly = cb_y0_c + cb_size // 2 - line_h // 2
+        cv2.rectangle(img, (lx, ly), (lx + line_w, ly + line_h),
+                      UI_COLORS["text_primary"], -1)
+
+    # -- Butonlar --
+    y = y0 + header_h
+    txt_scale = max(0.6, float(font_scale) * 0.78 * view_scale)
+    txt_thick = max(1, int(round(float(thickness) * 0.85 * view_scale)))
+
+    for b in content_buttons:
         key = b["key"]
         is_on = bool(ui_state.get(key, False))
+        is_hovered = (hover_key == key)
         label = str(b.get("label", key))
         hotkey = str(b.get("hotkey", "")).strip()
-        status = "ON" if is_on else "OFF"
 
-        fill = (70, 165, 75) if is_on else (65, 70, 95)
-        edge = (80, 255, 80) if is_on else (110, 150, 255)
-        status_fill = (20, 120, 20) if is_on else (40, 40, 135)
+        # Renk secimi (hover duyarli)
+        if is_on:
+            fill = UI_COLORS["btn_hover_on"] if is_hovered else UI_COLORS["btn_on"]
+        else:
+            fill = UI_COLORS["btn_hover_off"] if is_hovered else UI_COLORS["btn_off"]
+
+        edge = UI_COLORS["accent"] if is_hovered else UI_COLORS["panel_border"]
 
         b["rect"] = (x0, y, bw, bh)
-        _draw_alpha_panel(img, x0, y, x0 + bw, y + bh, color=(0, 0, 0), alpha=0.24)
-        cv2.rectangle(img, (x0, y), (x0 + bw, y + bh), fill, thickness=-1)
-        cv2.rectangle(img, (x0, y), (x0 + bw, y + bh), edge, thickness=max(1, int(round(2 * view_scale))))
 
-        sx1 = x0 + bw - status_w - max(6, int(round(8 * view_scale)))
-        sx2 = x0 + bw - max(6, int(round(8 * view_scale)))
-        sy1 = y + max(4, int(round(6 * view_scale)))
-        sy2 = y + bh - max(4, int(round(6 * view_scale)))
-        cv2.rectangle(img, (sx1, sy1), (sx2, sy2), status_fill, thickness=-1)
-        cv2.rectangle(img, (sx1, sy1), (sx2, sy2), (255, 255, 255), thickness=max(1, int(round(2 * view_scale))))
+        # Buton arka plani (rounded)
+        _draw_rounded_rect(img, x0, y, x0 + bw, y + bh, btn_r, fill, thickness=-1)
+        _draw_rounded_rect(img, x0, y, x0 + bw, y + bh, btn_r, edge,
+                           max(1, int(round(2 * view_scale))))
 
-        label_text = f"{label} [{hotkey}]" if hotkey else label
+        # Sol: label + hotkey
+        label_text = f"{label}  [{hotkey}]" if hotkey else label
         lx = x0 + max(10, int(round(14 * view_scale)))
-        ly = y + int(round(bh * 0.66))
-        cv2.putText(img, label_text, (lx + 2, ly + 2), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (0, 0, 0), txt_thick + 2, cv2.LINE_AA)
-        cv2.putText(img, label_text, (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (255, 255, 255), txt_thick, cv2.LINE_AA)
+        ly = y + int(round(bh * 0.62))
+        _draw_text_with_shadow(img, label_text, (lx, ly),
+                               cv2.FONT_HERSHEY_SIMPLEX, txt_scale,
+                               UI_COLORS["text_primary"], txt_thick)
 
-        (stw, sth), _ = cv2.getTextSize(status, cv2.FONT_HERSHEY_SIMPLEX, txt_scale, txt_thick)
-        tx = sx1 + max(2, (status_w - stw) // 2)
-        ty = sy1 + max(sth + 2, ((sy2 - sy1) + sth) // 2)
-        cv2.putText(img, status, (tx + 2, ty + 2), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (0, 0, 0), txt_thick + 2, cv2.LINE_AA)
-        cv2.putText(img, status, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, txt_scale, (255, 255, 255), txt_thick, cv2.LINE_AA)
+        # Sag: toggle switch
+        tw_x = x0 + bw - toggle_w - toggle_margin
+        tw_y = y + (bh - toggle_h) // 2
+        _draw_toggle_switch(img, tw_x, tw_y, toggle_w, toggle_h,
+                            is_on, view_scale)
 
         y += (bh + gap)
 
 
 def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
-    """Mouse callback for runtime toggle buttons."""
-    if event != cv2.EVENT_LBUTTONDOWN:
-        return
+    """Mouse callback for runtime toggle buttons (hover + click + collapse).
+
+    NOT: OpenCV WINDOW_NORMAL modunda mouse koordinatlarini otomatik olarak
+    goruntu piksel koordinatlarina cevirir, bu yuzden ek donusum gerekmez.
+    """
     if not isinstance(userdata, dict):
         return
     ui_state = userdata.get("state")
     buttons = userdata.get("buttons", [])
     if not isinstance(ui_state, dict):
         return
+
+    # OpenCV zaten goruntu koordinatlarini verir -- dogrudan kullan
+    mx, my = x, y
+
+    # -- Hover tracking (her mouse hareketi) --
+    if event == cv2.EVENT_MOUSEMOVE:
+        ui_state["_hover_key"] = None
+        for b in buttons:
+            try:
+                bx, by, bw, bh = b["rect"]
+            except (ValueError, KeyError):
+                continue
+            if bx <= mx <= (bx + bw) and by <= my <= (by + bh):
+                ui_state["_hover_key"] = b["key"]
+                break
+        return
+
+    # -- Click handling --
+    if event != cv2.EVENT_LBUTTONDOWN:
+        return
     for b in buttons:
-        bx, by, bw, bh = b["rect"]
-        if bx <= x <= (bx + bw) and by <= y <= (by + bh):
+        try:
+            bx, by, bw, bh = b["rect"]
+        except (ValueError, KeyError):
+            continue
+        if bx <= mx <= (bx + bw) and by <= my <= (by + bh):
             k = b["key"]
             ui_state[k] = not bool(ui_state.get(k, False))
             break
@@ -1754,9 +1986,16 @@ if __name__ == '__main__':
         "trajectory": bool(DRAW_TRAJECTORY),
         "inner_frame": bool(SHOW_INNER_FRAME),
         "tm_boxes": bool(SHOW_TM_BOXES),
+        "_panel_collapsed": False,
+        "_hover_key": None,
     }
     runtime_ui_buttons = _build_runtime_buttons() if UI_BUTTONS_ENABLED else []
-    runtime_ui_ctx = {"state": runtime_ui_state, "buttons": runtime_ui_buttons}
+    runtime_ui_ctx = {
+        "state": runtime_ui_state,
+        "buttons": runtime_ui_buttons,
+        "display_size": (UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT),
+        "img_size": None,
+    }
     runtime_ui_cb_set = False
     
     
@@ -2521,17 +2760,29 @@ if __name__ == '__main__':
                 f"ALT: {int(ucus_yuksekligi)} m",
                 f"ERR: {int(uzaklik*1000)} m",
             ]
+            # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
+            _hud_font_scale = 6
+            _hud_thickness = 20
+            _hud_padding = 25
+            try:
+                _hud_sizes = [cv2.getTextSize(s, cv2.FONT_HERSHEY_SIMPLEX,
+                              _hud_font_scale, _hud_thickness)[0] for s in hud_lines]
+                _hud_max_h = max(h for (_, h) in _hud_sizes)
+                _hud_line_gap = int(_hud_max_h * 1.6)
+                _hud_panel_h = _hud_line_gap * len(hud_lines) + _hud_padding
+                _hud_y = max(150, res.shape[0] - _hud_panel_h - 40)
+            except Exception:
+                _hud_y = max(150, res.shape[0] - 600)
             draw_info_panel(
                 res,
                 hud_lines,
-                top_left=(25, 150),
+                top_left=(25, _hud_y),
                 font=cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale=6,
-                thickness=20,
-                text_color=(255, 255, 255),
-                bg_color=(0, 0, 0),
-                alpha=0.5,
-                padding=25,
+                font_scale=_hud_font_scale,
+                thickness=_hud_thickness,
+                alpha=0.55,
+                padding=_hud_padding,
+                corner_radius=18,
             )
 
             # Add a 100 m scale bar if spatial resolution is known (cm/px)
@@ -2555,6 +2806,8 @@ if __name__ == '__main__':
                 
             if UI_BUTTONS_ENABLED:
                 try:
+                    # Mouse callback icin goruntu boyutunu guncelle
+                    runtime_ui_ctx["img_size"] = (res.shape[1], res.shape[0])
                     _draw_runtime_buttons(
                         res,
                         runtime_ui_state,
@@ -2584,6 +2837,8 @@ if __name__ == '__main__':
                     runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", True))
                 elif key in (ord('r'), ord('R')):
                     runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
+                elif key in (ord('h'), ord('H')):
+                    runtime_ui_state["_panel_collapsed"] = not bool(runtime_ui_state.get("_panel_collapsed", False))
             
                 # cv2.rectangle(img, top_left, bottom_right,(255,0,0),35)
                 # plt.figure()
