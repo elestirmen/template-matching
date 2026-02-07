@@ -1,4 +1,4 @@
-﻿"""
+"""
 Bu betik, IHA/drone goruntulerini referans harita uzerinde konumlandirir.
 
 Ozet akis:
@@ -771,19 +771,16 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
 
 def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
                        color=(255, 0, 255), outline=(0, 0, 0), outline_thickness=8):
-    """GerÃ§ek konumu bir uÃ§ak simgesi ile gÃ¶stermek iÃ§in daha gerÃ§ekÃ§i bir ikon Ã§izer.
+    """Harita uzerinde konum ve yon gosteren temiz bir ucak silueti cizer.
 
-    - center: (x, y) piksel koordinatÄ± (Ã¶rn. (knm[1], knm[0]))
-    - heading_deg: yaw/heading (derece). 0=Kuzey, pozitif saat yÃ¶nÃ¼ varsayÄ±mÄ±yla -yaw uygulanÄ±r.
-    - size_px: ikonun toplam uzunluÄŸu (burun-kuyruk).
-
-    PNG desteÄŸi: EÄŸer Ã§alÄ±ÅŸma klasÃ¶rÃ¼nde `plane_icon.png`/`plane.png` (veya `assets/` altÄ±nda) varsa,
-    otomatik olarak bu PNG dÃ¶ndÃ¼rÃ¼lerek alfa ile bindirilir. Yoksa vektÃ¶rel bir siluet Ã§izilir.
+    - center: (x, y) piksel koordinati
+    - heading_deg: yaw/heading (derece). 0=Kuzey, pozitif saat yonu.
+    - size_px: burun-kuyruk uzunlugu (piksel).
     """
     try:
         cx, cy = int(center[0]), int(center[1])
 
-        # 1) Ã–nce varsa PNG ikonunu kullan
+        # PNG varsa onu kullan
         icon = None
         try:
             candidates = [
@@ -802,8 +799,6 @@ def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
             icon = None
 
         if icon is not None and icon.ndim in (2, 3, 4):
-            # DÃ¶ndÃ¼r ve merkezde bindir
-            # 0 derece = Kuzey olacak ÅŸekilde hizala (PNG baÅŸÄ± genelde saÄŸ/East varsayÄ±ldÄ±ÄŸÄ±nda +90)
             ang = float(heading_deg) - 90.0
             ih, iw = icon.shape[:2]
             M = cv2.getRotationMatrix2D((iw/2.0, ih/2.0), ang, 1.0)
@@ -813,21 +808,18 @@ def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
             M[0,2] += (nW/2.0) - iw/2.0
             M[1,2] += (nH/2.0) - ih/2.0
             rot = cv2.warpAffine(icon, M, (nW, nH), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
-
-            # Ã–lÃ§ekle (en bÃ¼yÃ¼k boyutu size_px olacak ÅŸekilde)
             scale = float(size_px) / max(nW, nH)
             if scale != 1.0:
                 rot = cv2.resize(rot, (max(1,int(nW*scale)), max(1,int(nH*scale))), interpolation=cv2.INTER_AREA)
             rh, rw = rot.shape[:2]
-
-            # ROI belirle ve alfa ile bindir
             x1 = cx - rw//2; y1 = cy - rh//2
             x2 = x1 + rw;   y2 = y1 + rh
             H, W = img.shape[:2]
             rx1 = max(0, x1); ry1 = max(0, y1)
             rx2 = min(W, x2); ry2 = min(H, y2)
             if rx1 < rx2 and ry1 < ry2:
-                sx1 = rx1 - x1; sy1 = ry1 - y1; sx2 = sx1 + (rx2 - rx1); sy2 = sy1 + (ry2 - ry1)
+                sx1 = rx1 - x1; sy1 = ry1 - y1
+                sx2 = sx1 + (rx2 - rx1); sy2 = sy1 + (ry2 - ry1)
                 overlay = rot[sy1:sy2, sx1:sx2]
                 base = img[ry1:ry2, rx1:rx2]
                 if overlay.shape[2] == 4:
@@ -840,159 +832,88 @@ def draw_plane_icon_v2(img, center, heading_deg, size_px=200,
                     img[ry1:ry2, rx1:rx2] = overlay
             return
 
-        # 2) PNG yoksa vektorel siluet cizer
-        length = float(size_px)
-        if length <= 0:
+        # --- Vektorel ucak silueti ---
+        L = float(size_px)
+        if L <= 0:
             return
 
-        def _normalize_rgb(col):
+        def _clamp_rgb(col):
             if isinstance(col, (list, tuple, np.ndarray)):
                 vals = list(col)
             else:
                 vals = [col, col, col]
-            if len(vals) < 3:
-                vals += [0] * (3 - len(vals))
+            while len(vals) < 3:
+                vals.append(0)
             return tuple(int(np.clip(float(v), 0, 255)) for v in vals[:3])
 
-        def _blend_rgb(src, target, alpha):
-            return tuple(int(np.clip(src[i] * alpha + target[i] * (1.0 - alpha), 0, 255)) for i in range(3))
+        base_color  = _clamp_rgb(color)
+        outline_rgb = _clamp_rgb(outline if outline is not None else (0, 0, 0))
 
-        base_color = _normalize_rgb(color)
-        outline_rgb = _normalize_rgb(outline if outline is not None else (0, 0, 0))
-        fuselage_color = _blend_rgb(base_color, (255, 255, 255), 0.75)
-        wing_color = _blend_rgb(base_color, (220, 220, 220), 0.45)
-        tail_color = _blend_rgb(base_color, (200, 200, 200), 0.5)
-        highlight_color = _blend_rgb(base_color, (255, 255, 255), 0.7)
-        canopy_color = (55, 65, 80)
-
-        fuselage_width = length * 0.12
-        nose_width = fuselage_width * 0.55
-        wing_span = length * 0.62
-        tail_span = length * 0.28
-
-        outline_pts = np.array([
-            [0.0, -0.60 * length],
-            [nose_width, -0.52 * length],
-            [fuselage_width, -0.34 * length],
-            [wing_span, -0.02 * length],
-            [wing_span * 0.95, 0.12 * length],
-            [fuselage_width * 0.95, 0.24 * length],
-            [tail_span, 0.44 * length],
-            [0.08 * length, 0.60 * length],
-            [0.0, 0.66 * length],
-            [-0.08 * length, 0.60 * length],
-            [-tail_span, 0.44 * length],
-            [-fuselage_width * 0.95, 0.24 * length],
-            [-wing_span * 0.95, 0.12 * length],
-            [-wing_span, -0.02 * length],
-            [-fuselage_width, -0.34 * length],
-            [-nose_width, -0.52 * length],
-        ], dtype=np.float32)
-
-        fuselage = np.array([
-            [0.0, -0.58 * length],
-            [nose_width * 0.9, -0.46 * length],
-            [fuselage_width * 0.7, -0.26 * length],
-            [fuselage_width * 0.6, 0.28 * length],
-            [0.0, 0.58 * length],
-            [-fuselage_width * 0.6, 0.28 * length],
-            [-fuselage_width * 0.7, -0.26 * length],
-            [-nose_width * 0.9, -0.46 * length],
-        ], dtype=np.float32)
-
-        wing_right = np.array([
-            [fuselage_width * 0.97, -0.025 * length],
-            [wing_span, 0.0 * length],
-            [wing_span * 0.97, 0.04 * length],
-            [fuselage_width * 0.94, 0.015 * length],
-        ], dtype=np.float32)
-        wing_left = wing_right.copy()
-        wing_left[:, 0] *= -1
-
-        wing_left = wing_right.copy()
-        wing_left[:, 0] *= -1
-
-        tail_right = np.array([
-            [fuselage_width * 0.55, 0.32 * length],
-            [tail_span, 0.40 * length],
-            [tail_span * 0.85, 0.48 * length],
-            [fuselage_width * 0.45, 0.44 * length],
-        ], dtype=np.float32)
-        tail_left = tail_right.copy()
-        tail_left[:, 0] *= -1
-
-        vertical_tail = np.array([
-            [0.0, 0.30 * length],
-            [fuselage_width * 0.28, 0.54 * length],
-            [0.0, 0.64 * length],
-            [-fuselage_width * 0.28, 0.54 * length],
-        ], dtype=np.float32)
-
-        cockpit = np.array([
-            [0.0, -0.48 * length],
-            [fuselage_width * 0.38, -0.38 * length],
-            [0.0, -0.30 * length],
-            [-fuselage_width * 0.38, -0.38 * length],
-        ], dtype=np.float32)
-
+        # Donusum matrisi
         ang = float(heading_deg)
         rad = np.deg2rad(ang)
-        c, s = np.cos(rad), np.sin(rad)
-        R = np.array([[c, -s], [s, c]], dtype=np.float32)
+        co, si = np.cos(rad), np.sin(rad)
+        R_mat = np.array([[co, -si], [si, co]], dtype=np.float32)
 
-        def _transform(points_array):
-            pts = np.array(points_array, dtype=np.float32)
+        def _xf(pts_list):
+            pts = np.array(pts_list, dtype=np.float32)
             if pts.size == 0:
                 return None
-            pts_rot = pts @ R.T
-            pts_rot[:, 0] += cx
-            pts_rot[:, 1] += cy
-            return pts_rot.astype(np.int32)
+            pts_r = pts @ R_mat.T
+            pts_r[:, 0] += cx
+            pts_r[:, 1] += cy
+            return pts_r.astype(np.int32)
 
-        outline_i = _transform(outline_pts)
-        if outline_i is None:
+        # Boyut oranlari
+        fw = L * 0.10   # govde yarim genisligi
+        ws = L * 0.60   # kanat yari acikligi
+        ts = L * 0.26   # kuyruk yari acikligi
+
+        # Tum ucak konturu (simetrik, sade)
+        plane = [
+            # Burun
+            [0.0,       -0.50 * L],
+            [fw * 0.5,  -0.42 * L],
+            [fw,        -0.28 * L],
+            # Sag kanat
+            [fw,        -0.06 * L],
+            [ws,         0.02 * L],
+            [ws * 0.95,  0.10 * L],
+            [fw,         0.12 * L],
+            # Govde orta-arka
+            [fw * 0.85,  0.30 * L],
+            # Sag kuyruk
+            [ts,         0.42 * L],
+            [ts * 0.90,  0.50 * L],
+            [fw * 0.35,  0.48 * L],
+            # Kuyruk ucu
+            [0.0,        0.52 * L],
+            # Sol kuyruk
+            [-fw * 0.35, 0.48 * L],
+            [-ts * 0.90, 0.50 * L],
+            [-ts,        0.42 * L],
+            # Govde sol
+            [-fw * 0.85, 0.30 * L],
+            [-fw,        0.12 * L],
+            [-ws * 0.95, 0.10 * L],
+            [-ws,        0.02 * L],
+            [-fw,       -0.06 * L],
+            # Sol govde-burun
+            [-fw,       -0.28 * L],
+            [-fw * 0.5, -0.42 * L],
+        ]
+
+        plane_xf = _xf(plane)
+        if plane_xf is None:
             return
-        cv2.fillPoly(img, [outline_i], base_color)
 
-        overlays = [
-            (tail_right, tail_color),
-            (tail_left, tail_color),
-            (vertical_tail, tail_color),
-            (wing_right, wing_color),
-            (wing_left, wing_color),
-            (fuselage, fuselage_color),
-        ]
-        for shape, col in overlays:
-            pts_i = _transform(shape)
-            if pts_i is not None:
-                cv2.fillPoly(img, [pts_i], col)
+        # Dolgu
+        cv2.fillPoly(img, [plane_xf], base_color, lineType=cv2.LINE_AA)
 
-        cockpit_i = _transform(cockpit)
-        if cockpit_i is not None:
-            cv2.fillPoly(img, [cockpit_i], canopy_color)
-
-        detail_thickness = max(1, outline_thickness // 3) if outline_thickness else 1
-        wing_detail_thickness = max(1, outline_thickness // 4) if outline_thickness else 1
-
-        nose_point = _transform(np.array([[0.0, -0.60 * length]], dtype=np.float32))
-        if nose_point is not None and nose_point.shape[0] == 1:
-            cv2.circle(img, tuple(nose_point[0]), max(1, detail_thickness), highlight_color, thickness=-1, lineType=cv2.LINE_AA)
-
-        spine = _transform(np.array([[0.0, -0.50 * length], [0.0, 0.56 * length]], dtype=np.float32))
-        if spine is not None and spine.shape[0] == 2:
-            cv2.line(img, tuple(spine[0]), tuple(spine[1]), highlight_color, thickness=detail_thickness, lineType=cv2.LINE_AA)
-
-        wing_lines = [
-            np.array([[fuselage_width * 0.97, -0.003 * length], [wing_span * 0.97, 0.032 * length]], dtype=np.float32),
-            np.array([[-fuselage_width * 0.97, -0.003 * length], [-wing_span * 0.97, 0.032 * length]], dtype=np.float32),
-        ]
-        for line in wing_lines:
-            pts = _transform(line)
-            if pts is not None and pts.shape[0] == 2:
-                cv2.line(img, tuple(pts[0]), tuple(pts[1]), highlight_color, thickness=wing_detail_thickness, lineType=cv2.LINE_AA)
-
+        # Dis hat
         if outline_thickness > 0:
-            cv2.polylines(img, [outline_i], isClosed=True, color=outline_rgb, thickness=outline_thickness, lineType=cv2.LINE_AA)
+            cv2.polylines(img, [plane_xf], isClosed=True, color=outline_rgb,
+                          thickness=max(1, outline_thickness), lineType=cv2.LINE_AA)
 
     except Exception:
         try:
