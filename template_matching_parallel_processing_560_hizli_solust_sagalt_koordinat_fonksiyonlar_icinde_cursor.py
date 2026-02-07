@@ -66,6 +66,7 @@ RUN_CFG = {
     "UI_WINDOW_WIDTH": 1000,
     "UI_WINDOW_HEIGHT": 1000,
     "SHOW_INNER_FRAME": True,
+    "SHOW_ROI_FRAME": True,
     "SHOW_TM_BOXES": True,
 
     # Calisma sonu bekleme
@@ -93,6 +94,7 @@ UI_BUTTON_SCALE = float(RUN_CFG.get("UI_BUTTON_SCALE", 1.0))
 UI_WINDOW_WIDTH = int(RUN_CFG.get("UI_WINDOW_WIDTH", 1280))
 UI_WINDOW_HEIGHT = int(RUN_CFG.get("UI_WINDOW_HEIGHT", 960))
 SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", True))
+SHOW_ROI_FRAME = bool(RUN_CFG.get("SHOW_ROI_FRAME", True))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
 
 if benchmark:
@@ -114,6 +116,7 @@ import time
 import rasterio as rio
 import numpy as np
 from math import cos, sqrt
+from datetime import datetime
 import piexif
 import csv
 from PIL import Image
@@ -596,7 +599,7 @@ def _to_float_ratio(val):
 
 def parse_exif(image_path):
     """Parse EXIF safely; returns dict with keys:
-    yaw, latitude, longitude, altitude, focal_length, model.
+    yaw, latitude, longitude, altitude, focal_length, model, timestamp.
     Returns None on failure.
     """
     import re
@@ -665,6 +668,32 @@ def parse_exif(image_path):
     fl = get_field(exif, 'FocalLength')
     focal_length = _to_float_ratio(fl)
     model = get_field(exif, 'Model')
+    timestamp = None
+    dt_raw = (
+        get_field(exif, 'DateTimeOriginal')
+        or get_field(exif, 'DateTimeDigitized')
+        or get_field(exif, 'DateTime')
+    )
+    subsec_raw = (
+        get_field(exif, 'SubSecTimeOriginal')
+        or get_field(exif, 'SubsecTimeOriginal')
+        or get_field(exif, 'SubSecTime')
+    )
+    if dt_raw is not None:
+        try:
+            if isinstance(dt_raw, (bytes, bytearray)):
+                dt_raw = dt_raw.decode(errors='ignore')
+            dt_obj = datetime.strptime(str(dt_raw).strip(), "%Y:%m:%d %H:%M:%S")
+            frac = 0.0
+            if subsec_raw is not None:
+                if isinstance(subsec_raw, (bytes, bytearray)):
+                    subsec_raw = subsec_raw.decode(errors='ignore')
+                digits = "".join(ch for ch in str(subsec_raw) if ch.isdigit())
+                if digits:
+                    frac = float(f"0.{digits}")
+            timestamp = dt_obj.timestamp() + frac
+        except Exception:
+            timestamp = None
 
     return {
         'yaw': yaw,
@@ -673,6 +702,7 @@ def parse_exif(image_path):
         'altitude': altitude,
         'focal_length': focal_length,
         'model': model,
+        'timestamp': timestamp,
     }
 
 def make_rc_to_ll(dataset):
@@ -904,7 +934,8 @@ def _build_runtime_buttons():
          "rect": (20, 20, 44, 44), "is_collapse": True},
         {"key": "trajectory",   "label": "Trajektori",   "hotkey": "T", "rect": (20, 20, 260, 54)},
         {"key": "inner_frame",  "label": "Ic Cerceve",   "hotkey": "I", "rect": (20, 84, 260, 54)},
-        {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 148, 260, 54)},
+        {"key": "roi_frame",    "label": "ROI Cerceve",  "hotkey": "O", "rect": (20, 148, 260, 54)},
+        {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 212, 260, 54)},
     ]
 
 
@@ -1484,6 +1515,7 @@ def rotated_rect(w, h, angle):
 # RUN_CFG: Tum calisma parametrelerini bu bloktan yonetebilirsiniz.
 # Burada degistirdiginiz degerler tum script'e uygulanir.
 # -----------------------------------------------------------------------------
+
 RUN_CFG = {
     # Genel calisma modu
     "BENCHMARK": False,
@@ -1522,6 +1554,7 @@ RUN_CFG = {
     "WAIT_PER_MODEL": False,
     "WAIT_ON_EXIT": False,
 }
+
 
 benchmark = bool(RUN_CFG["BENCHMARK"])
 DEBUG = bool(RUN_CFG["DEBUG"])
@@ -1985,6 +2018,7 @@ if __name__ == '__main__':
     runtime_ui_state = {
         "trajectory": bool(DRAW_TRAJECTORY),
         "inner_frame": bool(SHOW_INNER_FRAME),
+        "roi_frame": bool(SHOW_ROI_FRAME),
         "tm_boxes": bool(SHOW_TM_BOXES),
         "_panel_collapsed": False,
         "_hover_key": None,
@@ -2010,6 +2044,12 @@ if __name__ == '__main__':
         # Her model/harita cifti icin gecmis izleri ayri tutulur.
         traj_pred_points = []
         traj_real_points = []
+        prev_pred_pt_for_speed = None
+        prev_speed_ts = None
+        prev_speed_wall_ts = None
+        speed_vx_mps = 0.0
+        speed_vy_mps = 0.0
+        speed_mps = 0.0
         
         model_yolu = model_path_list[k]
         model = load_model(model_yolu)        
@@ -2070,6 +2110,11 @@ if __name__ == '__main__':
             altitude = exif_data.get('altitude')
             FocalLength = exif_data.get('focal_length')
             kamera_model = exif_data.get('model')
+            frame_timestamp = exif_data.get('timestamp')
+            try:
+                frame_timestamp = float(frame_timestamp) if frame_timestamp is not None else None
+            except Exception:
+                frame_timestamp = None
 
             if gps_latitude is None or gps_longitude is None:
                 print("GPS EXIF eksik, atlaniyor:", anlik_goruntu)
@@ -2652,14 +2697,37 @@ if __name__ == '__main__':
                 
             # dosyaya_yaz(sonuclar,dogru_tahmin,yanlis_tahmin)  # DÃƒÂ¶ngÃƒÂ¼ sonunda bir defa yazÃ„Â±lacak
                 
-            centerOfCircle=konum    
-                    
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
             
             if benchmark==True:
                 cerceve_boyutu=cerceve_boyutu_deger
                 konum=(knm[1],knm[0])
                 
+            centerOfCircle = (int(konum[0]), int(konum[1]))
+            pred_pt = (int(centerOfCircle[0]), int(centerOfCircle[1]))
+            real_pt = (int(knm[1]), int(knm[0]))
+
+            m_per_px = max(0.0, float(mekansal_cozunurluk) / 100.0)
+            speed_vx_mps = 0.0
+            speed_vy_mps = 0.0
+            speed_mps = 0.0
+            if prev_pred_pt_for_speed is not None:
+                dt = 0.0
+                if frame_timestamp is not None and prev_speed_ts is not None:
+                    dt = float(frame_timestamp - prev_speed_ts)
+                if dt <= 1e-6 and prev_speed_wall_ts is not None:
+                    dt = float(time.time() - prev_speed_wall_ts)
+                if dt > 1e-6 and m_per_px > 0:
+                    dx_px = float(pred_pt[0] - prev_pred_pt_for_speed[0])
+                    dy_px = float(pred_pt[1] - prev_pred_pt_for_speed[1])
+                    speed_vx_mps = (dx_px * m_per_px) / dt
+                    speed_vy_mps = (dy_px * m_per_px) / dt
+                    speed_mps = math.hypot(speed_vx_mps, speed_vy_mps)
+
+            prev_pred_pt_for_speed = pred_pt
+            prev_speed_ts = frame_timestamp
+            prev_speed_wall_ts = time.time()
+            
             
             if runtime_ui_state.get("inner_frame", True):
                 cv2.rectangle(
@@ -2670,14 +2738,19 @@ if __name__ == '__main__':
                     25
                 )
 
+            if runtime_ui_state.get("roi_frame", True):
+                rx1 = max(0, min(int(ust), img.shape[1] - 1))
+                ry1 = max(0, min(int(sol), img.shape[0] - 1))
+                rx2 = max(0, min(int(alt), img.shape[1] - 1))
+                ry2 = max(0, min(int(sag), img.shape[0] - 1))
+                if rx2 > rx1 and ry2 > ry1:
+                    cv2.rectangle(img, (rx1, ry1), (rx2, ry2), (0, 165, 255), 15)
+
             if runtime_ui_state.get("tm_boxes", True):
                 cv2.rectangle(img, top_left1, bottom_right1, (0, 0, 255), 25)
                 cv2.rectangle(img, top_left2, bottom_right2, (0, 255, 0), 25)
                 cv2.rectangle(img, top_left3, bottom_right3, (255, 0, 0), 25)
             radius=10
-
-            pred_pt = (int(centerOfCircle[0]), int(centerOfCircle[1]))
-            real_pt = (int(knm[1]), int(knm[0]))
 
             # Noktalari sadece gecerli piksel araliginda kaydet.
             if 0 <= pred_pt[0] < img.shape[1] and 0 <= pred_pt[1] < img.shape[0]:
@@ -2713,6 +2786,27 @@ if __name__ == '__main__':
                         cv2.circle(img, p, rp, (0, 255, 255), -1, lineType=cv2.LINE_AA)
                     for p in traj_real_points:
                         cv2.circle(img, p, rp, (0, 255, 0), -1, lineType=cv2.LINE_AA)
+
+            if m_per_px > 1e-9 and speed_mps > 0.01:
+                vx_px_s = speed_vx_mps / m_per_px
+                vy_px_s = speed_vy_mps / m_per_px
+                arrow_dx = vx_px_s * 0.8
+                arrow_dy = vy_px_s * 0.8
+                arrow_len = math.hypot(arrow_dx, arrow_dy)
+                if arrow_len > 0:
+                    max_arrow_len = 300.0
+                    if arrow_len > max_arrow_len:
+                        scale = max_arrow_len / arrow_len
+                        arrow_dx *= scale
+                        arrow_dy *= scale
+                    tip_x = int(round(pred_pt[0] + arrow_dx))
+                    tip_y = int(round(pred_pt[1] + arrow_dy))
+                    tip_x = max(0, min(tip_x, img.shape[1] - 1))
+                    tip_y = max(0, min(tip_y, img.shape[0] - 1))
+                    cv2.arrowedLine(
+                        img, pred_pt, (tip_x, tip_y), (255, 255, 0),
+                        thickness=10, line_type=cv2.LINE_AA, tipLength=0.25
+                    )
 
             cv2.circle(img, centerOfCircle, radius, (0,255,255), 25)   #tahmini konumu veren nokta
             cv2.circle(img,(knm[1],knm[0]),radius,(0,255,0), 25)                   #gerÃƒÂ§ek konumu gÃƒÂ¶steren nokta
@@ -2759,6 +2853,8 @@ if __name__ == '__main__':
                 f"HDG: {yaw:.1f} deg",
                 f"ALT: {int(ucus_yuksekligi)} m",
                 f"ERR: {int(uzaklik*1000)} m",
+                f"SPD: {speed_mps:.2f} m/s",
+                f"VEL: ({speed_vx_mps:+.2f}, {speed_vy_mps:+.2f}) m/s",
             ]
             # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
             _hud_font_scale = 6
@@ -2835,6 +2931,8 @@ if __name__ == '__main__':
                     runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
                 elif key in (ord('i'), ord('I')):
                     runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", True))
+                elif key in (ord('o'), ord('O')):
+                    runtime_ui_state["roi_frame"] = not bool(runtime_ui_state.get("roi_frame", True))
                 elif key in (ord('r'), ord('R')):
                     runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
                 elif key in (ord('h'), ord('H')):
