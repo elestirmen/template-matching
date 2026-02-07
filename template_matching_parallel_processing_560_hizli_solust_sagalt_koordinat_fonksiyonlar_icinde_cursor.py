@@ -1462,6 +1462,56 @@ def standart_sapma(data):
 
 
 
+def _normalize_ext_set(exts):
+    """Return normalized lowercase extension set like {'.jpg', '.h5'}."""
+    out = set()
+    for e in (exts or []):
+        if not isinstance(e, str):
+            continue
+        e = e.strip().lower()
+        if not e:
+            continue
+        if not e.startswith("."):
+            e = "." + e
+        out.add(e)
+    return out
+
+
+def _ext_allowed(path, allowed_exts):
+    if not allowed_exts:
+        return True
+    return os.path.splitext(path)[1].lower() in allowed_exts
+
+
+def _list_files_filtered(folder, allowed_exts):
+    """List files in a folder filtered by extension; ignore unrelated files."""
+    if not os.path.isdir(folder):
+        return []
+    files = []
+    for name in os.listdir(folder):
+        p = os.path.join(folder, name)
+        if not os.path.isfile(p):
+            continue
+        if not _ext_allowed(p, allowed_exts):
+            continue
+        files.append(p)
+    return files
+
+
+def _filter_candidates(paths, allowed_exts, label):
+    """Validate explicit file candidates, skipping missing or wrong-extension files."""
+    kept = []
+    for p in paths:
+        if not os.path.isfile(p):
+            print(f"Uyari: {label} dosyasi bulunamadi, atlandi: {p}")
+            continue
+        if not _ext_allowed(p, allowed_exts):
+            print(f"Uyari: {label} uzantisi desteklenmiyor, atlandi: {p}")
+            continue
+        kept.append(p)
+    return kept
+
+
 if __name__ == '__main__': 
     # Log CUDA environment once
     try:
@@ -1482,49 +1532,56 @@ if __name__ == '__main__':
     if not os.path.isabs(anlik_yol):
         anlik_yol = os.path.join(dirname, anlik_yol)
 
+    if not os.path.isdir(harita_yol):
+        raise RuntimeError(f"Harita klasoru bulunamadi: {harita_yol}")
+    if not os.path.isdir(model_yol):
+        raise RuntimeError(f"Model klasoru bulunamadi: {model_yol}")
+    if not os.path.isdir(anlik_yol):
+        raise RuntimeError(f"Anlik goruntu klasoru bulunamadi: {anlik_yol}")
+
+    # Desteklenen uzantilar: alakasiz dosyalari (.gitkeep vb.) otomatik dislar.
+    harita_exts = _normalize_ext_set(
+        RUN_CFG.get("HARITA_UZANTILARI", [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".jp2"])
+    )
+    model_exts = _normalize_ext_set(
+        RUN_CFG.get("MODEL_UZANTILARI", [".h5", ".keras", ".hdf5"])
+    )
+    anlik_exts = _normalize_ext_set(
+        RUN_CFG.get("ANLIK_UZANTILARI", [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"])
+    )
+
     harita_secili = RUN_CFG.get("HARITA_DOSYALARI", [])
     if harita_secili:
-        harita_path_list = [
+        harita_aday_list = [
             (p if os.path.isabs(p) else os.path.join(harita_yol, p))
             for p in harita_secili
         ]
+        harita_path_list = _filter_candidates(harita_aday_list, harita_exts, "harita")
     else:
-        harita_path_list = [
-            os.path.join(harita_yol, f)
-            for f in os.listdir(harita_yol)
-            if os.path.isfile(os.path.join(harita_yol, f))
-        ]
+        harita_path_list = _list_files_filtered(harita_yol, harita_exts)
 
     model_secili = RUN_CFG.get("MODEL_DOSYALARI", [])
     if model_secili:
-        model_path_list = [
+        model_aday_list = [
             (p if os.path.isabs(p) else os.path.join(model_yol, p))
             for p in model_secili
         ]
+        model_path_list = _filter_candidates(model_aday_list, model_exts, "model")
     else:
-        model_path_list = [
-            os.path.join(model_yol, f)
-            for f in os.listdir(model_yol)
-            if os.path.isfile(os.path.join(model_yol, f))
-        ]
+        model_path_list = _list_files_filtered(model_yol, model_exts)
 
     if bool(RUN_CFG.get("SORT_INPUTS", False)):
         harita_path_list = sorted(harita_path_list)
         model_path_list = sorted(model_path_list)
 
-    harita_olmayan = [p for p in harita_path_list if not os.path.isfile(p)]
-    model_olmayan = [p for p in model_path_list if not os.path.isfile(p)]
-    for p in harita_olmayan:
-        print("Uyari: harita dosyasi bulunamadi, atlandi:", p)
-    for p in model_olmayan:
-        print("Uyari: model dosyasi bulunamadi, atlandi:", p)
-    harita_path_list = [p for p in harita_path_list if os.path.isfile(p)]
-    model_path_list = [p for p in model_path_list if os.path.isfile(p)]
-
     if not harita_path_list:
-        raise RuntimeError(f"Harita dosyasi bulunamadi: {harita_yol}")
+        raise RuntimeError(
+            f"Harita dosyasi bulunamadi (uzantilar: {sorted(harita_exts)}): {harita_yol}"
+        )
     if not model_path_list:
-        raise RuntimeError(f"Model dosyasi bulunamadi: {model_yol}")
+        raise RuntimeError(
+            f"Model dosyasi bulunamadi (uzantilar: {sorted(model_exts)}): {model_yol}"
+        )
 
     if len(harita_path_list) != len(model_path_list):
         print(
@@ -1537,6 +1594,15 @@ if __name__ == '__main__':
     harita_yol_list = [os.path.basename(p) for p in harita_path_list]
 
     ana_harita_elevation = RUN_CFG["DEM_PATH"]
+    anlik_yol_list = _list_files_filtered(anlik_yol, anlik_exts)
+    try:
+        anlik_yol_list = sorted(anlik_yol_list, key=lambda p: os.path.getmtime(p))
+    except Exception:
+        anlik_yol_list = sorted(anlik_yol_list)
+    if not anlik_yol_list:
+        raise RuntimeError(
+            f"Anlik goruntu dosyasi bulunamadi (uzantilar: {sorted(anlik_exts)}): {anlik_yol}"
+        )
     
     
     
@@ -1648,16 +1714,7 @@ if __name__ == '__main__':
           
         kenarx=int(t_img.shape[0]/512)
         
-        # 6) Anlik goruntu klasorundeki dosyalari getir
-        
-        anlik_yol_list = sorted(
-            [
-                os.path.join(anlik_yol, x)
-                for x in os.listdir(anlik_yol)
-                if os.path.isfile(os.path.join(anlik_yol, x))
-            ],
-            key=lambda p: os.path.getmtime(p),
-        )
+        # 6) Anlik goruntu dosyalari (filtrelenmis liste yukarida bir kez hazirlandi)
         uzaklik=0
         fark=100
         irtifa_dizisi=[]
