@@ -1,242 +1,242 @@
-# UAV Görüntü Konumland?rma - Template Matching ile Derin Ö?renme Destekli Jeolokalizasyon
+# UAV GÃ¶rÃ¼ntÃ¼ KonumlandÄ±rma - Template Matching ile Derin Ã–ÄŸrenme Destekli Jeolokalizasyon
 
-Bu proje, ?HA (?nsans?z Hava Arac?) / drone görüntülerini **referans ortofoto harita** üzerinde otomatik olarak konumland?ran bir bilgisayarl? görü sistemidir. Derin ö?renme tabanl? öznitelik ç?kar?m? ile çok ölçekli template matching yöntemini birle?tirerek, GPS'ten ba??ms?z veya GPS do?rulamal? konum tahmini gerçekle?tirir.
+Bu proje, Ä°HA (Ä°nsansÄ±z Hava AracÄ±) / drone gÃ¶rÃ¼ntÃ¼lerini **referans ortofoto harita** Ã¼zerinde otomatik olarak konumlandÄ±ran bir bilgisayarlÄ± gÃ¶rÃ¼ sistemidir. Derin Ã¶ÄŸrenme tabanlÄ± Ã¶znitelik Ã§Ä±karÄ±mÄ± ile Ã§ok Ã¶lÃ§ekli template matching yÃ¶ntemini birleÅŸtirerek, GPS'ten baÄŸÄ±msÄ±z veya GPS doÄŸrulamalÄ± konum tahmini gerÃ§ekleÅŸtirir.
 
 ---
 
-## ?çindekiler
+## Ä°Ã§indekiler
 
-- [Genel Bak??](#genel-bak??)
+- [Genel BakÄ±ÅŸ](#genel-bakÄ±ÅŸ)
 - [Sistem Mimarisi](#sistem-mimarisi)
-- [Çal??ma Ak??? (Pipeline)](#çal??ma-ak???-pipeline)
-- [Klasör Yap?s?](#klasör-yap?s?)
-- [Yap?land?rma (RUN\_CFG)](#yap?land?rma-run_cfg)
+- [Ã‡alÄ±ÅŸma AkÄ±ÅŸÄ± (Pipeline)](#Ã§alÄ±ÅŸma-akÄ±ÅŸÄ±-pipeline)
+- [KlasÃ¶r YapÄ±sÄ±](#klasÃ¶r-yapÄ±sÄ±)
+- [YapÄ±landÄ±rma (RUN\_CFG)](#yapÄ±landÄ±rma-run_cfg)
 - [Kurulum](#kurulum)
-- [Ba??ml?l?klar](#ba??ml?l?klar)
-- [Kullan?m](#kullan?m)
+- [BaÄŸÄ±mlÄ±lÄ±klar](#baÄŸÄ±mlÄ±lÄ±klar)
+- [KullanÄ±m](#kullanÄ±m)
 - [Teknik Detaylar](#teknik-detaylar)
   - [EXIF Verisi Okuma](#exif-verisi-okuma)
-  - [DEM Tabanl? Çok Ölçekli Yakla??m](#dem-tabanl?-çok-ölçekli-yakla??m)
-  - [Görüntü Ön ??leme](#görüntü-ön-i?leme)
-  - [Keras Model Ç?kar?m?](#keras-model-ç?kar?m?)
+  - [DEM TabanlÄ± Ã‡ok Ã–lÃ§ekli YaklaÅŸÄ±m](#dem-tabanlÄ±-Ã§ok-Ã¶lÃ§ekli-yaklaÅŸÄ±m)
+  - [GÃ¶rÃ¼ntÃ¼ Ã–n Ä°ÅŸleme](#gÃ¶rÃ¼ntÃ¼-Ã¶n-iÅŸleme)
+  - [Keras Model Ã‡Ä±karÄ±mÄ±](#keras-model-Ã§Ä±karÄ±mÄ±)
   - [Template Matching](#template-matching)
-  - [Konum Belirleme (Kesi?im Yöntemi)](#konum-belirleme-kesi?im-yöntemi)
+  - [Konum Belirleme (KesiÅŸim YÃ¶ntemi)](#konum-belirleme-kesiÅŸim-yÃ¶ntemi)
   - [Piramit Arama (Pyramid Search)](#piramit-arama-pyramid-search)
-  - [CUDA GPU H?zland?rma](#cuda-gpu-h?zland?rma)
-- [Koordinat Dönü?ümleri](#koordinat-dönü?ümleri)
-- [De?erlendirme Metrikleri](#de?erlendirme-metrikleri)
-- [Görselle?tirme](#görselle?tirme)
-- [Ç?kt? Dosyalar?](#ç?kt?-dosyalar?)
-- [Kamera Deste?i](#kamera-deste?i)
-- [S?n?rlamalar ve Notlar](#s?n?rlamalar-ve-notlar)
+  - [CUDA GPU HÄ±zlandÄ±rma](#cuda-gpu-hÄ±zlandÄ±rma)
+- [Koordinat DÃ¶nÃ¼ÅŸÃ¼mleri](#koordinat-dÃ¶nÃ¼ÅŸÃ¼mleri)
+- [DeÄŸerlendirme Metrikleri](#deÄŸerlendirme-metrikleri)
+- [GÃ¶rselleÅŸtirme](#gÃ¶rselleÅŸtirme)
+- [Ã‡Ä±ktÄ± DosyalarÄ±](#Ã§Ä±ktÄ±-dosyalarÄ±)
+- [Kamera DesteÄŸi](#kamera-desteÄŸi)
+- [SÄ±nÄ±rlamalar ve Notlar](#sÄ±nÄ±rlamalar-ve-notlar)
 
 ---
 
-## Genel Bak??
+## Genel BakÄ±ÅŸ
 
-Sistem, bir drone'un çekti?i anl?k görüntüleri georeferansl? bir ortofoto harita üzerinde arayarak konumland?r?r. Temel fikir ?udur:
+Sistem, bir drone'un Ã§ektiÄŸi anlÄ±k gÃ¶rÃ¼ntÃ¼leri georeferanslÄ± bir ortofoto harita Ã¼zerinde arayarak konumlandÄ±rÄ±r. Temel fikir ÅŸudur:
 
-1. Drone görüntüsünün EXIF meta verisinden **yaw (ba?l?k aç?s?)**, **GPS koordinat?**, **odak uzakl???** ve **irtifa** bilgileri okunur.
-2. Say?sal Yükseklik Modeli (DEM) kullan?larak **arazi rak?m?** belirlenir ve uçu? yüksekli?i hesaplan?r.
-3. Uçu? yüksekli?i ve kamera parametreleri ile **Yer Örneklem Aral??? (GSD)** hesaplan?r.
-4. Görüntü yaw aç?s?na göre kuzeye hizalan?r ve GSD'ye göre ölçeklenir.
-5. Üç farkl? ölçekte (merkez, sol-üst, sa?-alt rak?m de?erlerine göre) **template patch**'leri üretilir.
-6. Her patch bir **Keras derin ö?renme modeli** ile i?lenerek öznitelik haritas? ç?kar?l?r.
-7. Referans haritan?n ilgili bölgesinde **template matching** (Normalized Cross-Correlation) yap?l?r.
-8. Üç e?le?menin kesi?im alan?ndan **nihai konum** belirlenir.
-9. Tahmin edilen konum ile gerçek GPS konumu aras?ndaki hata hesaplan?r.
+1. Drone gÃ¶rÃ¼ntÃ¼sÃ¼nÃ¼n EXIF meta verisinden **yaw (baÅŸlÄ±k aÃ§Ä±sÄ±)**, **GPS koordinatÄ±**, **odak uzaklÄ±ÄŸÄ±** ve **irtifa** bilgileri okunur.
+2. SayÄ±sal YÃ¼kseklik Modeli (DEM) kullanÄ±larak **arazi rakÄ±mÄ±** belirlenir ve uÃ§uÅŸ yÃ¼ksekliÄŸi hesaplanÄ±r.
+3. UÃ§uÅŸ yÃ¼ksekliÄŸi ve kamera parametreleri ile **Yer Ã–rneklem AralÄ±ÄŸÄ± (GSD)** hesaplanÄ±r.
+4. GÃ¶rÃ¼ntÃ¼ yaw aÃ§Ä±sÄ±na gÃ¶re kuzeye hizalanÄ±r ve GSD'ye gÃ¶re Ã¶lÃ§eklenir.
+5. ÃœÃ§ farklÄ± Ã¶lÃ§ekte (merkez, sol-Ã¼st, saÄŸ-alt rakÄ±m deÄŸerlerine gÃ¶re) **template patch**'leri Ã¼retilir.
+6. Her patch bir **Keras derin Ã¶ÄŸrenme modeli** ile iÅŸlenerek Ã¶znitelik haritasÄ± Ã§Ä±karÄ±lÄ±r.
+7. Referans haritanÄ±n ilgili bÃ¶lgesinde **template matching** (Normalized Cross-Correlation) yapÄ±lÄ±r.
+8. ÃœÃ§ eÅŸleÅŸmenin kesiÅŸim alanÄ±ndan **nihai konum** belirlenir.
+9. Tahmin edilen konum ile gerÃ§ek GPS konumu arasÄ±ndaki hata hesaplanÄ±r.
 
 ---
 
 ## Sistem Mimarisi
 
 ```
-???????????????????????????????????????????????????????????????????????
-?                         DRONE GÖRÜNTÜLER?                         ?
-?                        (parcalar/ klasörü)                         ?
-???????????????????????????????????????????????????????????????????????
-                               ?
-                    ???????????????????????
-                    ?    EXIF Okuyucu     ?
-                    ?  (yaw, GPS, alt,    ?
-                    ?   focal length)     ?
-                    ???????????????????????
-                               ?
-              ???????????????????????????????????
-              ?                ?                ?
-    ?????????????????? ??????????????? ???????????????????
-    ?  DEM Sorgusu   ? ? GSD Hesab?  ? ? Yaw Düzeltmesi  ?
-    ?  (Rak?m Bulma) ? ? (cm/piksel) ? ? (Kuzeye Hizala) ?
-    ?????????????????? ??????????????? ???????????????????
-              ?                ?                ?
-              ???????????????????????????????????
-                               ?
-                    ???????????????????????
-                    ?  Çok Ölçekli Patch  ?
-                    ?   Üretimi (3 adet)  ?
-                    ?  Sol-üst / Merkez / ?
-                    ?     Sa?-alt rak?m   ?
-                    ???????????????????????
-                               ?
-                    ???????????????????????
-                    ?   Keras Modeli      ?
-                    ?  (Öznitelik Ç?kar.) ?
-                    ?   Batch predict     ?
-                    ???????????????????????
-                               ?
-                    ???????????????????????
-                    ?  Template Matching   ?
-                    ?  (TM_CCOEFF_NORMED) ?
-                    ?  CPU veya CUDA GPU  ?
-                    ?  Piramit arama opt. ?
-                    ???????????????????????
-                               ?
-                    ???????????????????????
-                    ? Kesi?im Analizi     ?
-                    ? (3 sonucun birle?.) ?
-                    ???????????????????????
-                               ?
-              ???????????????????????????????????
-              ?                ?                ?
-    ?????????????????? ??????????????? ???????????????????
-    ? Konum Tahmini  ? ? Hata Hesab? ? ?  Görselle?tirme  ?
-    ? (Lat/Lon)      ? ? (Haversine) ? ?  (OpenCV HUD)    ?
-    ?????????????????? ??????????????? ???????????????????
++---------------------------------------------------------------------+
+|                         DRONE GORUNTULERI                            |
+|                        (parcalar/ klasoru)                           |
++--------------------------------+------------------------------------+
+                                 |
+                    +------------v------------+
+                    |    EXIF Okuyucu         |
+                    |  (yaw, GPS, alt,        |
+                    |   focal length)         |
+                    +------------+------------+
+                                 |
+              +------------------+------------------+
+              |                  |                  |
+    +---------v--------+ +------v------+ +---------v---------+
+    |  DEM Sorgusu     | | GSD Hesabi  | | Yaw Duzeltmesi    |
+    |  (Rakim Bulma)   | | (cm/piksel) | | (Kuzeye Hizala)   |
+    +---------+--------+ +------+------+ +---------+---------+
+              |                  |                  |
+              +------------------+------------------+
+                                 |
+                    +------------v------------+
+                    |  Cok Olcekli Patch      |
+                    |   Uretimi (3 adet)      |
+                    |  Sol-ust / Merkez /     |
+                    |     Sag-alt rakim       |
+                    +------------+------------+
+                                 |
+                    +------------v------------+
+                    |   Keras Modeli          |
+                    |  (Oznitelik Cikarim)    |
+                    |   Batch predict         |
+                    +------------+------------+
+                                 |
+                    +------------v------------+
+                    |  Template Matching      |
+                    |  (TM_CCOEFF_NORMED)     |
+                    |  CPU veya CUDA GPU      |
+                    |  Piramit arama opt.     |
+                    +------------+------------+
+                                 |
+                    +------------v------------+
+                    |  Kesisim Analizi        |
+                    |  (3 sonucun birlesimi)  |
+                    +------------+------------+
+                                 |
+              +------------------+------------------+
+              |                  |                  |
+    +---------v--------+ +------v------+ +---------v---------+
+    | Konum Tahmini    | | Hata Hesabi | |  Gorsellestirme   |
+    | (Lat/Lon)        | | (Haversine) | |  (OpenCV HUD)     |
+    +------------------+ +-------------+ +-------------------+
 ```
 
 ---
 
-## Çal??ma Ak??? (Pipeline)
+## Calisma Akisi (Pipeline)
 
-Betik çal??t?r?ld???nda a?a??daki ad?mlar s?rayla gerçekle?tirilir:
+Betik calistirildiginda asagidaki adimlar sirayla gerceklestirilir:
 
-### 1. Ba?latma ve Kaynak Yükleme
-- `RUN_CFG` yap?land?rma sözlü?ünden tüm parametreler okunur.
-- Harita dosyalar? (`haritalar/`), model dosyalar? (`model/`) ve anl?k görüntüler (`parcalar/`) listelenir.
-- DEM (Say?sal Yükseklik Modeli) raster dosyas? GDAL ile aç?l?r.
-- Referans haritan?n CRS (Koordinat Referans Sistemi) bilgisi okunur ve `piksel ? koordinat` dönü?türücüsü haz?rlan?r.
+### 1. Baslatma ve Kaynak Yukleme
+- `RUN_CFG` yapilandirma sozlugunden tum parametreler okunur.
+- Harita dosyalari (`haritalar/`), model dosyalari (`model/`) ve anlik goruntuler (`parcalar/`) listelenir.
+- DEM (Sayisal Yukseklik Modeli) raster dosyasi GDAL ile acilir.
+- Referans haritanin CRS (Koordinat Referans Sistemi) bilgisi okunur ve `piksel -> koordinat` donusturucusu hazirlanir.
 
-### 2. Model ve Harita Döngüsü
-Her harita-model çifti için:
-- Keras modeli (`load_model`) yüklenir.
+### 2. Model ve Harita Dongusu
+Her harita-model cifti icin:
+- Keras modeli (`load_model`) yuklenir.
 - Referans harita gri tonlu olarak OpenCV ile okunur.
-- Rasterio ile haritan?n CRS/transform bilgileri al?n?r.
+- Rasterio ile haritanin CRS/transform bilgileri alinir.
 
-### 3. Anl?k Görüntü ??leme Döngüsü
-Her drone görüntüsü için:
+### 3. Anlik Goruntu Isleme Dongusu
+Her drone goruntusu icin:
 
 #### 3.1 EXIF Okuma
-- PIL/Pillow kullan?larak EXIF verisi parse edilir.
-- Yaw aç?s? (MakerNote ? FlightDegree), GPS koordinatlar?, irtifa ve odak uzakl??? ç?kar?l?r.
+- PIL/Pillow kullanilarak EXIF verisi parse edilir.
+- Yaw acisi (MakerNote -> FlightDegree), GPS koordinatlari, irtifa ve odak uzakligi cikarilir.
 
-#### 3.2 DEM Sorgulama ve GSD Hesab?
-- Drone'un GPS konumuna kar??l?k gelen DEM pikselinden **arazi rak?m?** okunur.
-- Sol-üst ve sa?-alt kö?elerdeki rak?m de?erleri de ayr?ca al?n?r.
-- `Uçu? Yüksekli?i = GPS ?rtifas? - Arazi Rak?m? + Düzeltme`
-- `GSD (cm/px) = (Sensör Geni?li?i × Uçu? Yüksekli?i × 100) / (Odak Uzakl??? × Görüntü Geni?li?i)`
+#### 3.2 DEM Sorgulama ve GSD Hesabi
+- Drone'un GPS konumuna karsilik gelen DEM pikselinden **arazi rakimi** okunur.
+- Sol-ust ve sag-alt koselerdeki rakim degerleri de ayrica alinir.
+- `Ucus Yuksekligi = GPS Irtifasi - Arazi Rakimi + Duzeltme`
+- `GSD (cm/px) = (Sensor Genisligi x Ucus Yuksekligi x 100) / (Odak Uzakligi x Goruntu Genisligi)`
 
-#### 3.3 Görüntü Ön ??leme
-- Görüntü **yaw aç?s?n?n tersi** kadar döndürülerek kuzeye hizalan?r.
-- Döndürülen görüntüden **en büyük iç dikdörtgen** kesilir (siyah kö?eler kald?r?l?r).
-- GSD oran?yla ölçeklenerek referans harita çözünürlü?üne getirilir.
-- Üç farkl? ölçekle (merkez, sol-üst, sa?-alt rak?ma göre) 544×544 piksellik patch'ler kesilir.
+#### 3.3 Goruntu On Isleme
+- Goruntu **yaw acisinin tersi** kadar dondurulerek kuzeye hizalanir.
+- Dondurulen goruntuden **en buyuk ic dortgen** kesilir (siyah koseler kaldirilir).
+- GSD oraniyla olceklenerek referans harita cozunurlugune getirilir.
+- Uc farkli olcekle (merkez, sol-ust, sag-alt rakima gore) 544x544 piksellik patch'ler kesilir.
 
-#### 3.4 Derin Ö?renme Model Ç?kar?m?
+#### 3.4 Derin Ogrenme Model Cikarimi
 - 3 patch, tek bir batch olarak modele verilir.
-- Histogram? e?itleme ve [-1, 1] normalizasyonu uygulan?r.
-- Model ç?kt?s? 0-255 aral???na dönü?türülür ve kenarl?k pikselleri (`PRED_BORDER`) k?rp?l?r.
+- Histogrami esitleme ve [-1, 1] normalizasyonu uygulanir.
+- Model ciktisi 0-255 araligina donusturulur ve kenarlik pikselleri (`PRED_BORDER`) kirpilir.
 
 #### 3.5 Template Matching
-- Referans haritan?n bir alt bölgesinde (arama çerçevesi) `cv2.TM_CCOEFF_NORMED` ile e?le?tirme yap?l?r.
-- CUDA GPU varsa `cv2.cuda.createTemplateMatching` ile h?zland?r?lm?? e?le?tirme kullan?l?r.
-- ?ste?e ba?l? piramit arama: önce dü?ük çözünürlükte kaba arama, ard?ndan bulunan bölgede ince arama.
-- 3 template için e?zamanl? e?le?tirme (`ThreadPoolExecutor`).
+- Referans haritanin arama cercevesi bolumunde `cv2.TM_CCOEFF_NORMED` ile eslestirme yapilir.
+- CUDA GPU varsa `cv2.cuda.createTemplateMatching` ile hizlandirilmis eslestirme kullanilir.
+- Istege bagli piramit arama: once dusuk cozunurlukte kaba arama, ardindan bulunan bolgede ince arama.
+- 3 template icin eszamanli eslestirme (`ThreadPoolExecutor`).
 
 #### 3.6 Konum Belirleme
-- 3 e?le?me sonucunun dikdörtgenleri aras?ndaki **kesi?im alan?** hesaplan?r.
-- Kesi?im merkezinin piksel koordinat? ? co?rafi koordinat dönü?ümü yap?l?r.
-- Haversine formülü ile tahmin-gerçek aras? mesafe hesaplan?r.
+- 3 eslestirme sonucunun dortgenleri arasindaki **kesisim alani** hesaplanir.
+- Kesisim merkezinin piksel koordinati -> cografi koordinat donusumu yapilir.
+- Haversine formulu ile tahmin-gercek arasi mesafe hesaplanir.
 
-#### 3.7 Adaptif Arama Çerçevesi
-- Normal modda: bir sonraki kare için arama çerçevesi, mevcut tahmine yak?n bölgeye daralt?l?r.
-- E?le?me ba?ar?s?zsa çerçeve geni?letilir.
-- Benchmark modunda: her kare için EXIF GPS merkezli sabit çerçeve kullan?l?r.
+#### 3.7 Adaptif Arama Cercevesi
+- Normal modda: bir sonraki kare icin arama cercevesi, mevcut tahmine yakin bolgeye daraltilir.
+- Eslestirme basarisizsa cerceve genisletilir.
+- Benchmark modunda: her kare icin EXIF GPS merkezli sabit cerceve kullanilir.
 
-### 4. Sonuç Raporlama
-- RMSE, MAE, standart sapma hesaplan?r.
-- Precision (hassasiyet), Recall (geri ça??rma) ve F-skoru hesaplan?r.
-- Sonuçlar `sonuclar.csv`, `sonuclar.txt` ve `modele_gore_sonuclar.txt` dosyalar?na yaz?l?r.
+### 4. Sonuc Raporlama
+- RMSE, MAE, standart sapma hesaplanir.
+- Precision (hassasiyet), Recall (geri cagirma) ve F-skoru hesaplanir.
+- Sonuclar `sonuclar.csv`, `sonuclar.txt` ve `modele_gore_sonuclar.txt` dosyalarina yazilir.
 
 ---
 
-## Klasör Yap?s?
+## Klasor Yapisi
 
 ```
 template matching/
-?
-??? template_matching_parallel_processing_560_hizli_solust_sagalt_
-?   koordinat_fonksiyonlar_icinde_cursor.py   # Ana betik
-?
-??? haritalar/              # Georeferansl? ortofoto harita dosyalar? (.tif)
-??? model/                  # Keras derin ö?renme modelleri (.h5)
-??? parcalar/               # ??lenecek drone/?HA görüntüleri
-?
-??? anlik/                  # Anl?k görüntü klasörü (alternatif)
-??? anlik_t/                # Anl?k görüntü klasörü (alternatif)
-??? temp/                   # Geçici dosyalar
-??? haritalar_top/          # Ek harita dosyalar?
-??? top_modeller/           # Ek model dosyalar?
-??? ar?iv/                  # Ar?ivlenmi? dosyalar
-?
-??? bern ?ehri template match/  # Bern ?ehri test verileri
-?
-??? ana_harita_urgup_30_cm_utm_elevation.tif  # DEM dosyas? (varsay?lan)
-?
-??? sonuclar.csv            # Ç?kt?: detayl? sonuçlar (CSV)
-??? sonuclar.txt            # Ç?kt?: detayl? sonuçlar (metin)
-??? modele_gore_sonuclar.txt # Ç?kt?: model bazl? özet metrikler
-?
-??? README.md               # Bu dosya
-??? .gitignore
+|
++-- template_matching_parallel_processing_560_hizli_solust_sagalt_
+|   koordinat_fonksiyonlar_icinde_cursor.py   # Ana betik
+|
++-- haritalar/              # Georeferansli ortofoto harita dosyalari (.tif)
++-- model/                  # Keras derin ogrenme modelleri (.h5)
++-- parcalar/               # Islenecek drone/IHA goruntuleri
+|
++-- anlik/                  # Anlik goruntu klasoru (alternatif)
++-- anlik_t/                # Anlik goruntu klasoru (alternatif)
++-- temp/                   # Gecici dosyalar
++-- haritalar_top/          # Ek harita dosyalari
++-- top_modeller/           # Ek model dosyalari
++-- arsiv/                  # Arsivlenmis dosyalar
+|
++-- bern sehri template match/  # Bern sehri test verileri
+|
++-- ana_harita_urgup_30_cm_utm_elevation.tif  # DEM dosyasi (varsayilan)
+|
++-- sonuclar.csv            # Cikti: detayli sonuclar (CSV)
++-- sonuclar.txt            # Cikti: detayli sonuclar (metin)
++-- modele_gore_sonuclar.txt # Cikti: model bazli ozet metrikler
+|
++-- README.md               # Bu dosya
++-- .gitignore
 ```
 
 ---
 
-## Yap?land?rma (RUN_CFG)
+## Yapilandirma (RUN_CFG)
 
-Tüm çal??ma parametreleri dosyan?n ba??ndaki `RUN_CFG` sözlü?ünden yönetilir:
+Tum calisma parametreleri dosyanin basindaki `RUN_CFG` sozlugunden yonetilir:
 
-| Parametre | Varsay?lan | Aç?klama |
+| Parametre | Varsayilan | Aciklama |
 |-----------|-----------|----------|
-| `BENCHMARK` | `False` | `True` ise her kare EXIF GPS merkezi etraf?nda sabit çerçeve kullan?r (adaptif takip kapal?) |
-| `DEBUG` | `False` | `True` ise ara görüntüler (patch, model ç?kt?s?) ekranda gösterilir |
-| `PATCH_SIZE` | `544` | Model giri? boyutu (piksel) |
-| `PRED_BORDER` | `16` | Model ç?kt?s?ndan k?rp?lacak kenarl?k (piksel) |
-| `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinle?tir |
-| `COARSE_SCALE` | `0.5` | Piramit arama kaba ölçek faktörü |
-| `ROI_PAD_FACTOR` | `2.0` | Piramit arama ince arama bölgesi geni?leme katsay?s? |
-| `CERCEVE_BOYUTU_NORMAL` | `2048` | Normal modda arama çerçevesi boyutu (piksel) |
-| `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Benchmark modunda arama çerçevesi boyutu (piksel) |
-| `HARITA_DIR` | `"haritalar"` | Harita dosyalar?n?n bulundu?u klasör |
-| `MODEL_DIR` | `"model"` | Keras model dosyalar?n?n bulundu?u klasör |
-| `ANLIK_DIR` | `"parcalar"` | Drone görüntülerinin bulundu?u klasör |
-| `DEM_PATH` | `"ana_harita_urgup_30_cm_utm_elevation.tif"` | DEM raster dosyas? yolu |
-| `HARITA_DOSYALARI` | `[]` | Belirli harita dosyalar? listesi (bo? = klasördeki tümü) |
-| `MODEL_DOSYALARI` | `[]` | Belirli model dosyalar? listesi (bo? = klasördeki tümü) |
-| `SORT_INPUTS` | `False` | Girdi dosyalar?n? alfabetik s?rala |
-| `DEFAULT_FOCAL_LENGTH_MM` | `8.8` | EXIF'te yoksa varsay?lan odak uzakl??? (mm) |
-| `DEFAULT_SENSOR_WIDTH_MM` | `13.2` | Bilinmeyen kamera için varsay?lan sensör geni?li?i (mm) |
-| `USE_GPS_ALT_REF_SIGN` | `False` | GPS altitude referans i?aretini uygula |
-| `WAIT_PER_MODEL` | `False` | Her model sonras? durakla |
+| `BENCHMARK` | `False` | `True` ise her kare EXIF GPS merkezi etrafinda sabit cerceve kullanir (adaptif takip kapali) |
+| `DEBUG` | `False` | `True` ise ara goruntuler (patch, model ciktisi) ekranda gosterilir |
+| `PATCH_SIZE` | `544` | Model giris boyutu (piksel) |
+| `PRED_BORDER` | `16` | Model ciktisindan kirpilacak kenarlik (piksel) |
+| `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinlestir |
+| `COARSE_SCALE` | `0.5` | Piramit arama kaba olcek faktoru |
+| `ROI_PAD_FACTOR` | `2.0` | Piramit arama ince arama bolgesi genisleme katsayisi |
+| `CERCEVE_BOYUTU_NORMAL` | `2048` | Normal modda arama cercevesi boyutu (piksel) |
+| `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Benchmark modunda arama cercevesi boyutu (piksel) |
+| `HARITA_DIR` | `"haritalar"` | Harita dosyalarinin bulundugu klasor |
+| `MODEL_DIR` | `"model"` | Keras model dosyalarinin bulundugu klasor |
+| `ANLIK_DIR` | `"parcalar"` | Drone goruntularinin bulundugu klasor |
+| `DEM_PATH` | `"ana_harita_urgup_30_cm_utm_elevation.tif"` | DEM raster dosyasi yolu |
+| `HARITA_DOSYALARI` | `[]` | Belirli harita dosyalari listesi (bos = klasordeki tumu) |
+| `MODEL_DOSYALARI` | `[]` | Belirli model dosyalari listesi (bos = klasordeki tumu) |
+| `SORT_INPUTS` | `False` | Girdi dosyalarini alfabetik sirala |
+| `DEFAULT_FOCAL_LENGTH_MM` | `8.8` | EXIF'te yoksa varsayilan odak uzakligi (mm) |
+| `DEFAULT_SENSOR_WIDTH_MM` | `13.2` | Bilinmeyen kamera icin varsayilan sensor genisligi (mm) |
+| `USE_GPS_ALT_REF_SIGN` | `False` | GPS altitude referans isaretini uygula |
+| `WAIT_PER_MODEL` | `False` | Her model sonrasi durakla |
 | `WAIT_ON_EXIT` | `False` | Program sonunda durakla |
 
 ---
 
 ## Kurulum
 
-### 1. Python Ortam?
+### 1. Python Ortami
 
-Python 3.8+ önerilir. Sanal ortam olu?turup ba??ml?l?klar? kurun:
+Python 3.8+ onerilir. Sanal ortam olusturup bagimliliklari kurun:
 
 ```bash
 python -m venv venv
@@ -248,58 +248,58 @@ pip install tensorflow opencv-python rasterio gdal numpy pandas pillow piexif py
 
 ### 2. GDAL Kurulumu (Windows)
 
-GDAL kurulumu Windows'ta ek ad?mlar gerektirebilir:
+GDAL kurulumu Windows'ta ek adimlar gerektirebilir:
 
 ```bash
 pip install GDAL
 ```
 
-Sorun ya?arsan?z [Christoph Gohlke'nin wheel dosyalar?](https://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal) veya `conda` kullanabilirsiniz:
+Sorun yasarsaniz [Christoph Gohlke'nin wheel dosyalari](https://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal) veya `conda` kullanabilirsiniz:
 
 ```bash
 conda install -c conda-forge gdal rasterio
 ```
 
-### 3. CUDA GPU Deste?i (?ste?e Ba?l?)
+### 3. CUDA GPU Destegi (Istege Bagli)
 
-CUDA h?zland?rma kullanmak için:
-- NVIDIA GPU sürücülerini kurun.
-- OpenCV'yi CUDA deste?i ile derleyin veya `opencv-contrib-python` paketinin CUDA build'ini kullan?n.
-- TensorFlow GPU deste?i için uygun CUDA Toolkit ve cuDNN kurun.
+CUDA hizlandirma kullanmak icin:
+- NVIDIA GPU suruculerini kurun.
+- OpenCV'yi CUDA destegi ile derleyin veya `opencv-contrib-python` paketinin CUDA build'ini kullanin.
+- TensorFlow GPU destegi icin uygun CUDA Toolkit ve cuDNN kurun.
 
-### 4. Veri Haz?rl???
+### 4. Veri Hazirligi
 
-- **Haritalar**: Georeferansl? ortofoto haritalar? (GeoTIFF) `haritalar/` klasörüne koyun.
-- **Modeller**: E?itilmi? Keras model dosyalar?n? (`.h5`) `model/` klasörüne koyun.
-- **Görüntüler**: Drone görüntülerini (EXIF verileri içeren JPEG) `parcalar/` klasörüne koyun.
-- **DEM**: Say?sal yükseklik modeli GeoTIFF dosyas?n? proje kök dizinine koyun.
+- **Haritalar**: Georeferansli ortofoto haritalari (GeoTIFF) `haritalar/` klasorune koyun.
+- **Modeller**: Egitilmis Keras model dosyalarini (`.h5`) `model/` klasorune koyun.
+- **Goruntuler**: Drone goruntularini (EXIF verileri iceren JPEG) `parcalar/` klasorune koyun.
+- **DEM**: Sayisal yukseklik modeli GeoTIFF dosyasini proje kok dizinine koyun.
 
-> **Önemli**: Harita ve model dosyalar? birebir e?le?melidir. Klasörlerdeki dosya say?lar? e?it olmal?d?r (ilk harita ? ilk model).
+> **Onemli**: Harita ve model dosyalari birebir eslesmelidir. Klasorlerdeki dosya sayilari esit olmalidir (ilk harita -> ilk model).
 
 ---
 
-## Ba??ml?l?klar
+## Bagimliliklar
 
-| Paket | Kullan?m Amac? |
+| Paket | Kullanim Amaci |
 |-------|---------------|
-| `tensorflow` / `keras` | Derin ö?renme model ç?kar?m? |
-| `opencv-python` (`cv2`) | Görüntü i?leme, template matching, görselle?tirme |
-| `rasterio` | GeoTIFF raster dosyalar? okuma, CRS dönü?ümleri |
-| `gdal` (`osgeo`) | DEM (Say?sal Yükseklik Modeli) okuma |
-| `numpy` | Say?sal hesaplamalar |
-| `pandas` | Sonuçlar?n tablo format?nda yaz?lmas? |
-| `Pillow` (`PIL`) | EXIF verisi okuma, görüntü boyutu kontrolü |
-| `piexif` | EXIF meta verisi i?leme |
-| `pyproj` | Koordinat referans sistemi dönü?ümleri (WGS84 ? UTM) |
-| `affine` | Afin dönü?üm matrisi i?lemleri |
+| `tensorflow` / `keras` | Derin ogrenme model cikarimi |
+| `opencv-python` (`cv2`) | Goruntu isleme, template matching, gorsellestirme |
+| `rasterio` | GeoTIFF raster dosyalari okuma, CRS donusumleri |
+| `gdal` (`osgeo`) | DEM (Sayisal Yukseklik Modeli) okuma |
+| `numpy` | Sayisal hesaplamalar |
+| `pandas` | Sonuclarin tablo formatinda yazilmasi |
+| `Pillow` (`PIL`) | EXIF verisi okuma, goruntu boyutu kontrolu |
+| `piexif` | EXIF meta verisi isleme |
+| `pyproj` | Koordinat referans sistemi donusumleri (WGS84 <-> UTM) |
+| `affine` | Afin donusum matrisi islemleri |
 | `concurrent.futures` | Paralel template matching (ThreadPoolExecutor) |
-| `multiprocessing` | Paralel i?lem deste?i |
+| `multiprocessing` | Paralel islem destegi |
 
 ---
 
-## Kullan?m
+## Kullanim
 
-### Temel Çal??t?rma
+### Temel Calistirma
 
 ```bash
 python template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_fonksiyonlar_icinde_cursor.py
@@ -307,16 +307,16 @@ python template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_f
 
 ### Benchmark Modu
 
-`RUN_CFG` içinde `BENCHMARK` de?erini `True` yaparak benchmark modunu etkinle?tirin. Bu modda:
-- Her görüntü için arama çerçevesi EXIF GPS konumuna sabitlenir.
-- Adaptif takip devre d??? kal?r.
-- Daha geni? arama çerçevesi (5000 px) kullan?l?r.
+`RUN_CFG` icinde `BENCHMARK` degerini `True` yaparak benchmark modunu etkinlestirin. Bu modda:
+- Her goruntu icin arama cercevesi EXIF GPS konumuna sabitlenir.
+- Adaptif takip devre disi kalir.
+- Daha genis arama cercevesi (5000 px) kullanilir.
 
 ### Debug Modu
 
-`RUN_CFG` içinde `DEBUG` de?erini `True` yaparak ara görüntülerin ekranda gösterilmesini sa?lay?n:
-- Döndürülmü? patch görüntüsü
-- Model ç?kt? görüntüsü
+`RUN_CFG` icinde `DEBUG` degerini `True` yaparak ara goruntulerin ekranda gosterilmesini saglayabilirsiniz:
+- Donduturulmus patch goruntusu
+- Model cikti goruntusu
 
 ---
 
@@ -324,204 +324,204 @@ python template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_f
 
 ### EXIF Verisi Okuma
 
-`parse_exif()` fonksiyonu PIL kütüphanesi ile EXIF verisini okur:
+`parse_exif()` fonksiyonu PIL kutuphanesi ile EXIF verisini okur:
 
-- **Yaw (FlightDegree)**: DJI drone'larda `MakerNote` alan?nda `FlightDegree` etiketi alt?nda saklan?r. Regex ile ç?kar?l?r ve 10'a bölünür.
-- **GPS**: `GPSInfo` etiketinden enlem/boylam DMS (Derece-Dakika-Saniye) format?nda okunur ve ondal?k dereceye çevrilir.
-- **?rtifa**: `GPSAltitude` etiketinden metre cinsinden okunur.
-- **Odak Uzakl???**: `FocalLength` etiketinden mm cinsinden okunur.
-- **Kamera Modeli**: `Model` etiketinden okunarak sensör geni?li?i tablosunda e?le?tirilir.
+- **Yaw (FlightDegree)**: DJI drone'larda `MakerNote` alaninda `FlightDegree` etiketi altinda saklanir. Regex ile cikarilir ve 10'a bolunur.
+- **GPS**: `GPSInfo` etiketinden enlem/boylam DMS (Derece-Dakika-Saniye) formatinda okunur ve ondalik dereceye cevrilir.
+- **Irtifa**: `GPSAltitude` etiketinden metre cinsinden okunur.
+- **Odak Uzakligi**: `FocalLength` etiketinden mm cinsinden okunur.
+- **Kamera Modeli**: `Model` etiketinden okunarak sensor genisligi tablosunda eslestirilir.
 
-### DEM Tabanl? Çok Ölçekli Yakla??m
+### DEM Tabanli Cok Olcekli Yaklasim
 
-Arazinin düz olmad??? durumlarda tek bir GSD de?eri tüm görüntüyü do?ru temsil edemez. Bu sorunu çözmek için:
+Arazinin duz olmadigi durumlarda tek bir GSD degeri tum goruntuyu dogru temsil edemez. Bu sorunu cozmek icin:
 
-1. **Merkez rak?m**: Drone'un tam alt?ndaki nokta ? `olcek_scale_test`
-2. **Sol-üst kö?e rak?m?**: 100 piksel mesafedeki sol-üst nokta ? `olcek_scale_sol_ust`
-3. **Sa?-alt kö?e rak?m?**: 100 piksel mesafedeki sa?-alt nokta ? `olcek_scale_sag_alt`
+1. **Merkez rakim**: Drone'un tam altindaki nokta -> `olcek_scale_test`
+2. **Sol-ust kose rakimi**: 100 piksel mesafedeki sol-ust nokta -> `olcek_scale_sol_ust`
+3. **Sag-alt kose rakimi**: 100 piksel mesafedeki sag-alt nokta -> `olcek_scale_sag_alt`
 
-Her ölçek için ayr? template patch üretilir:
+Her olcek icin ayri template patch uretilir:
 ```
-ölçek = (GSD / harita_çözünürlü?ü) × (kö?e_rak?m? / merkez_rak?m?)
-```
-
-Bu yakla??m, engebeli arazilerde konum tahmin do?rulu?unu art?r?r.
-
-### Görüntü Ön ??leme
-
-1. **Yaw Düzeltmesi**: Görüntü `-yaw` kadar döndürülerek kuzey hizas?na getirilir. `rotate_image()` fonksiyonu, döndürme sonras? tüm piksel verilerini koruyacak ?ekilde geni?letilmi? bir tuval üretir.
-
-2. **?ç Dikdörtgen K?rpma**: `largest_rotated_rect()` ve `crop_around_center()` ile döndürme sonras? olu?an siyah kö?eler kald?r?l?r.
-
-3. **Ölçekleme**: GSD oran?na göre görüntü referans harita çözünürlü?üne getirilir. CUDA varsa `cuda_resize_if_available()` kullan?l?r.
-
-4. **Patch Ç?karma**: Merkezi 544×544 piksellik alanlar (± `fark` offset ile 3 adet) kesilir.
-
-### Keras Model Ç?kar?m?
-
-Model patch'leri i?leme ak???:
-
-```
-544×544 gri ? histogram e?itleme ? [-1, 1] normalizasyon ? model.predict (batch=3) ? [0, 255] ? kenarl?k k?rpma
+olcek = (GSD / harita_cozunurlugu) x (kose_rakim / merkez_rakim)
 ```
 
-- 3 patch tek bir batch olarak i?lenir (verimlilik).
-- Model ç?kt?s? `squeeze` ile 2D'ye indirgenir.
-- `PRED_BORDER` (16 px) kenarl?k her yönden k?rp?larak kenar artefaktlar? önlenir.
-- Sonuç: 512×512 piksellik öznitelik haritalar? (gri tonlu).
+Bu yaklasim, engebeli arazilerde konum tahmin dogrulugunu artirir.
+
+### Goruntu On Isleme
+
+1. **Yaw Duzeltmesi**: Goruntu `-yaw` kadar dondurulerek kuzey hizasina getirilir. `rotate_image()` fonksiyonu, dondurme sonrasi tum piksel verilerini koruyacak sekilde genisletilmis bir tuval uretir.
+
+2. **Ic Dortgen Kirpma**: `largest_rotated_rect()` ve `crop_around_center()` ile dondurme sonrasi olusan siyah koseler kaldirilir.
+
+3. **Olcekleme**: GSD oranina gore goruntu referans harita cozunurlugune getirilir. CUDA varsa `cuda_resize_if_available()` kullanilir.
+
+4. **Patch Cikarma**: Merkezi 544x544 piksellik alanlar (+/- `fark` offset ile 3 adet) kesilir.
+
+### Keras Model Cikarimi
+
+Model patch'leri isleme akisi:
+
+```
+544x544 gri -> histogram esitleme -> [-1, 1] normalizasyon -> model.predict (batch=3) -> [0, 255] -> kenarlik kirpma
+```
+
+- 3 patch tek bir batch olarak islenir (verimlilik).
+- Model ciktisi `squeeze` ile 2D'ye indirgenir.
+- `PRED_BORDER` (16 px) kenarlik her yonden kirpilarak kenar artefaktlari onlenir.
+- Sonuc: 512x512 piksellik oznitelik haritalari (gri tonlu).
 
 ### Template Matching
 
-`cv2.TM_CCOEFF_NORMED` (Normalize Edilmi? Çapraz Korelasyon) yöntemi kullan?l?r:
+`cv2.TM_CCOEFF_NORMED` (Normalize Edilmis Capraz Korelasyon) yontemi kullanilir:
 
-- **Giri?**: Referans haritan?n arama çerçevesi bölümü + model ç?kt?s? template
-- **Ç?k??**: Korelasyon haritas? (her piksel için e?le?me skoru, [-1, 1])
-- **Sonuç**: `cv2.minMaxLoc` ile en yüksek korelasyon noktas? bulunur.
+- **Giris**: Referans haritanin arama cercevesi bolumu + model ciktisi template
+- **Cikis**: Korelasyon haritasi (her piksel icin eslestirme skoru, [-1, 1])
+- **Sonuc**: `cv2.minMaxLoc` ile en yuksek korelasyon noktasi bulunur.
 
-### Konum Belirleme (Kesi?im Yöntemi)
+### Konum Belirleme (Kesisim Yontemi)
 
-3 template'in e?le?me dikdörtgenleri aras?nda kesi?im analizi yap?l?r:
+3 template'in eslestirme dortgenleri arasinda kesisim analizi yapilir:
 
 ```
-Öncelik s?ras?:
-1. A ? B ? C (üçünün kesi?imi)
-2. A ? B (ilk ikisinin kesi?imi)
-3. B ? C (son ikisinin kesi?imi)
-4. A ? C (ilk ve üçüncünün kesi?imi)
-5. Kesi?im yoksa ? merkez template sonucu (B) kullan?l?r
+Oncelik sirasi:
+1. A n B n C (ucunun kesisimi)
+2. A n B (ilk ikisinin kesisimi)
+3. B n C (son ikisinin kesisimi)
+4. A n C (ilk ve ucuncunun kesisimi)
+5. Kesisim yoksa -> merkez template sonucu (B) kullanilir
 ```
 
-Kesi?im alan?n?n **merkez noktas?** nihai konum tahmini olarak kabul edilir.
+Kesisim alaninin **merkez noktasi** nihai konum tahmini olarak kabul edilir.
 
 ### Piramit Arama (Pyramid Search)
 
-`USE_PYRAMID = True` oldu?unda iki a?amal? arama yap?l?r:
+`USE_PYRAMID = True` oldugunda iki asamali arama yapilir:
 
-1. **Kaba Arama**: Görüntü ve template `COARSE_SCALE` (0.5) oran?nda küçültülür, template matching uygulan?r.
-2. **?nce Arama**: Kaba araman?n buldu?u konumun çevresinde (`ROI_PAD_FACTOR` geni?li?inde) tam çözünürlükte arama yap?l?r.
+1. **Kaba Arama**: Goruntu ve template `COARSE_SCALE` (0.5) oraninda kucultulur, template matching uygulanir.
+2. **Ince Arama**: Kaba aramanin buldugu konumun cevresinde (`ROI_PAD_FACTOR` genisliginde) tam cozunurlukle arama yapilir.
 
-Bu yöntem, büyük haritalar üzerinde arama süresini **2-4 kat** azalt?r.
+Bu yontem, buyuk haritalar uzerinde arama suresini **2-4 kat** azaltir.
 
-### CUDA GPU H?zland?rma
+### CUDA GPU Hizlandirma
 
-Sistem otomatik olarak CUDA GPU varl???n? kontrol eder ve varsa kullan?r:
+Sistem otomatik olarak CUDA GPU varligini kontrol eder ve varsa kullanir:
 
-| ??lem | CPU | GPU (CUDA) |
+| Islem | CPU | GPU (CUDA) |
 |-------|-----|------------|
 | Template Matching | `cv2.matchTemplate` | `cv2.cuda.createTemplateMatching` |
-| Görüntü Ölçekleme | `cv2.resize` | `cv2.cuda.resize` |
-| Görüntü Döndürme | `cv2.warpAffine` | `cv2.cuda.warpAffine` |
+| Goruntu Olcekleme | `cv2.resize` | `cv2.cuda.resize` |
+| Goruntu Dondurme | `cv2.warpAffine` | `cv2.cuda.warpAffine` |
 
-- GPU'ya geçi? transparent't?r: hata durumunda otomatik CPU fallback.
-- `match_three()`: GPU varsa görüntü bir kez GPU'ya yüklenir, 3 template s?rayla e?le?tirilir.
-- CUDA bilgisi ba?lang?çta `log_cuda_info_once()` ile loglan?r.
-
----
-
-## Koordinat Dönü?ümleri
-
-Sistem birden fazla koordinat sistemi aras?nda dönü?üm yapar:
-
-| Dönü?üm | Fonksiyon | Aç?klama |
-|----------|-----------|----------|
-| WGS84 ? Piksel | `piksel_bul()` / `piksel_bul_fast()` | GPS koordinat?n? harita piksel konumuna çevirir |
-| Piksel ? WGS84 | `koordinat_bul()` / `make_rc_to_ll()` | Piksel konumunu co?rafi koordinata çevirir |
-| WGS84 ? UTM | `latlon_to_utm()` | Enlem/boylam? UTM koordinat?na çevirir |
-| Haversine | `haversine_distance()` | ?ki co?rafi koordinat aras? büyük daire mesafesi |
-| Quick Distance | `quick_distance()` | Yakla??k mesafe (h?zl? hesap) |
-| Quick Distance UTM | `quick_distance_utm()` | UTM tabanl? mesafe hesab? |
-
-**CRS Dönü?ümleri**: `pyproj.Transformer` kullan?larak EPSG:4326 (WGS84) ile haritan?n/DEM'in yerel CRS'i aras?nda dönü?üm yap?l?r.
+- GPU'ya gecis seffaftir: hata durumunda otomatik CPU fallback.
+- `match_three()`: GPU varsa goruntu bir kez GPU'ya yuklenir, 3 template sirayla eslestirilir.
+- CUDA bilgisi baslangicta `log_cuda_info_once()` ile loglanir.
 
 ---
 
-## De?erlendirme Metrikleri
+## Koordinat Donusumleri
 
-Her model-harita çifti tamamland???nda a?a??daki metrikler hesaplan?r:
+Sistem birden fazla koordinat sistemi arasinda donusum yapar:
+
+| Donusum | Fonksiyon | Aciklama |
+|---------|-----------|----------|
+| WGS84 -> Piksel | `piksel_bul()` / `piksel_bul_fast()` | GPS koordinatini harita piksel konumuna cevirir |
+| Piksel -> WGS84 | `koordinat_bul()` / `make_rc_to_ll()` | Piksel konumunu cografi koordinata cevirir |
+| WGS84 -> UTM | `latlon_to_utm()` | Enlem/boylami UTM koordinatina cevirir |
+| Haversine | `haversine_distance()` | Iki cografi koordinat arasi buyuk daire mesafesi |
+| Quick Distance | `quick_distance()` | Yaklasik mesafe (hizli hesap) |
+| Quick Distance UTM | `quick_distance_utm()` | UTM tabanli mesafe hesabi |
+
+**CRS Donusumleri**: `pyproj.Transformer` kullanilarak EPSG:4326 (WGS84) ile haritanin/DEM'in yerel CRS'i arasinda donusum yapilir.
+
+---
+
+## Degerlendirme Metrikleri
+
+Her model-harita cifti tamamlandiginda asagidaki metrikler hesaplanir:
 
 ### Mesafe Metrikleri
-- **RMSE** (Root Mean Square Error): Tahmin hatalar?n?n karekök ortalamas?
-- **MAE** (Mean Absolute Error): Mutlak hatalar?n ortalamas?
-- **Standart Sapma**: Hata da??l?m?n?n yay?l?m?
+- **RMSE** (Root Mean Square Error): Tahmin hatalarinin karekok ortalamasi
+- **MAE** (Mean Absolute Error): Mutlak hatalarin ortalamasi
+- **Standart Sapma**: Hata dagiliminin yayilimi
 
-### S?n?fland?rma Metrikleri (E?ik: 70 metre)
-- **Do?ru Pozitif (TP)**: Do?ru konum bulundu ve kesi?im var
-- **Yanl?? Pozitif (FP)**: Yanl?? konum bulundu ama kesi?im var
-- **Do?ru Negatif (TN)**: Yanl?? konum ve kesi?im yok
-- **Yanl?? Negatif (FN)**: Do?ru konum ama kesi?im yok
+### Siniflandirma Metrikleri (Esik: 70 metre)
+- **Dogru Pozitif (TP)**: Dogru konum bulundu ve kesisim var
+- **Yanlis Pozitif (FP)**: Yanlis konum bulundu ama kesisim var
+- **Dogru Negatif (TN)**: Yanlis konum ve kesisim yok
+- **Yanlis Negatif (FN)**: Dogru konum ama kesisim yok
 
-### Türetilmi? Metrikler
+### Turetilmis Metrikler
 - **Hassasiyet (Precision)** = TP / (TP + FP)
-- **Geri Ça??rma (Recall)** = TP / (TP + FN)
-- **F-Skoru** = 2 × (Precision × Recall) / (Precision + Recall)
-- **Do?ruluk Yüzdesi** = Do?ru Tahmin / Toplam × 100
+- **Geri Cagirma (Recall)** = TP / (TP + FN)
+- **F-Skoru** = 2 x (Precision x Recall) / (Precision + Recall)
+- **Dogruluk Yuzdesi** = Dogru Tahmin / Toplam x 100
 
 ---
 
-## Görselle?tirme
+## Gorsellestirme
 
-Sistem çal???rken birden fazla OpenCV penceresi aç?l?r:
+Sistem calisirken birden fazla OpenCV penceresi acilir:
 
 ### Ana Harita Penceresi ("konum")
-- Referans haritan?n yak?nla?t?r?lm?? görünümü
-- **K?rm?z? dikdörtgen**: Template 1 (sol-üst ölçek) e?le?me konumu
-- **Ye?il dikdörtgen**: Template 2 (merkez ölçek) e?le?me konumu
-- **Mavi dikdörtgen**: Template 3 (sa?-alt ölçek) e?le?me konumu
-- **Siyah dikdörtgen**: Arama çerçevesi s?n?rlar?
-- **Sar? daire**: Tahmin edilen konum
-- **Ye?il daire**: Gerçek GPS konumu
-- **Uçak ikonu**: Gerçek konum ve ba?l?k yönü
+- Referans haritanin yakinlastirilmis gorunumu
+- **Kirmizi dortgen**: Template 1 (sol-ust olcek) eslestirme konumu
+- **Yesil dortgen**: Template 2 (merkez olcek) eslestirme konumu
+- **Mavi dortgen**: Template 3 (sag-alt olcek) eslestirme konumu
+- **Siyah dortgen**: Arama cercevesi sinirlari
+- **Sari daire**: Tahmin edilen konum
+- **Yesil daire**: Gercek GPS konumu
+- **Ucak ikonu**: Gercek konum ve baslik yonu
 
 ### HUD (Head-Up Display)
-- **HDG**: Yaw/ba?l?k aç?s? (derece)
-- **ALT**: Uçu? yüksekli?i (metre)
-- **ERR**: Konum hatas? (metre)
-- **Ölçek Çubu?u**: 100 metrelik referans çubu?u
-- **Art? ??areti**: Ekran merkezi
+- **HDG**: Yaw/baslik acisi (derece)
+- **ALT**: Ucus yuksekligi (metre)
+- **ERR**: Konum hatasi (metre)
+- **Olcek Cubugu**: 100 metrelik referans cubugu
+- **Arti Isareti**: Ekran merkezi
 
 ### Crop vs Model Penceresi
-- Üst: Kesilmi? ve döndürülmü? drone görüntüsü (renkli)
-- Alt: Keras model ç?kt?s? (gri tonlu)
+- Ust: Kesilmis ve donduturulmus drone goruntusu (renkli)
+- Alt: Keras model ciktisi (gri tonlu)
 
 ---
 
-## Ç?kt? Dosyalar?
+## Cikti Dosyalari
 
-| Dosya | Format | ?çerik |
+| Dosya | Format | Icerik |
 |-------|--------|--------|
-| `sonuclar.csv` | CSV | Her görüntü için: dosya ad?, sonuç (Do?ru/Yanl??), gerçek lat/lon, tahmin lat/lon, uçu? yüksekli?i |
-| `sonuclar.txt` | Metin | `sonuclar.csv` ile ayn? içerik, tablo format?nda |
-| `modele_gore_sonuclar.txt` | Metin | Her model için: do?ru/yanl?? tahmin say?s?, RMSE, MAE, std, TP, FP, TN, FN, F-skoru |
+| `sonuclar.csv` | CSV | Her goruntu icin: dosya adi, sonuc (Dogru/Yanlis), gercek lat/lon, tahmin lat/lon, ucus yuksekligi |
+| `sonuclar.txt` | Metin | `sonuclar.csv` ile ayni icerik, tablo formatinda |
+| `modele_gore_sonuclar.txt` | Metin | Her model icin: dogru/yanlis tahmin sayisi, RMSE, MAE, std, TP, FP, TN, FN, F-skoru |
 
 ---
 
-## Kamera Deste?i
+## Kamera Destegi
 
-Yerle?ik sensör boyutu bilinen kameralar:
+Yerlesik sensor boyutu bilinen kameralar:
 
-| Kamera Modeli | Sensör Geni?li?i (mm) | Drone |
+| Kamera Modeli | Sensor Genisligi (mm) | Drone |
 |--------------|----------------------|-------|
 | L1D-20c | 13.2 | DJI Mavic 2 Pro |
 | FC2204 | 6.17 | DJI Mavic 2 Zoom |
 
-Bilinmeyen kamera modelleri için `DEFAULT_SENSOR_WIDTH_MM` (varsay?lan: 13.2 mm) kullan?l?r.
+Bilinmeyen kamera modelleri icin `DEFAULT_SENSOR_WIDTH_MM` (varsayilan: 13.2 mm) kullanilir.
 
 ---
 
-## S?n?rlamalar ve Notlar
+## Sinirlamalar ve Notlar
 
-- **Harita-Model E?le?mesi**: `haritalar/` ve `model/` klasörlerindeki dosya say?lar? e?it olmal?d?r. E?it de?ilse minimum say? kadar çift i?lenir.
-- **EXIF Gereksinimi**: Görüntülerde GPS koordinatlar?, irtifa ve odak uzakl??? bilgileri bulunmal?d?r.
-- **DEM Kapsam?**: ??lenen görüntülerin koordinatlar? DEM dosyas?n?n kapsad??? alan içinde olmal?d?r.
-- **S?n?r Kontrolü**: Harita kenarlar?na çok yak?n konumlardaki görüntüler (272 piksel s?n?r) atlan?r.
-- **Referans Harita Çözünürlü?ü**: Varsay?lan olarak ~30 cm/piksel çözünürlük kabul edilir (`29.85 cm/px`).
-- **Bellek**: Büyük ortofoto haritalar yüksek RAM tüketebilir. `OPENCV_IO_MAX_IMAGE_PIXELS` s?n?r? `2^40`'a ayarlanm??t?r.
-- **Yaw Deste?i**: Yaw bilgisi DJI MakerNote format?nda beklenir. Di?er drone üreticileri için özel parse gerekebilir.
-- **Ba?ar? E?i?i**: Varsay?lan olarak 70 metre mesafe ba?ar?l? konum tahmini olarak kabul edilir.
-- **Adaptif Takip**: 300 metreden büyük hata durumunda, bir önceki konuma geri dönülür (kay?p önleme mekanizmas?).
+- **Harita-Model Eslesmesi**: `haritalar/` ve `model/` klasorlerindeki dosya sayilari esit olmalidir. Esit degilse minimum sayi kadar cift islenir.
+- **EXIF Gereksinimi**: Goruntulerde GPS koordinatlari, irtifa ve odak uzakligi bilgileri bulunmalidir.
+- **DEM Kapsami**: Islenen goruntulerin koordinatlari DEM dosyasinin kapsadigi alan icinde olmalidir.
+- **Sinir Kontrolu**: Harita kenarlarina cok yakin konumlardaki goruntuler (272 piksel sinir) atlanir.
+- **Referans Harita Cozunurlugu**: Varsayilan olarak ~30 cm/piksel cozunurluk kabul edilir (`29.85 cm/px`).
+- **Bellek**: Buyuk ortofoto haritalar yuksek RAM tuketebilir. `OPENCV_IO_MAX_IMAGE_PIXELS` siniri `2^40`'a ayarlanmistir.
+- **Yaw Destegi**: Yaw bilgisi DJI MakerNote formatinda beklenir. Diger drone ureticileri icin ozel parse gerekebilir.
+- **Basari Esigi**: Varsayilan olarak 70 metre mesafe basarili konum tahmini olarak kabul edilir.
+- **Adaptif Takip**: 300 metreden buyuk hata durumunda, bir onceki konuma geri donulur (kayip onleme mekanizmasi).
 
 ---
 
 ## Lisans
 
-Bu proje, Kapadokya Üniversitesi tez çal??mas? kapsam?nda geli?tirilmi?tir.
+Bu proje, Kapadokya Universitesi tez calismasi kapsaminda gelistirilmistir.
