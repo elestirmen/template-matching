@@ -51,6 +51,20 @@ RUN_CFG = {
     "DEFAULT_SENSOR_WIDTH_MM": 13.2,
     "USE_GPS_ALT_REF_SIGN": False,
 
+    # Trajectory cizimi (tahmin=sari, gercek=yesil)
+    "DRAW_TRAJECTORY": True,
+    "TRAJECTORY_DRAW_POINTS": True,
+    "TRAJECTORY_MAX_POINTS": 0,   # 0: sinirsiz
+    "TRAJECTORY_LINE_THICKNESS": 10,
+    "TRAJECTORY_POINT_RADIUS": 8,
+
+    # Runtime UI butonlari (konum penceresinde tikla-ac/kapa)
+    "UI_BUTTONS_ENABLED": True,
+    "UI_BUTTON_FONT_SCALE": 0.8,
+    "UI_BUTTON_THICKNESS": 2,
+    "SHOW_INNER_FRAME": True,
+    "SHOW_TM_BOXES": True,
+
     # Calisma sonu bekleme
     "WAIT_PER_MODEL": False,
     "WAIT_ON_EXIT": False,
@@ -64,6 +78,16 @@ PRED_BORDER = int(RUN_CFG["PRED_BORDER"])
 USE_PYRAMID = bool(RUN_CFG["USE_PYRAMID"])
 COARSE_SCALE = float(RUN_CFG["COARSE_SCALE"])
 ROI_PAD_FACTOR = float(RUN_CFG["ROI_PAD_FACTOR"])
+DRAW_TRAJECTORY = bool(RUN_CFG.get("DRAW_TRAJECTORY", False))
+TRAJECTORY_DRAW_POINTS = bool(RUN_CFG.get("TRAJECTORY_DRAW_POINTS", True))
+TRAJECTORY_MAX_POINTS = int(RUN_CFG.get("TRAJECTORY_MAX_POINTS", 0))
+TRAJECTORY_LINE_THICKNESS = int(RUN_CFG.get("TRAJECTORY_LINE_THICKNESS", 10))
+TRAJECTORY_POINT_RADIUS = int(RUN_CFG.get("TRAJECTORY_POINT_RADIUS", 8))
+UI_BUTTONS_ENABLED = bool(RUN_CFG.get("UI_BUTTONS_ENABLED", True))
+UI_BUTTON_FONT_SCALE = float(RUN_CFG.get("UI_BUTTON_FONT_SCALE", 0.8))
+UI_BUTTON_THICKNESS = int(RUN_CFG.get("UI_BUTTON_THICKNESS", 2))
+SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", True))
+SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
 
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
@@ -762,6 +786,55 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
     tx = x1 + (bar_w - tw) // 2
     ty = max(th + 10, y1 - 15)
     cv2.putText(img, label, (tx, ty), font, font_scale, text_color, thickness, cv2.LINE_AA)
+
+
+def _build_runtime_buttons():
+    """Return clickable button definitions for runtime visibility toggles."""
+    return [
+        {"key": "trajectory", "label": "Trajektori", "rect": (20, 20, 260, 54)},
+        {"key": "inner_frame", "label": "Ic Cerceve", "rect": (20, 84, 260, 54)},
+        {"key": "tm_boxes", "label": "TM RGB Kutu", "rect": (20, 148, 260, 54)},
+    ]
+
+
+def _draw_runtime_buttons(img, ui_state, buttons, font_scale=0.8, thickness=2):
+    """Draw ON/OFF buttons onto the current frame."""
+    if img is None or not buttons:
+        return
+    for b in buttons:
+        x, y, w, h = b["rect"]
+        key = b["key"]
+        is_on = bool(ui_state.get(key, False))
+        fill = (50, 140, 60) if is_on else (70, 70, 70)
+        edge = (0, 255, 0) if is_on else (180, 180, 180)
+        label = f"{b['label']}: {'ON' if is_on else 'OFF'}"
+
+        _draw_alpha_panel(img, x, y, x + w, y + h, color=(0, 0, 0), alpha=0.35)
+        cv2.rectangle(img, (x, y), (x + w, y + h), fill, thickness=-1)
+        cv2.rectangle(img, (x, y), (x + w, y + h), edge, thickness=max(1, int(thickness)))
+        cv2.putText(
+            img, label, (x + 12, y + int(h * 0.65)),
+            cv2.FONT_HERSHEY_SIMPLEX, float(font_scale), (255, 255, 255),
+            max(1, int(thickness)), cv2.LINE_AA
+        )
+
+
+def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
+    """Mouse callback for runtime toggle buttons."""
+    if event != cv2.EVENT_LBUTTONDOWN:
+        return
+    if not isinstance(userdata, dict):
+        return
+    ui_state = userdata.get("state")
+    buttons = userdata.get("buttons", [])
+    if not isinstance(ui_state, dict):
+        return
+    for b in buttons:
+        bx, by, bw, bh = b["rect"]
+        if bx <= x <= (bx + bw) and by <= y <= (by + bh):
+            k = b["key"]
+            ui_state[k] = not bool(ui_state.get(k, False))
+            break
 
 
 
@@ -1530,6 +1603,14 @@ if __name__ == '__main__':
     konum=(0,0)
     konum_once=(0,0)
     kare=()  
+    runtime_ui_state = {
+        "trajectory": bool(DRAW_TRAJECTORY),
+        "inner_frame": bool(SHOW_INNER_FRAME),
+        "tm_boxes": bool(SHOW_TM_BOXES),
+    }
+    runtime_ui_buttons = _build_runtime_buttons() if UI_BUTTONS_ENABLED else []
+    runtime_ui_ctx = {"state": runtime_ui_state, "buttons": runtime_ui_buttons}
+    runtime_ui_cb_set = False
     
     
     
@@ -1540,6 +1621,9 @@ if __name__ == '__main__':
         dogru_negatif=0
         yanlis_negatif=0
         uzaklik_hatalari = []
+        # Her model/harita cifti icin gecmis izleri ayri tutulur.
+        traj_pred_points = []
+        traj_real_points = []
         
         model_yolu = model_path_list[k]
         model = load_model(model_yolu)        
@@ -2200,12 +2284,59 @@ if __name__ == '__main__':
                 konum=(knm[1],knm[0])
                 
             
-            cv2.rectangle(img, (-int(cerceve_boyutu/2)+konum[0],-int(cerceve_boyutu/2)+konum[1]), (+int(cerceve_boyutu/2)+konum[0],+int(cerceve_boyutu/2)+konum[1]),(0,0,0),25)
+            if runtime_ui_state.get("inner_frame", True):
+                cv2.rectangle(
+                    img,
+                    (-int(cerceve_boyutu/2)+konum[0], -int(cerceve_boyutu/2)+konum[1]),
+                    (+int(cerceve_boyutu/2)+konum[0], +int(cerceve_boyutu/2)+konum[1]),
+                    (0, 0, 0),
+                    25
+                )
 
-            cv2.rectangle(img, top_left1, bottom_right1,(0,0,255),25)
-            cv2.rectangle(img, top_left2, bottom_right2,(0,255,0),25)
-            cv2.rectangle(img, top_left3, bottom_right3,(255,0,0),25)
+            if runtime_ui_state.get("tm_boxes", True):
+                cv2.rectangle(img, top_left1, bottom_right1, (0, 0, 255), 25)
+                cv2.rectangle(img, top_left2, bottom_right2, (0, 255, 0), 25)
+                cv2.rectangle(img, top_left3, bottom_right3, (255, 0, 0), 25)
             radius=10
+
+            pred_pt = (int(centerOfCircle[0]), int(centerOfCircle[1]))
+            real_pt = (int(knm[1]), int(knm[0]))
+
+            # Noktalari sadece gecerli piksel araliginda kaydet.
+            if 0 <= pred_pt[0] < img.shape[1] and 0 <= pred_pt[1] < img.shape[0]:
+                traj_pred_points.append(pred_pt)
+            if 0 <= real_pt[0] < img.shape[1] and 0 <= real_pt[1] < img.shape[0]:
+                traj_real_points.append(real_pt)
+
+            if TRAJECTORY_MAX_POINTS > 0:
+                if len(traj_pred_points) > TRAJECTORY_MAX_POINTS:
+                    traj_pred_points = traj_pred_points[-TRAJECTORY_MAX_POINTS:]
+                if len(traj_real_points) > TRAJECTORY_MAX_POINTS:
+                    traj_real_points = traj_real_points[-TRAJECTORY_MAX_POINTS:]
+
+            if runtime_ui_state.get("trajectory", False):
+                # Trajektori cizgileri: tahmin=sari, gercek=yesil
+                if len(traj_pred_points) >= 2:
+                    pts_pred = np.array(traj_pred_points, dtype=np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(
+                        img, [pts_pred], isClosed=False, color=(0, 255, 255),
+                        thickness=max(1, TRAJECTORY_LINE_THICKNESS), lineType=cv2.LINE_AA
+                    )
+                if len(traj_real_points) >= 2:
+                    pts_real = np.array(traj_real_points, dtype=np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(
+                        img, [pts_real], isClosed=False, color=(0, 255, 0),
+                        thickness=max(1, TRAJECTORY_LINE_THICKNESS), lineType=cv2.LINE_AA
+                    )
+
+                # Her adim nokta izi
+                if TRAJECTORY_DRAW_POINTS:
+                    rp = max(1, TRAJECTORY_POINT_RADIUS)
+                    for p in traj_pred_points:
+                        cv2.circle(img, p, rp, (0, 255, 255), -1, lineType=cv2.LINE_AA)
+                    for p in traj_real_points:
+                        cv2.circle(img, p, rp, (0, 255, 0), -1, lineType=cv2.LINE_AA)
+
             cv2.circle(img, centerOfCircle, radius, (0,255,255), 25)   #tahmini konumu veren nokta
             cv2.circle(img,(knm[1],knm[0]),radius,(0,255,0), 25)                   #gerÃ§ek konumu gÃ¶steren nokta
                     #plt.figure()
@@ -2284,8 +2415,26 @@ if __name__ == '__main__':
 
                 
                 
+            if UI_BUTTONS_ENABLED:
+                try:
+                    _draw_runtime_buttons(
+                        res,
+                        runtime_ui_state,
+                        runtime_ui_buttons,
+                        font_scale=UI_BUTTON_FONT_SCALE,
+                        thickness=UI_BUTTON_THICKNESS,
+                    )
+                except Exception:
+                    pass
+
             cv2.namedWindow("konum", cv2.WINDOW_NORMAL)  
             cv2.resizeWindow("konum", 1000, 1000)
+            if UI_BUTTONS_ENABLED and (not runtime_ui_cb_set):
+                try:
+                    cv2.setMouseCallback("konum", _runtime_buttons_mouse_cb, runtime_ui_ctx)
+                    runtime_ui_cb_set = True
+                except Exception:
+                    pass
             cv2.imshow("konum", res)
             _ = cv2.waitKey(1)   #â˜ºekrana verilen haritayÄ± anlÄ±k gÃ¶rebilmek iÃ§in yazÄ±lÄ±r
             
