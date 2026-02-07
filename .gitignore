@@ -4,6 +4,7 @@
 # Takip edilmesini istediklerimiz
 !.gitignore
 !template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_fonksiyonlar_icinde_cursor.py
+!requirements.txt
 !*.md
 !*.MD
 !**/.gitkeep

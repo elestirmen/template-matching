@@ -1,0 +1,10 @@
+﻿affine
+GDAL
+numpy
+opencv-python
+pandas
+piexif
+Pillow
+pyproj
+rasterio
+tensorflow
