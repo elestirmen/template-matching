@@ -1,4 +1,4 @@
-# UAV Görüntü Konumlandırma - Template Matching ile Derin Öğrenme Destekli Jeolokalizasyon
+﻿# UAV Görüntü Konumlandırma - Template Matching ile Derin Öğrenme Destekli Jeolokalizasyon
 
 Bu proje, İHA (İnsansız Hava Aracı) / drone görüntülerini **referans ortofoto harita** üzerinde otomatik olarak konumlandıran bir bilgisayarlı görü sistemidir. Derin öğrenme tabanlı öznitelik çıkarımı ile çok ölçekli template matching yöntemini birleştirerek, GPS'ten bağımsız veya GPS doğrulamalı konum tahmini gerçekleştirir.
 
