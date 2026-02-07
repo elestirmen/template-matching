@@ -14,66 +14,78 @@ Klasorler:
 - parcalar/: anlik goruntu klasoru
 """
 # -----------------------------------------------------------------------------
-# RUN_CFG: Tum calisma parametrelerini bu bloktan yonetebilirsiniz.
-# Bu bolumu dosyanin en ustunde tutuyoruz ki erisim kolay olsun.
+# RUN_CFG (UST BLOK):
+# Bu blok erken asamada okunan UI/trajectory ve genel varsayilanlari tutar.
+# DOSYADA IKI RUN_CFG VARDIR:
+# 1) Bu ust blok: UI + trajectory + erken init degerleri.
+# 2) Asagidaki ikinci blok: ana pipeline'da kullanilan cekirdek eslestirme ayarlari.
+#
+# Parametre mantigi (genel):
+# - "Boyut / alan / pad" degerini artirmak -> daha guvenli ama daha yavas.
+# - "Olcek (scale)" degerini dusurmek -> daha hizli ama kaba arama hassasiyeti duser.
+# - Cizim kalinlik/boyut degerini artirmak -> gorunurluk artar, goruntu kalabaliklasir.
 # -----------------------------------------------------------------------------
 RUN_CFG = {
     # Genel calisma modu
-    "BENCHMARK": False,
-    "DEBUG": False,
+    "BENCHMARK": False,  # True: adaptif takip yerine her karede sabit GPS merkezli arama.
+    "DEBUG": False,      # True: ara pencereler/ara ciktilar acilir (performans duser).
 
     # Model/patch ayarlari
-    "PATCH_SIZE": 544,
-    "PRED_BORDER": 16,
+    "PATCH_SIZE": 544,  # Artarsa daha genis baglam gorur (VRAM/RAM ve sure artar).
+    "PRED_BORDER": 16,  # Artarsa model cikti kenarlari daha cok kirpilir (artefakt azalir).
 
     # Template matching hizlandirma
-    "USE_PYRAMID": True,
-    "COARSE_SCALE": 0.5,
-    "ROI_PAD_FACTOR": 0.4,
+    "USE_PYRAMID": True,   # True: coarse-to-fine arama (genelde daha hizli).
+    "COARSE_SCALE": 0.5,   # Kuculdukce kaba arama hizlanir, ama konum ilk tahmini kabalasir.
+    "ROI_PAD_FACTOR": 0.4, # Buyudukce ince arama ROI alani genisler (guven artar, sure artar).
 
     # Arama cercevesi boyutu
-    "CERCEVE_BOYUTU_NORMAL": 2048,
-    "CERCEVE_BOYUTU_BENCHMARK": 5000,
+    "CERCEVE_BOYUTU_NORMAL": 2048,    # Buyudukce kayma toleransi artar, hesap suresi artar.
+    "CERCEVE_BOYUTU_BENCHMARK": 5000, # Benchmark modunda sabit arama alani.
 
     # Veri yollari
-    "HARITA_DIR": "haritalar",
-    "MODEL_DIR": "model",
-    "ANLIK_DIR": "parcalar",
-    "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",
+    "HARITA_DIR": "haritalar",   # Referans harita klasoru.
+    "MODEL_DIR": "model",        # Keras model klasoru.
+    "ANLIK_DIR": "parcalar",     # Islenecek anlik goruntu klasoru.
+    "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
 
-    # Isterseniz dogrudan dosya secin (bos birakirsaniz klasordeki tum dosyalar kullanilir)
-    "HARITA_DOSYALARI": [],  # ornek: ["map1.tif", "map2.tif"]
-    "MODEL_DOSYALARI": [],   # ornek: ["m1.h5", "m2.h5"]
-    "SORT_INPUTS": False,
+    # Dosya secimi:
+    # - Liste bos ise ilgili klasordeki tum uygun uzantilar kullanilir.
+    # - Liste dolu ise sadece burada yazilan dosyalar kullanilir.
+    "HARITA_DOSYALARI": [],  # Ornek: ["map1.tif", "map2.tif"]
+    "MODEL_DOSYALARI": [],   # Ornek: ["m1.h5", "m2.h5"]
+    "SORT_INPUTS": False,    # True: giris listeleri siralanir (eslestirme sirasi sabitlenir).
 
     # EXIF/camera fallback
-    "DEFAULT_FOCAL_LENGTH_MM": 8.8,
-    "DEFAULT_SENSOR_WIDTH_MM": 13.2,
-    "USE_GPS_ALT_REF_SIGN": False,
+    "DEFAULT_FOCAL_LENGTH_MM": 8.8,  # EXIF focal length yoksa kullanilir.
+    "DEFAULT_SENSOR_WIDTH_MM": 13.2, # Kamera modeli bilinmiyorsa sensor fallback.
+    "USE_GPS_ALT_REF_SIGN": False,   # True ise altitude ref isareti uygulanir.
 
-    # Trajectory cizimi (tahmin=sari, gercek=yesil)
-    "DRAW_TRAJECTORY": True,
-    "TRAJECTORY_DRAW_POINTS": True,
-    "TRAJECTORY_MAX_POINTS": 0,   # 0: sinirsiz
-    "TRAJECTORY_LINE_THICKNESS": 15,
-    "TRAJECTORY_POINT_RADIUS": 20,
+    # Trajectory cizimi (tahmin=sari, gercek=yesil):
+    "DRAW_TRAJECTORY": True,       # False: trajektori hic cizilmez.
+    "TRAJECTORY_DRAW_POINTS": True,# True: her adimin nokta izi de cizilir.
+    "TRAJECTORY_MAX_POINTS": 0,    # 0: sinirsiz; >0: yalnizca son N nokta tutulur.
+    "TRAJECTORY_LINE_THICKNESS": 15, # Artarsa cizgi daha kalin gorunur.
+    "TRAJECTORY_POINT_RADIUS": 20,   # Artarsa nokta izi daha belirgin olur.
 
-    # Runtime UI butonlari (konum penceresinde tikla-ac/kapa)
-    "UI_BUTTONS_ENABLED": True,
-    "UI_BUTTON_FONT_SCALE": 1.0,
-    "UI_BUTTON_THICKNESS": 2,
-    "UI_BUTTON_SCALE": 0.5,
-    "UI_WINDOW_WIDTH": 1000,
-    "UI_WINDOW_HEIGHT": 1000,
-    "SHOW_INNER_FRAME": True,
-    "SHOW_ROI_FRAME": True,
-    "SHOW_TM_BOXES": True,
+    # Runtime UI butonlari (konum penceresinde tikla-ac/kapa):
+    "UI_BUTTONS_ENABLED": True,  # False: ekrandaki UI butonlari ve mouse callback kapanir.
+    "UI_BUTTON_FONT_SCALE": 1.0, # Buton metin boyutu.
+    "UI_BUTTON_THICKNESS": 2,    # Buton metin/cerceve kalinligi.
+    "UI_BUTTON_SCALE": 0.5,      # Tum UI panelinin genel olcegi.
+    "UI_WINDOW_WIDTH": 1000,     # konum penceresi genisligi.
+    "UI_WINDOW_HEIGHT": 1000,    # konum penceresi yuksekligi.
+    "SHOW_INNER_FRAME": True,    # Baslangicta ic arama cercevesi gorunurlugu.
+    "SHOW_ROI_FRAME": True,      # Baslangicta ROI cercevesi gorunurlugu.
+    "SHOW_TM_BOXES": True,       # Baslangicta TM kutularinin gorunurlugu.
 
     # Calisma sonu bekleme
-    "WAIT_PER_MODEL": False,
-    "WAIT_ON_EXIT": False,
+    "WAIT_PER_MODEL": False,  # True: her model dongusu sonunda input bekler.
+    "WAIT_ON_EXIT": False,    # True: program bitiminde input bekler.
 }
 
+# RUN_CFG -> tip guvenli sabitler.
+# Burada yapilan donusumler (bool/int/float), run-time surprizlerini azaltir.
 benchmark = bool(RUN_CFG["BENCHMARK"])
 DEBUG = bool(RUN_CFG["DEBUG"])
 PATCH_SIZE = int(RUN_CFG["PATCH_SIZE"])
@@ -1512,50 +1524,71 @@ def rotated_rect(w, h, angle):
 
 # Parametreleri asagidaki RUN_CFG bolumunden ayarlayin.
 # -----------------------------------------------------------------------------
-# RUN_CFG: Tum calisma parametrelerini bu bloktan yonetebilirsiniz.
-# Burada degistirdiginiz degerler tum script'e uygulanir.
+# RUN_CFG (ANA/CEKIRDEK BLOK):
+# Bu ikinci blok, ana pipeline'da kullanilan cekirdek parametreleri yeniden set eder.
+# Bu nedenle asagidaki degerler; eslestirme, patch, piramit arama ve veri yolu
+# davranisini dogrudan degistirir.
+#
+# ONEMLI:
+# - Ust blokta daha once okunmus UI/trajectory sabitleri bu bloktan etkilenmez.
+# - Burada bir degeri degistirdiginizde asagidaki "benchmark/DEBUG/PATCH..." sabitleri
+#   yeniden hesaplanir ve tum is akisi bu yeni degerlerle devam eder.
 # -----------------------------------------------------------------------------
 
 RUN_CFG = {
-    # Genel calisma modu
+    # Genel calisma modu:
+    # BENCHMARK=True -> adaptif takip kapanir, her kare GPS merkezli sabit arama yapilir.
+    # DEBUG=True     -> ara pencereler/loglar acilir (teshis kolaylasir, performans duser).
     "BENCHMARK": False,
     "DEBUG": False,
 
-    # Model/patch ayarlari
+    # Model/patch ayarlari:
+    # PATCH_SIZE buyudukce model daha genis baglam gorur, ancak sure ve bellek artar.
+    # PRED_BORDER buyudukce model cikti kenarlarindaki gurultu daha cok budanir.
     "PATCH_SIZE": 544,
     "PRED_BORDER": 16,
 
-    # Template matching hizlandirma
+    # Template matching hizlandirma:
+    # USE_PYRAMID=False -> tek asamali arama (daha basit, genelde daha yavas).
+    # COARSE_SCALE kuculdukce kaba arama hizlanir, ilk tahmin daha kaba olur.
+    # ROI_PAD_FACTOR buyudukce ince arama alani genisler (kacirma riski azalir, sure artar).
     "USE_PYRAMID": True,
     "COARSE_SCALE": 0.5,
     "ROI_PAD_FACTOR": 2.0,
 
-    # Arama cercevesi boyutu
+    # Arama cercevesi boyutu:
+    # Buyuk cerceve -> daha zor durumda yakalama sansi artar, ama hesap maliyeti artar.
     "CERCEVE_BOYUTU_NORMAL": 2048,
     "CERCEVE_BOYUTU_BENCHMARK": 5000,
 
-    # Veri yollari
+    # Veri yollari:
+    # Buradaki degisiklikler hangi dosyalardan okuma yapilacagini belirler.
     "HARITA_DIR": "haritalar",
     "MODEL_DIR": "model",
     "ANLIK_DIR": "parcalar",
     "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",
 
-    # Isterseniz dogrudan dosya secin (bos birakirsaniz klasordeki tum dosyalar kullanilir)
-    "HARITA_DOSYALARI": [],  # ornek: ["map1.tif", "map2.tif"]
-    "MODEL_DOSYALARI": [],   # ornek: ["m1.h5", "m2.h5"]
-    "SORT_INPUTS": False,
+    # Isterseniz dogrudan dosya secin:
+    # - Bos liste: klasordeki tum uygun dosyalar.
+    # - Dolu liste: sadece listelenen dosyalar.
+    "HARITA_DOSYALARI": [],  # Ornek: ["map1.tif", "map2.tif"]
+    "MODEL_DOSYALARI": [],   # Ornek: ["m1.h5", "m2.h5"]
+    "SORT_INPUTS": False,    # True: dosya sirasi deterministik olur.
 
-    # EXIF/camera fallback
+    # EXIF/camera fallback:
+    # EXIF eksik/bozuk oldugunda bu degerler devreye girer.
     "DEFAULT_FOCAL_LENGTH_MM": 8.8,
     "DEFAULT_SENSOR_WIDTH_MM": 13.2,
     "USE_GPS_ALT_REF_SIGN": False,
 
-    # Calisma sonu bekleme
+    # Calisma sonu bekleme:
+    # CLI ortaminda adim adim izleme icin kullanisli.
     "WAIT_PER_MODEL": False,
     "WAIT_ON_EXIT": False,
 }
 
 
+# RUN_CFG -> tip guvenli sabitler (ana akista kullanilanlar).
 benchmark = bool(RUN_CFG["BENCHMARK"])
 DEBUG = bool(RUN_CFG["DEBUG"])
 PATCH_SIZE = int(RUN_CFG["PATCH_SIZE"])
@@ -1885,7 +1918,11 @@ if __name__ == '__main__':
     if not os.path.isdir(anlik_yol):
         raise RuntimeError(f"Anlik goruntu klasoru bulunamadi: {anlik_yol}")
 
-    # Desteklenen uzantilar: alakasiz dosyalari (.gitkeep vb.) otomatik dislar.
+    # Desteklenen uzantilar:
+    # - RUN_CFG icinde HARITA_UZANTILARI / MODEL_UZANTILARI / ANLIK_UZANTILARI
+    #   tanimlarsaniz burada override edilir.
+    # - Listeyi genisletmek, daha fazla dosya turunun otomatik bulunmasini saglar.
+    # - Listeyi daraltmak, yanlis dosya yuklenme riskini azaltir.
     harita_exts = _normalize_ext_set(
         RUN_CFG.get("HARITA_UZANTILARI", [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".jp2"])
     )
@@ -2015,6 +2052,9 @@ if __name__ == '__main__':
     konum=(0,0)
     konum_once=(0,0)
     kare=()  
+    # Runtime UI gorunum anahtarlari:
+    # - Buradaki True/False degerleri sadece baslangic durumunu belirler.
+    # - Calisma sirasinda butonlar veya kisayollar (T/I/O/R/H) ile degistirilebilir.
     runtime_ui_state = {
         "trajectory": bool(DRAW_TRAJECTORY),
         "inner_frame": bool(SHOW_INNER_FRAME),
@@ -2926,6 +2966,8 @@ if __name__ == '__main__':
             cv2.imshow("konum", res)
             key = cv2.waitKey(1) & 0xFF
             if UI_BUTTONS_ENABLED:
+                # Klavye kisayollari:
+                # T=trajektori, I=ic cerceve, O=ROI cercevesi, R=TM kutulari, H=panel.
                 if key in (ord('t'), ord('T')):
                     runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
                 elif key in (ord('i'), ord('I')):
