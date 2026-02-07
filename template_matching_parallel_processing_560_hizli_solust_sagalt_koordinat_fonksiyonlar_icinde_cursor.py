@@ -2853,7 +2853,7 @@ if __name__ == '__main__':
                 f"HDG: {yaw:.1f} deg",
                 f"ALT: {int(ucus_yuksekligi)} m",
                 f"ERR: {int(uzaklik*1000)} m",
-                f"SPD: {speed_mps:.2f} m/s",
+                f"SPD: {speed_mps:.2f} m/s ({speed_mps*3.6:.2f} km/h)",
                 f"VEL: ({speed_vx_mps:+.2f}, {speed_vy_mps:+.2f}) m/s",
             ]
             # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
