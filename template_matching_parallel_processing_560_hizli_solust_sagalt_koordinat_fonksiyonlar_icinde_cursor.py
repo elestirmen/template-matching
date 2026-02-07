@@ -65,8 +65,32 @@ RUN_CFG = {
     "UI_BUTTON_SCALE": 0.5,
     "UI_WINDOW_WIDTH": 1000,
     "UI_WINDOW_HEIGHT": 1000,
-    "SHOW_INNER_FRAME": True,
+    "SHOW_INNER_FRAME": False,
     "SHOW_TM_BOXES": True,
+    "SHOW_ROI_FRAME": True,
+    "ROI_FRAME_COLOR_BGR": (0, 165, 255),
+    "ROI_FRAME_THICKNESS": 14,
+
+    # Motion prediction (Kalman + pseudo IMU from GPS/yaw/time)
+    "USE_MOTION_KALMAN": True,
+    "KALMAN_POS_STD_INIT_PX": 120.0,
+    "KALMAN_VEL_STD_INIT_PXPS": 160.0,
+    "KALMAN_PROCESS_ACC_STD_PXPS2": 45.0,
+    "KALMAN_GPS_POS_STD_PX": 70.0,
+    "KALMAN_TM_POS_STD_PX": 18.0,
+    "KALMAN_VEL_MEAS_STD_PXPS": 30.0,
+    "KALMAN_DEFAULT_DT_SEC": 0.2,
+    "KALMAN_MIN_DT_SEC": 0.05,
+    "KALMAN_MAX_DT_SEC": 2.0,
+    "KALMAN_HEADING_BLEND": 0.25,
+    "KALMAN_GATING_SIGMA_GAIN": 3.0,
+    "KALMAN_TM_GATE_MIN_PX": 60.0,
+    "KALMAN_ADAPTIVE_FRAME_MIN_PX": 900,
+    "KALMAN_ADAPTIVE_FRAME_MAX_PX": 5000,
+    "KALMAN_ADAPTIVE_SIGMA_GAIN": 8.0,
+    "KALMAN_PSEUDO_IMU_ENABLED": True,
+    "KALMAN_PSEUDO_IMU_MAX_ACC_PXPS2": 250.0,
+    "KALMAN_EXTERNAL_IMU_ENABLED": False,
 
     # Calisma sonu bekleme
     "WAIT_PER_MODEL": False,
@@ -92,8 +116,30 @@ UI_BUTTON_THICKNESS = int(RUN_CFG.get("UI_BUTTON_THICKNESS", 3))
 UI_BUTTON_SCALE = float(RUN_CFG.get("UI_BUTTON_SCALE", 1.0))
 UI_WINDOW_WIDTH = int(RUN_CFG.get("UI_WINDOW_WIDTH", 1280))
 UI_WINDOW_HEIGHT = int(RUN_CFG.get("UI_WINDOW_HEIGHT", 960))
-SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", True))
+SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", False))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
+SHOW_ROI_FRAME = bool(RUN_CFG.get("SHOW_ROI_FRAME", True))
+ROI_FRAME_COLOR_BGR = tuple(int(v) for v in RUN_CFG.get("ROI_FRAME_COLOR_BGR", (0, 165, 255)))
+ROI_FRAME_THICKNESS = int(RUN_CFG.get("ROI_FRAME_THICKNESS", 14))
+USE_MOTION_KALMAN = bool(RUN_CFG.get("USE_MOTION_KALMAN", True))
+KALMAN_POS_STD_INIT_PX = float(RUN_CFG.get("KALMAN_POS_STD_INIT_PX", 120.0))
+KALMAN_VEL_STD_INIT_PXPS = float(RUN_CFG.get("KALMAN_VEL_STD_INIT_PXPS", 160.0))
+KALMAN_PROCESS_ACC_STD_PXPS2 = float(RUN_CFG.get("KALMAN_PROCESS_ACC_STD_PXPS2", 45.0))
+KALMAN_GPS_POS_STD_PX = float(RUN_CFG.get("KALMAN_GPS_POS_STD_PX", 70.0))
+KALMAN_TM_POS_STD_PX = float(RUN_CFG.get("KALMAN_TM_POS_STD_PX", 18.0))
+KALMAN_VEL_MEAS_STD_PXPS = float(RUN_CFG.get("KALMAN_VEL_MEAS_STD_PXPS", 30.0))
+KALMAN_DEFAULT_DT_SEC = float(RUN_CFG.get("KALMAN_DEFAULT_DT_SEC", 0.2))
+KALMAN_MIN_DT_SEC = float(RUN_CFG.get("KALMAN_MIN_DT_SEC", 0.05))
+KALMAN_MAX_DT_SEC = float(RUN_CFG.get("KALMAN_MAX_DT_SEC", 2.0))
+KALMAN_HEADING_BLEND = float(RUN_CFG.get("KALMAN_HEADING_BLEND", 0.25))
+KALMAN_GATING_SIGMA_GAIN = float(RUN_CFG.get("KALMAN_GATING_SIGMA_GAIN", 3.0))
+KALMAN_TM_GATE_MIN_PX = float(RUN_CFG.get("KALMAN_TM_GATE_MIN_PX", 60.0))
+KALMAN_ADAPTIVE_FRAME_MIN_PX = int(RUN_CFG.get("KALMAN_ADAPTIVE_FRAME_MIN_PX", 900))
+KALMAN_ADAPTIVE_FRAME_MAX_PX = int(RUN_CFG.get("KALMAN_ADAPTIVE_FRAME_MAX_PX", 5000))
+KALMAN_ADAPTIVE_SIGMA_GAIN = float(RUN_CFG.get("KALMAN_ADAPTIVE_SIGMA_GAIN", 8.0))
+KALMAN_PSEUDO_IMU_ENABLED = bool(RUN_CFG.get("KALMAN_PSEUDO_IMU_ENABLED", True))
+KALMAN_PSEUDO_IMU_MAX_ACC_PXPS2 = float(RUN_CFG.get("KALMAN_PSEUDO_IMU_MAX_ACC_PXPS2", 250.0))
+KALMAN_EXTERNAL_IMU_ENABLED = bool(RUN_CFG.get("KALMAN_EXTERNAL_IMU_ENABLED", False))
 
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
@@ -111,6 +157,7 @@ import multiprocessing
 import warnings
 import math
 import time
+import datetime
 import rasterio as rio
 import numpy as np
 from math import cos, sqrt
@@ -594,9 +641,241 @@ def _to_float_ratio(val):
     except Exception:
         return None
 
+def _parse_exif_datetime(dt_raw, subsec_raw=None):
+    """Return unix timestamp from EXIF DateTime* values, else None."""
+    if dt_raw is None:
+        return None
+    try:
+        if isinstance(dt_raw, bytes):
+            dt_raw = dt_raw.decode(errors='ignore')
+        dt_text = str(dt_raw).strip()
+        if not dt_text:
+            return None
+        dt_obj = datetime.datetime.strptime(dt_text, "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        return None
+
+    micro = 0
+    try:
+        if subsec_raw is not None:
+            if isinstance(subsec_raw, bytes):
+                subsec_raw = subsec_raw.decode(errors='ignore')
+            digits = "".join(ch for ch in str(subsec_raw).strip() if ch.isdigit())
+            if digits:
+                micro = int((digits + "000000")[:6])
+    except Exception:
+        micro = 0
+
+    try:
+        dt_obj = dt_obj.replace(microsecond=micro)
+    except Exception:
+        pass
+    try:
+        return float(dt_obj.timestamp())
+    except Exception:
+        return None
+
+def _safe_capture_timestamp(image_path, exif_capture_time):
+    """Prefer EXIF time; fallback to file mtime."""
+    if exif_capture_time is not None and np.isfinite(exif_capture_time):
+        return float(exif_capture_time)
+    try:
+        return float(os.path.getmtime(image_path))
+    except Exception:
+        return None
+
+def _resolve_dt(prev_ts, cur_ts, default_dt=0.2, dt_min=0.05, dt_max=2.0):
+    if prev_ts is None or cur_ts is None or (not np.isfinite(prev_ts)) or (not np.isfinite(cur_ts)):
+        return float(default_dt)
+    dt = float(cur_ts) - float(prev_ts)
+    if (not np.isfinite(dt)) or dt <= 0:
+        return float(default_dt)
+    return float(np.clip(dt, float(dt_min), float(dt_max)))
+
+def _heading_to_xy_unit(heading_deg):
+    """North=0 deg, clockwise positive. Image axes: +x right, +y down."""
+    try:
+        rad = math.radians(float(heading_deg))
+        vx = math.sin(rad)
+        vy = -math.cos(rad)
+        n = math.hypot(vx, vy)
+        if n <= 1e-9:
+            return None
+        return (vx / n, vy / n)
+    except Exception:
+        return None
+
+def _blend_velocity_with_heading(velocity_xy, heading_deg, blend_ratio=0.25):
+    """Blend measured velocity direction with heading direction, preserving speed."""
+    if velocity_xy is None:
+        return None
+    vx, vy = float(velocity_xy[0]), float(velocity_xy[1])
+    speed = math.hypot(vx, vy)
+    if speed <= 1e-9:
+        return (0.0, 0.0)
+    heading_u = _heading_to_xy_unit(heading_deg)
+    if heading_u is None:
+        return (vx, vy)
+    mx, my = vx / speed, vy / speed
+    a = float(np.clip(blend_ratio, 0.0, 1.0))
+    bx = (1.0 - a) * mx + a * heading_u[0]
+    by = (1.0 - a) * my + a * heading_u[1]
+    n = math.hypot(bx, by)
+    if n <= 1e-9:
+        return (vx, vy)
+    return (speed * bx / n, speed * by / n)
+
+def _roi_from_center(center_xy, frame_size, image_shape):
+    """Return (row_start,row_end,col_start,col_end) with bounds protection."""
+    if center_xy is None:
+        return None
+    H, W = int(image_shape[0]), int(image_shape[1])
+    if H <= 0 or W <= 0:
+        return None
+    fs = int(max(64, frame_size))
+    fs = min(fs, H, W)
+    half = fs // 2
+    cx = int(round(float(center_xy[0])))
+    cy = int(round(float(center_xy[1])))
+
+    y1 = cy - half
+    y2 = y1 + fs
+    x1 = cx - half
+    x2 = x1 + fs
+
+    if y1 < 0:
+        y2 -= y1
+        y1 = 0
+    if x1 < 0:
+        x2 -= x1
+        x1 = 0
+    if y2 > H:
+        y1 -= (y2 - H)
+        y2 = H
+    if x2 > W:
+        x1 -= (x2 - W)
+        x2 = W
+
+    y1 = max(0, y1)
+    x1 = max(0, x1)
+    y2 = min(H, y2)
+    x2 = min(W, x2)
+
+    if y2 <= y1 or x2 <= x1:
+        return None
+    return (int(y1), int(y2), int(x1), int(x2))
+
+def _adaptive_frame_size(base_frame_size, sigma_x, sigma_y, min_size, max_size, sigma_gain):
+    sigma = max(float(sigma_x), float(sigma_y), 0.0)
+    desired = max(float(base_frame_size), float(PATCH_SIZE) + float(sigma_gain) * sigma)
+    clipped = np.clip(desired, float(min_size), float(max_size))
+    return int(max(64, clipped))
+
+def _get_external_imu_accel_pxps2(capture_time, frame_index):
+    """Future IMU hook.
+    Return (ax, ay) in pixel/s^2 for the current frame time. Return None if not available.
+    """
+    _ = capture_time, frame_index
+    return None
+
+class MotionKalman2D:
+    """Constant-velocity Kalman filter in pixel coordinates: [x, y, vx, vy]."""
+    def __init__(self, process_acc_std=45.0):
+        self.process_acc_std = float(max(1e-6, process_acc_std))
+        self.x = np.zeros((4, 1), dtype=np.float64)
+        self.P = np.eye(4, dtype=np.float64)
+        self.initialized = False
+
+    def initialize(self, pos_xy, vel_xy=(0.0, 0.0), pos_std=120.0, vel_std=160.0):
+        px, py = float(pos_xy[0]), float(pos_xy[1])
+        vx, vy = float(vel_xy[0]), float(vel_xy[1])
+        self.x = np.array([[px], [py], [vx], [vy]], dtype=np.float64)
+        p2 = float(max(1e-3, pos_std)) ** 2
+        v2 = float(max(1e-3, vel_std)) ** 2
+        self.P = np.diag([p2, p2, v2, v2]).astype(np.float64)
+        self.initialized = True
+
+    def predict(self, dt, accel_xy=None):
+        if not self.initialized:
+            return
+        dt = float(max(1e-3, dt))
+        F = np.array(
+            [[1.0, 0.0, dt, 0.0],
+             [0.0, 1.0, 0.0, dt],
+             [0.0, 0.0, 1.0, 0.0],
+             [0.0, 0.0, 0.0, 1.0]],
+            dtype=np.float64,
+        )
+
+        u = np.zeros((4, 1), dtype=np.float64)
+        if accel_xy is not None:
+            ax, ay = float(accel_xy[0]), float(accel_xy[1])
+            u = np.array([[0.5 * dt * dt * ax],
+                          [0.5 * dt * dt * ay],
+                          [dt * ax],
+                          [dt * ay]], dtype=np.float64)
+
+        q = self.process_acc_std ** 2
+        dt2 = dt * dt
+        dt3 = dt2 * dt
+        dt4 = dt2 * dt2
+        Q = q * np.array(
+            [[0.25 * dt4, 0.0, 0.5 * dt3, 0.0],
+             [0.0, 0.25 * dt4, 0.0, 0.5 * dt3],
+             [0.5 * dt3, 0.0, dt2, 0.0],
+             [0.0, 0.5 * dt3, 0.0, dt2]],
+            dtype=np.float64,
+        )
+
+        self.x = F @ self.x + u
+        self.P = F @ self.P @ F.T + Q
+        self.P = 0.5 * (self.P + self.P.T)
+
+    def _update(self, z, H, R):
+        if not self.initialized:
+            return
+        z = np.asarray(z, dtype=np.float64).reshape((-1, 1))
+        H = np.asarray(H, dtype=np.float64)
+        R = np.asarray(R, dtype=np.float64)
+        y = z - (H @ self.x)
+        S = H @ self.P @ H.T + R
+        try:
+            K = self.P @ H.T @ np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            K = self.P @ H.T @ np.linalg.pinv(S)
+        I = np.eye(self.P.shape[0], dtype=np.float64)
+        self.x = self.x + K @ y
+        self.P = (I - K @ H) @ self.P
+        self.P = 0.5 * (self.P + self.P.T)
+
+    def update_position(self, pos_xy, pos_std):
+        std = float(max(1e-3, pos_std))
+        H = np.array([[1.0, 0.0, 0.0, 0.0],
+                      [0.0, 1.0, 0.0, 0.0]], dtype=np.float64)
+        R = np.diag([std ** 2, std ** 2]).astype(np.float64)
+        self._update([float(pos_xy[0]), float(pos_xy[1])], H, R)
+
+    def update_velocity(self, vel_xy, vel_std):
+        std = float(max(1e-3, vel_std))
+        H = np.array([[0.0, 0.0, 1.0, 0.0],
+                      [0.0, 0.0, 0.0, 1.0]], dtype=np.float64)
+        R = np.diag([std ** 2, std ** 2]).astype(np.float64)
+        self._update([float(vel_xy[0]), float(vel_xy[1])], H, R)
+
+    def get_position(self):
+        return (float(self.x[0, 0]), float(self.x[1, 0]))
+
+    def get_velocity(self):
+        return (float(self.x[2, 0]), float(self.x[3, 0]))
+
+    def get_position_sigma(self):
+        sx = math.sqrt(max(0.0, float(self.P[0, 0])))
+        sy = math.sqrt(max(0.0, float(self.P[1, 1])))
+        return sx, sy
+
 def parse_exif(image_path):
     """Parse EXIF safely; returns dict with keys:
-    yaw, latitude, longitude, altitude, focal_length, model.
+    yaw, latitude, longitude, altitude, focal_length, model, capture_time.
     Returns None on failure.
     """
     import re
@@ -665,6 +944,9 @@ def parse_exif(image_path):
     fl = get_field(exif, 'FocalLength')
     focal_length = _to_float_ratio(fl)
     model = get_field(exif, 'Model')
+    dt_raw = get_field(exif, 'DateTimeOriginal') or get_field(exif, 'DateTimeDigitized') or get_field(exif, 'DateTime')
+    subsec_raw = get_field(exif, 'SubSecTimeOriginal') or get_field(exif, 'SubSecTime')
+    capture_time = _parse_exif_datetime(dt_raw, subsec_raw)
 
     return {
         'yaw': yaw,
@@ -673,6 +955,7 @@ def parse_exif(image_path):
         'altitude': altitude,
         'focal_length': focal_length,
         'model': model,
+        'capture_time': capture_time,
     }
 
 def make_rc_to_ll(dataset):
@@ -903,8 +1186,8 @@ def _build_runtime_buttons():
         {"key": "_panel_collapsed", "label": "", "hotkey": "H",
          "rect": (20, 20, 44, 44), "is_collapse": True},
         {"key": "trajectory",   "label": "Trajektori",   "hotkey": "T", "rect": (20, 20, 260, 54)},
-        {"key": "inner_frame",  "label": "Ic Cerceve",   "hotkey": "I", "rect": (20, 84, 260, 54)},
-        {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 148, 260, 54)},
+        {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 84, 260, 54)},
+        {"key": "roi_frame",    "label": "ROI Cerceve",  "hotkey": "O", "rect": (20, 148, 260, 54)},
     ]
 
 
@@ -1984,8 +2267,8 @@ if __name__ == '__main__':
     kare=()  
     runtime_ui_state = {
         "trajectory": bool(DRAW_TRAJECTORY),
-        "inner_frame": bool(SHOW_INNER_FRAME),
         "tm_boxes": bool(SHOW_TM_BOXES),
+        "roi_frame": bool(SHOW_ROI_FRAME),
         "_panel_collapsed": False,
         "_hover_key": None,
     }
@@ -2010,6 +2293,11 @@ if __name__ == '__main__':
         # Her model/harita cifti icin gecmis izleri ayri tutulur.
         traj_pred_points = []
         traj_real_points = []
+        motion_kf = MotionKalman2D(KALMAN_PROCESS_ACC_STD_PXPS2) if USE_MOTION_KALMAN else None
+        last_capture_time = None
+        last_gps_xy = None
+        last_speed_xy = None
+        pending_imu_accel = None
         
         model_yolu = model_path_list[k]
         model = load_model(model_yolu)        
@@ -2096,80 +2384,107 @@ if __name__ == '__main__':
             
            
             # Use pre-opened map and transformer for fast lookups
-            # Harita ÃƒÂ¼zerinde EXIF koordinatÃ„Â±na karÃ…Å¸Ã„Â±lÃ„Â±k gelen pikseli bul
+            # Harita uzerinde EXIF koordinatina karsilik gelen pikseli bul
             knm = piksel_bul_fast(map_ds, ll_to_map, gps_longitude, gps_latitude)
-            
+            gps_map_xy = (float(knm[1]), float(knm[0]))  # (x, y)
 
-            
-            
-                       
-                
-            # Ã„Â°lk karede EXIF konumuna yakÃ„Â±n ÃƒÂ§evrede, sonraki karelerde bir ÃƒÂ¶nceki tahmine yakÃ„Â±n ÃƒÂ§evrede ara
-            if benchmark==False:
-                
-                if i==0:
-                    sol=-int(cerceve_boyutu/2)+knm[0]
-                    sag=+int(cerceve_boyutu/2)+knm[0]
-                    ust=-int(cerceve_boyutu/2)+knm[1]
-                    alt=+int(cerceve_boyutu/2)+knm[1]
-                    
-                    if sol<0:
-                        sol=0
-                    if sag<0:
-                        sag= 0
-                    if ust<0:
-                        ust= 0
-                    if alt<0:
-                        alt= 0
-                    cerceve=img[sol:sag,ust:alt]
-                    konum=(knm[1],knm[0])
-                else:
-                    sol=-int(cerceve_boyutu/2)+konum[1]
-                    sag=+int(cerceve_boyutu/2)+konum[1]
-                    ust=-int(cerceve_boyutu/2)+konum[0]
-                    alt=+int(cerceve_boyutu/2)+konum[0]
-                    
-                    if sol<0:
-                        sol=0
-                    if sag<0:
-                        sag= 0
-                    if ust<0:
-                        ust= 0
-                    if alt<0:
-                        alt= 0
-                    cerceve=img[sol:sag,ust:alt]
-                
-                    
+            capture_time = _safe_capture_timestamp(anlik_goruntu, exif_data.get('capture_time'))
+            dt_sec = _resolve_dt(
+                last_capture_time,
+                capture_time,
+                default_dt=KALMAN_DEFAULT_DT_SEC,
+                dt_min=KALMAN_MIN_DT_SEC,
+                dt_max=KALMAN_MAX_DT_SEC,
+            )
+
+            gps_speed_xy = None
+            if last_gps_xy is not None and dt_sec > 1e-6:
+                raw_vx = (gps_map_xy[0] - last_gps_xy[0]) / dt_sec
+                raw_vy = (gps_map_xy[1] - last_gps_xy[1]) / dt_sec
+                gps_speed_xy = _blend_velocity_with_heading(
+                    (raw_vx, raw_vy),
+                    yaw,
+                    blend_ratio=KALMAN_HEADING_BLEND,
+                )
+
+            if KALMAN_PSEUDO_IMU_ENABLED and (last_speed_xy is not None) and (gps_speed_xy is not None) and dt_sec > 1e-6:
+                ax = (gps_speed_xy[0] - last_speed_xy[0]) / dt_sec
+                ay = (gps_speed_xy[1] - last_speed_xy[1]) / dt_sec
+                a_norm = math.hypot(ax, ay)
+                if a_norm > KALMAN_PSEUDO_IMU_MAX_ACC_PXPS2 > 0:
+                    scale_acc = KALMAN_PSEUDO_IMU_MAX_ACC_PXPS2 / a_norm
+                    ax *= scale_acc
+                    ay *= scale_acc
+                pending_imu_accel = (ax, ay)
             else:
-                cerceve_boyutu=cerceve_boyutu_deger
-                sol=-int(cerceve_boyutu/2)+knm[0]
-                sag=+int(cerceve_boyutu/2)+knm[0]
-                ust=-int(cerceve_boyutu/2)+knm[1]
-                alt=+int(cerceve_boyutu/2)+knm[1]
-                
-                if sol<0:
-                    sol=0
-                if sag<0:
-                    sag= 0
-                if ust<0:
-                    ust= 0
-                if alt<0:
-                    alt= 0
-                konum=(knm[1],knm[0])
-                
-                cerceve=img[sol:sag,ust:alt]
-            
-            
-            
-            
-            sol = max(0, min(sol, img.shape[0]))
-            sag = max(0, min(sag, img.shape[0]))
-            ust = max(0, min(ust, img.shape[1]))
-            alt = max(0, min(alt, img.shape[1]))
-            if sag <= sol or alt <= ust:
-                print("cerceve gecersiz, atlaniyor")
+                pending_imu_accel = None
+
+            search_center_xy = None
+            kalman_pred_before_tm = None
+            kalman_sigma_before_tm = (0.0, 0.0)
+            active_frame_size = int(cerceve_boyutu)
+
+            # Kalman: GPS + yon + zaman -> hiz/hiz vektoru + pseudo IMU ivmesi.
+            if (benchmark == False) and USE_MOTION_KALMAN and (motion_kf is not None):
+                if motion_kf.initialized:
+                    ext_imu_accel = _get_external_imu_accel_pxps2(capture_time, i) if KALMAN_EXTERNAL_IMU_ENABLED else None
+                    imu_accel_for_predict = ext_imu_accel if ext_imu_accel is not None else pending_imu_accel
+                    motion_kf.predict(dt_sec, accel_xy=imu_accel_for_predict)
+                    motion_kf.update_position(gps_map_xy, KALMAN_GPS_POS_STD_PX)
+                    if gps_speed_xy is not None:
+                        motion_kf.update_velocity(gps_speed_xy, KALMAN_VEL_MEAS_STD_PXPS)
+                else:
+                    init_vel = gps_speed_xy if gps_speed_xy is not None else (0.0, 0.0)
+                    motion_kf.initialize(
+                        gps_map_xy,
+                        vel_xy=init_vel,
+                        pos_std=KALMAN_POS_STD_INIT_PX,
+                        vel_std=KALMAN_VEL_STD_INIT_PXPS,
+                    )
+
+                kalman_pred_before_tm = motion_kf.get_position()
+                kalman_sigma_before_tm = motion_kf.get_position_sigma()
+                search_center_xy = kalman_pred_before_tm
+                active_frame_size = _adaptive_frame_size(
+                    base_frame_size=cerceve_boyutu,
+                    sigma_x=kalman_sigma_before_tm[0],
+                    sigma_y=kalman_sigma_before_tm[1],
+                    min_size=KALMAN_ADAPTIVE_FRAME_MIN_PX,
+                    max_size=KALMAN_ADAPTIVE_FRAME_MAX_PX,
+                    sigma_gain=KALMAN_ADAPTIVE_SIGMA_GAIN,
+                )
+            elif benchmark == False:
+                # Kalman kapaliysa eski akis: ilk kare EXIF, sonra onceki tahmin.
+                if i == 0:
+                    search_center_xy = gps_map_xy
+                    konum = (int(gps_map_xy[0]), int(gps_map_xy[1]))
+                else:
+                    search_center_xy = (float(konum[0]), float(konum[1]))
+            else:
+                cerceve_boyutu = cerceve_boyutu_deger
+                active_frame_size = cerceve_boyutu
+                search_center_xy = gps_map_xy
+                konum = (int(gps_map_xy[0]), int(gps_map_xy[1]))
+
+            if search_center_xy is None:
+                search_center_xy = gps_map_xy
+
+            roi = _roi_from_center(search_center_xy, active_frame_size, img.shape)
+            if roi is None:
+                print('cerceve gecersiz, atlaniyor')
+                last_capture_time = capture_time
+                last_gps_xy = gps_map_xy
+                if gps_speed_xy is not None:
+                    last_speed_xy = gps_speed_xy
                 continue
-            cerceve = img[sol:sag,ust:alt]
+            sol, sag, ust, alt = roi
+            cerceve = img[sol:sag, ust:alt]
+            cerceve_boyutu = max(int(sag - sol), int(alt - ust))
+
+            last_capture_time = capture_time
+            last_gps_xy = gps_map_xy
+            if gps_speed_xy is not None:
+                last_speed_xy = gps_speed_xy
             
             
             
@@ -2583,7 +2898,32 @@ if __name__ == '__main__':
                      
             
             
-            konum=(konum_y,konum_x)
+            raw_tm_konum = (float(konum_y), float(konum_x))
+            konum=(int(raw_tm_konum[0]),int(raw_tm_konum[1]))
+
+            # TM olcumunu Kalman ile birlestir; beklenmeyen sicrama varsa gate uygula.
+            if (benchmark == False) and USE_MOTION_KALMAN and (motion_kf is not None) and motion_kf.initialized:
+                sx, sy = motion_kf.get_position_sigma()
+                sigma_gate = max(float(sx), float(sy), float(kalman_sigma_before_tm[0]), float(kalman_sigma_before_tm[1]))
+                gate_px = max(KALMAN_TM_GATE_MIN_PX, KALMAN_GATING_SIGMA_GAIN * (sigma_gate + KALMAN_TM_POS_STD_PX))
+                d_tm = 0.0
+                if kalman_pred_before_tm is not None:
+                    d_tm = math.hypot(
+                        raw_tm_konum[0] - float(kalman_pred_before_tm[0]),
+                        raw_tm_konum[1] - float(kalman_pred_before_tm[1]),
+                    )
+                if (kalman_pred_before_tm is not None) and (d_tm > gate_px):
+                    print(f"Kalman gate: TM olcumu disarida ({d_tm:.1f}px > {gate_px:.1f}px), tahmin korunuyor")
+                    konum = (int(round(kalman_pred_before_tm[0])), int(round(kalman_pred_before_tm[1])))
+                else:
+                    motion_kf.update_position(raw_tm_konum, KALMAN_TM_POS_STD_PX)
+                    kf_xy = motion_kf.get_position()
+                    konum = (int(round(kf_xy[0])), int(round(kf_xy[1])))
+
+            konum = (
+                max(0, min(int(konum[0]), img.shape[1] - 1)),
+                max(0, min(int(konum[1]), img.shape[0] - 1)),
+            )
             
            
             
@@ -2640,8 +2980,11 @@ if __name__ == '__main__':
                 
                
             if uzaklik > 0.3 and benchmark == False:
-                # Ilk karede geri donus noktasi (0,0) olmasin; EXIF konumuna don.
-                if i == 0:
+                # Buyuk hata varsa once Kalman tahminine, yoksa eski fallback'e don.
+                if USE_MOTION_KALMAN and (motion_kf is not None) and motion_kf.initialized:
+                    kf_xy = motion_kf.get_position()
+                    konum = (int(round(kf_xy[0])), int(round(kf_xy[1])))
+                elif i == 0:
                     konum = (knm[1], knm[0])
                 else:
                     konum = konum_once
@@ -2661,7 +3004,7 @@ if __name__ == '__main__':
                 konum=(knm[1],knm[0])
                 
             
-            if runtime_ui_state.get("inner_frame", True):
+            if SHOW_INNER_FRAME:
                 cv2.rectangle(
                     img,
                     (-int(cerceve_boyutu/2)+konum[0], -int(cerceve_boyutu/2)+konum[1]),
@@ -2669,6 +3012,20 @@ if __name__ == '__main__':
                     (0, 0, 0),
                     25
                 )
+
+            if runtime_ui_state.get("roi_frame", SHOW_ROI_FRAME):
+                roi_x1 = max(0, min(int(ust), img.shape[1] - 1))
+                roi_y1 = max(0, min(int(sol), img.shape[0] - 1))
+                roi_x2 = max(0, min(int(alt), img.shape[1] - 1))
+                roi_y2 = max(0, min(int(sag), img.shape[0] - 1))
+                if roi_x2 > roi_x1 and roi_y2 > roi_y1:
+                    cv2.rectangle(
+                        img,
+                        (roi_x1, roi_y1),
+                        (roi_x2, roi_y2),
+                        ROI_FRAME_COLOR_BGR,
+                        max(1, ROI_FRAME_THICKNESS),
+                    )
 
             if runtime_ui_state.get("tm_boxes", True):
                 cv2.rectangle(img, top_left1, bottom_right1, (0, 0, 255), 25)
@@ -2755,10 +3112,30 @@ if __name__ == '__main__':
             window_name = 'Image'
 
             # 7.4) HUD: baÃ…Å¸lÃ„Â±k (yaw), uÃƒÂ§uÃ…Å¸ yÃƒÂ¼ksekliÃ„Å¸i ve hatayÃ„Â± gÃƒÂ¶ster; ÃƒÂ¶lÃƒÂ§ek ÃƒÂ§ubuÃ„Å¸u ve hedef iÃ…Å¸aretleri ÃƒÂ§iz
+            speed_pxps = None
+            speed_src = "N/A"
+            if USE_MOTION_KALMAN and (motion_kf is not None) and motion_kf.initialized:
+                vxy = motion_kf.get_velocity()
+                speed_pxps = math.hypot(float(vxy[0]), float(vxy[1]))
+                speed_src = "KF"
+            elif gps_speed_xy is not None:
+                speed_pxps = math.hypot(float(gps_speed_xy[0]), float(gps_speed_xy[1]))
+                speed_src = "GPS"
+
+            speed_mps = None
+            if (speed_pxps is not None) and np.isfinite(speed_pxps) and (mekansal_cozunurluk > 0):
+                speed_mps = (float(speed_pxps) * float(mekansal_cozunurluk)) / 100.0
+
+            if speed_mps is not None and np.isfinite(speed_mps):
+                speed_text = f"SPD({speed_src}): {speed_mps:.1f} m/s  ({speed_mps*3.6:.1f} km/h)"
+            else:
+                speed_text = "SPD: N/A"
+
             hud_lines = [
                 f"HDG: {yaw:.1f} deg",
                 f"ALT: {int(ucus_yuksekligi)} m",
                 f"ERR: {int(uzaklik*1000)} m",
+                speed_text,
             ]
             # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
             _hud_font_scale = 6
@@ -2833,10 +3210,10 @@ if __name__ == '__main__':
             if UI_BUTTONS_ENABLED:
                 if key in (ord('t'), ord('T')):
                     runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
-                elif key in (ord('i'), ord('I')):
-                    runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", True))
                 elif key in (ord('r'), ord('R')):
                     runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
+                elif key in (ord('o'), ord('O')):
+                    runtime_ui_state["roi_frame"] = not bool(runtime_ui_state.get("roi_frame", SHOW_ROI_FRAME))
                 elif key in (ord('h'), ord('H')):
                     runtime_ui_state["_panel_collapsed"] = not bool(runtime_ui_state.get("_panel_collapsed", False))
             
