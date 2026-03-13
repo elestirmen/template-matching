@@ -46,7 +46,7 @@ RUN_CFG = {
     # Veri yollari
     "HARITA_DIR": "haritalar",   # Referans harita klasoru.
     "MODEL_DIR": "model",        # Keras model klasoru.
-    "ANLIK_DIR": "parcalar",     # Islenecek anlik goruntu klasoru.
+    "ANLIK_DIR": "guzergahlar/1_tezde_ucus_5",     # Islenecek anlik goruntu klasoru.
     "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
 
     # Dosya secimi:
@@ -75,7 +75,7 @@ RUN_CFG = {
     "UI_BUTTON_SCALE": 0.5,      # Tum UI panelinin genel olcegi.
     "UI_WINDOW_WIDTH": 1000,     # konum penceresi genisligi.
     "UI_WINDOW_HEIGHT": 1000,    # konum penceresi yuksekligi.
-    "SHOW_INNER_FRAME": True,    # Baslangicta ic arama cercevesi gorunurlugu.
+    "SHOW_INNER_FRAME": False,   # Baslangicta ic arama cercevesi gorunurlugu.
     "SHOW_ROI_FRAME": True,      # Baslangicta ROI cercevesi gorunurlugu.
     "SHOW_TM_BOXES": True,       # Baslangicta TM kutularinin gorunurlugu.
 
@@ -105,7 +105,7 @@ UI_BUTTON_THICKNESS = int(RUN_CFG.get("UI_BUTTON_THICKNESS", 3))
 UI_BUTTON_SCALE = float(RUN_CFG.get("UI_BUTTON_SCALE", 1.0))
 UI_WINDOW_WIDTH = int(RUN_CFG.get("UI_WINDOW_WIDTH", 1280))
 UI_WINDOW_HEIGHT = int(RUN_CFG.get("UI_WINDOW_HEIGHT", 960))
-SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", True))
+SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", False))
 SHOW_ROI_FRAME = bool(RUN_CFG.get("SHOW_ROI_FRAME", True))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
 
@@ -120,6 +120,7 @@ import cv2
 from osgeo import gdal
 #import exiftool
 from tensorflow.keras.models import load_model
+from tensorflow.keras.layers import Conv2DTranspose
 import pickle
 import multiprocessing
 import warnings
@@ -138,6 +139,34 @@ from pyproj import Transformer
 import concurrent.futures
 warnings.filterwarnings("ignore")
 dirname = os.path.dirname(os.path.abspath(__file__))
+
+
+class _CompatConv2DTranspose(Conv2DTranspose):
+    """Eski H5 modellerde gelebilen desteklenmeyen 'groups' alanini yok sayar."""
+
+    @classmethod
+    def from_config(cls, config):
+        cfg = dict(config or {})
+        cfg.pop("groups", None)
+        return super().from_config(cfg)
+
+
+def load_model_compat(model_path):
+    """Modeli yukler; Keras surum uyumsuzlugunda uyumluluk fallback'i dener."""
+    try:
+        return load_model(model_path, compile=False)
+    except TypeError as exc:
+        msg = str(exc)
+        if "Conv2DTranspose" in msg and "groups" in msg:
+            print(
+                "Uyarı: Model uyumluluk modu etkin. Conv2DTranspose 'groups' alanı yoksayiliyor."
+            )
+            return load_model(
+                model_path,
+                compile=False,
+                custom_objects={"Conv2DTranspose": _CompatConv2DTranspose},
+            )
+        raise
 
 def _get_screen_size():
     """Ekran boyutunu (genislik, yukseklik) dondurur; hata olursa guvenli varsayilan verir."""
@@ -415,6 +444,8 @@ def log_cuda_info_once():
             return
         devices = 0
         has_tm = False
+        build_has_cuda = False
+        build_cuda_line = ""
         try:
             if hasattr(cv2, 'cuda'):
                 devices = cv2.cuda.getCudaEnabledDeviceCount()
@@ -422,10 +453,19 @@ def log_cuda_info_once():
         except Exception:
             pass
         try:
-            build_has_cuda = 'CUDA: YES' in cv2.getBuildInformation()
+            build_info = cv2.getBuildInformation()
+            build_has_cuda = (
+                'CUDA: YES' in build_info or
+                'NVIDIA CUDA: YES' in build_info or
+                'NVIDIA CUDA:                   YES' in build_info
+            )
+            for line in build_info.splitlines():
+                if 'NVIDIA CUDA' in line or line.strip().startswith('CUDA:'):
+                    build_cuda_line = line.strip()
+                    break
         except Exception:
             build_has_cuda = False
-        print(f"OpenCV CUDA devices: {devices}, has TM: {has_tm}, build CUDA: {build_has_cuda}")
+        print(f"OpenCV CUDA devices: {devices}, has TM: {has_tm}, build CUDA: {build_has_cuda}, build CUDA line: {build_cuda_line}")
         log_cuda_info_once._logged = True
     except Exception:
         pass
@@ -435,7 +475,9 @@ def intersection(a,b):
     y = max(a[1], b[1])
     w = min(a[0]+a[2], b[0]+b[2]) - x
     h = min(a[1]+a[3], b[1]+b[3]) - y
-    if w<0 or h<0: return () # or (0,0,0,0) ?
+    # Sifir alanli temaslari gercek kesisim olarak kabul etme.
+    if w <= 0 or h <= 0:
+        return ()
     return (x, y, w, h)
 
 
@@ -2044,7 +2086,7 @@ if __name__ == '__main__':
         speed_mps = 0.0
         
         model_yolu = model_path_list[k]
-        model = load_model(model_yolu)        
+        model = load_model_compat(model_yolu)        
         
         
           
@@ -2073,10 +2115,8 @@ if __name__ == '__main__':
         # 7) Her anlık görüntü için döngü
         for i in range(len(anlik_yol_list)):
             
-            yanlis_pozitif_kontrol = 0            
-            dogru_pozitif_kontrol = 0
-            dogru_negatif_kontrol  = 0
-            yanlis_negatif_kontrol = 0
+            # Bu karede anlamli bir kesisim tabanli tahmin uretildiyse True olur.
+            intersection_found = False
             
             baslangic_zamani = time.time()
 
@@ -2569,37 +2609,33 @@ if __name__ == '__main__':
                 
             if kesisim_ab!=() and kesisim_bc!=() and kesisim_ac!=():
                 kesisim_abc=intersection(kesisim_ab, kesisim_bc)
-                kare=(kesisim_abc[0],kesisim_abc[1],int(kesisim_abc[2]),int(kesisim_abc[3]))
-                print("konum: ",kare)
-                cerceve_boyutu+=100
-                yanlis_pozitif_kontrol+=1
-                dogru_pozitif_kontrol+=1
+                if kesisim_abc != ():
+                    kare=(kesisim_abc[0],kesisim_abc[1],int(kesisim_abc[2]),int(kesisim_abc[3]))
+                    print("konum: ",kare)
+                    cerceve_boyutu+=100
+                    intersection_found = True
                 
-            elif kesisim_ab!=() :
+            if not intersection_found and kesisim_ab!=() :
                 kare=(kesisim_ab[0],kesisim_ab[1],int(kesisim_ab[2]),int(kesisim_ab[3]))
                 print("konum: ",kare)
                 cerceve_boyutu+=100
-                yanlis_pozitif_kontrol+=1
-                dogru_pozitif_kontrol+=1
-            elif kesisim_bc!=() :
+                intersection_found = True
+            elif not intersection_found and kesisim_bc!=() :
                 kare=(kesisim_bc[0],kesisim_bc[1],int(kesisim_bc[2]),int(kesisim_bc[3]))
                 print("konum: ",kare)
                 cerceve_boyutu+=100
-                yanlis_pozitif_kontrol+=1
-                dogru_pozitif_kontrol+=1
-            elif kesisim_ac!=() :
+                intersection_found = True
+            elif not intersection_found and kesisim_ac!=() :
                 kare=(kesisim_ac[0],kesisim_ac[1],int(kesisim_ac[2]),int(kesisim_ac[3]))
                 print("konum: ",kare)
                 cerceve_boyutu+=100
-                yanlis_pozitif_kontrol+=1
-                dogru_pozitif_kontrol+=1
+                intersection_found = True
                         
-            else:
+            if not intersection_found:
                 print("kesişim yok")
                 kare=(0,0,0,0)
                 kare=b
                 cerceve_boyutu+=500
-                yanlis_negatif_kontrol+=1
                 
             
             
@@ -2656,17 +2692,17 @@ if __name__ == '__main__':
             
             # Başarı eşiği: 70 metre (0.07 km). Duruma göre TP/FP/TN/FN sayaçları güncellenir.
             if(uzaklik<=0.07):
-                if yanlis_negatif_kontrol>0:
-                    yanlis_negatif+=1
-                else:
+                if intersection_found:
                     dogru_pozitif+=1
+                else:
+                    yanlis_negatif+=1
                     
                 dogru_tahmin+=1
                 sonuclar.append([[anlik_yol_list[i]],["Dogru"],[gps_latitude],[gps_longitude],[lat_tahmin],[long_tahmin],[ucus_yuksekligi]])
                 
                     
             else:
-                if yanlis_pozitif_kontrol>0:
+                if intersection_found:
                     yanlis_pozitif+=1
                 else:
                     dogru_negatif+=1
@@ -2728,7 +2764,7 @@ if __name__ == '__main__':
             prev_speed_wall_ts = time.time()
             
             
-            if runtime_ui_state.get("inner_frame", True):
+            if runtime_ui_state.get("inner_frame", False):
                 cv2.rectangle(
                     img,
                     (-int(cerceve_boyutu/2)+konum[0], -int(cerceve_boyutu/2)+konum[1]),
@@ -2930,7 +2966,7 @@ if __name__ == '__main__':
                 if key in (ord('t'), ord('T')):
                     runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
                 elif key in (ord('i'), ord('I')):
-                    runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", True))
+                    runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", False))
                 elif key in (ord('o'), ord('O')):
                     runtime_ui_state["roi_frame"] = not bool(runtime_ui_state.get("roi_frame", True))
                 elif key in (ord('r'), ord('R')):
