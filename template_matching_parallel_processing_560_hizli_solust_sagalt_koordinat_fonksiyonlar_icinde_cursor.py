@@ -79,6 +79,20 @@ RUN_CFG = {
     "SHOW_ROI_FRAME": True,      # Baslangicta ROI cercevesi gorunurlugu.
     "SHOW_TM_BOXES": True,       # Baslangicta TM kutularinin gorunurlugu.
 
+    # Kamera sensor genisligi (mm) -- model bazli tablo; bilinmeyende DEFAULT_SENSOR_WIDTH_MM kullanilir.
+    "CAMERA_SENSOR_BY_MODEL": {
+        "L1D-20c": 13.2,  # Mavic 2 Pro
+        "FC2204":  6.17,  # Mavic 2 Zoom
+    },
+
+    # Irtifa / DEM duzeltmesi
+    "RAKIM_DUZELTME": 26,   # DEM datum offseti (metre). Ihtiyaca gore ayarla.
+
+    # Basari esigi ve adaptif cerceve siniri
+    "BASARI_ESIGI_KM": 0.07,     # Bu mesafe (km) alti dogru tahmin sayilir (70 m).
+    "CERCEVE_BOYUTU_MAX": 8000,  # Adaptif buyumede izin verilen maksimum cerceve boyutu.
+    "FARK_MAX": 200,             # Patch kaydirma maksimum piksel siniri.
+
     # Calisma sonu bekleme
     "WAIT_PER_MODEL": False,  # True: her model dongusu sonunda input bekler.
     "WAIT_ON_EXIT": False,    # True: program bitiminde input bekler.
@@ -108,6 +122,11 @@ UI_WINDOW_HEIGHT = int(RUN_CFG.get("UI_WINDOW_HEIGHT", 960))
 SHOW_INNER_FRAME = bool(RUN_CFG.get("SHOW_INNER_FRAME", False))
 SHOW_ROI_FRAME = bool(RUN_CFG.get("SHOW_ROI_FRAME", True))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
+RAKIM_DUZELTME = int(RUN_CFG.get("RAKIM_DUZELTME", 26))
+BASARI_ESIGI_KM = float(RUN_CFG.get("BASARI_ESIGI_KM", 0.07))
+CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
+FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
+CAMERA_SENSOR_BY_MODEL = dict(RUN_CFG.get("CAMERA_SENSOR_BY_MODEL", {"L1D-20c": 13.2, "FC2204": 6.17}))
 
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
@@ -976,16 +995,143 @@ def draw_scale_bar(img, cpp_cm_per_px, scale_meters=100, margin=60, bar_height=3
     x2 = min(w - 1, x1 + bar_w)
     y2 = min(h - 1, y1 + bar_height)
 
-    # Okunabilirligi artirmak icin yariseffaf arka plan.
-    _draw_alpha_panel(img, x1 - 25, y1 - 80, x2 + 25, y2 + 25, color=(0, 0, 0), alpha=0.5)
-    cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness=-1)
-    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), thickness=max(2, thickness // 2))  # Kenar
+    pad = max(20, bar_height // 2)
+    lh = cv2.getTextSize(f"{int(scale_meters)} m", font, font_scale, thickness)[0][1]
+    px0 = max(0, x1 - pad)
+    py0 = max(0, y1 - lh - pad * 2)
+    px1 = min(img.shape[1] - 1, x2 + pad)
+    py1 = min(img.shape[0] - 1, y2 + pad)
+    corner = max(8, bar_height // 3)
+    _draw_alpha_rounded_panel(img, px0, py0, px1, py1, radius=corner,
+                              color=UI_COLORS["panel_bg"], alpha=0.65)
+    _draw_rounded_rect(img, px0, py0, px1, py1, corner,
+                       UI_COLORS["panel_border"], max(2, thickness // 4))
+
+    # Cubuk dolgusu ve dis hat
+    _draw_rounded_rect(img, x1, y1, x2, y2, bar_height // 4, color, thickness=-1)
+    _draw_rounded_rect(img, x1, y1, x2, y2, bar_height // 4,
+                       UI_COLORS["panel_border"], max(2, thickness // 2))
+
+    # Uc cizgileri (sol/sag dikey)
+    tick_h = bar_height + max(4, thickness // 2)
+    cv2.line(img, (x1, y1 - (tick_h - bar_height) // 2),
+             (x1, y1 + tick_h - (tick_h - bar_height) // 2),
+             (0, 0, 0), max(2, thickness // 2), cv2.LINE_AA)
+    cv2.line(img, (x2, y1 - (tick_h - bar_height) // 2),
+             (x2, y1 + tick_h - (tick_h - bar_height) // 2),
+             (0, 0, 0), max(2, thickness // 2), cv2.LINE_AA)
 
     label = f"{int(scale_meters)} m"
     (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
     tx = x1 + (bar_w - tw) // 2
-    ty = max(th + 10, y1 - 15)
-    cv2.putText(img, label, (tx, ty), font, font_scale, text_color, thickness, cv2.LINE_AA)
+    ty = y1 - max(8, thickness // 2)
+    _draw_text_with_shadow(img, label, (tx, ty), font, font_scale,
+                           text_color, thickness, shadow_offset=3)
+
+
+def draw_compass(img, heading_deg, margin=160, size=320, font_scale=2.8, thickness=7):
+    """Sag ust kosede pusula cizer: sabit kuzey oku (beyaz) + heading oku (accent rengi).
+
+    - heading_deg: yaw/heading acisi (derece). 0=Kuzey, pozitif saat yonu.
+    - size: daire capinin piksel cinsinden degeri (buyuk haritalar icin buyut).
+    """
+    try:
+        h_img, w_img = img.shape[:2]
+        r = size // 2
+        cx = w_img - margin - r
+        cy = margin + r
+
+        # Arka plan dairesi (yari seffaf, rounded panel)
+        overlay = img.copy()
+        cv2.circle(overlay, (cx, cy), r, UI_COLORS["panel_bg"], -1)
+        cv2.addWeighted(overlay, 0.65, img, 0.35, 0, dst=img)
+        cv2.circle(img, (cx, cy), r, UI_COLORS["panel_border"],
+                   max(2, thickness // 3), lineType=cv2.LINE_AA)
+
+        # Kuzey oku (beyaz, her zaman yukarida)
+        n_tip  = (cx, cy - int(r * 0.70))
+        n_tail = (cx, cy + int(r * 0.32))
+        cv2.arrowedLine(img, n_tail, n_tip, (255, 255, 255),
+                        max(2, thickness // 2), line_type=cv2.LINE_AA, tipLength=0.22)
+
+        # "N" etiketi
+        n_lbl = "N"
+        (nw, nh), _ = cv2.getTextSize(n_lbl, cv2.FONT_HERSHEY_SIMPLEX,
+                                       font_scale * 0.75, thickness)
+        nx = cx - nw // 2
+        ny = cy - int(r * 0.82)
+        _draw_text_with_shadow(img, n_lbl, (nx, ny),
+                               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.75,
+                               (255, 255, 255), thickness, shadow_offset=3)
+
+        # Heading oku (accent rengi, yaw yonune doner)
+        ang_rad = math.radians(float(heading_deg))
+        hdg_sin, hdg_cos = math.sin(ang_rad), math.cos(ang_rad)
+        hdg_len  = int(r * 0.68)
+        tail_len = int(r * 0.28)
+        hdg_tip  = (int(round(cx + hdg_sin * hdg_len)),
+                    int(round(cy - hdg_cos * hdg_len)))
+        hdg_tail = (int(round(cx - hdg_sin * tail_len)),
+                    int(round(cy + hdg_cos * tail_len)))
+        cv2.arrowedLine(img, hdg_tail, hdg_tip,
+                        UI_COLORS["accent"], thickness,
+                        line_type=cv2.LINE_AA, tipLength=0.28)
+
+        # Merkez nokta
+        cv2.circle(img, (cx, cy), max(4, thickness // 2 + 1),
+                   (255, 255, 255), -1, lineType=cv2.LINE_AA)
+
+        # Heading derece degeri (daire icinde alt)
+        hdg_lbl = f"{int(heading_deg % 360):03d}"
+        (tw, th), _ = cv2.getTextSize(hdg_lbl, cv2.FONT_HERSHEY_SIMPLEX,
+                                       font_scale * 0.65, thickness)
+        tx = cx - tw // 2
+        ty = cy + int(r * 0.62)
+        _draw_text_with_shadow(img, hdg_lbl, (tx, ty),
+                               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.65,
+                               UI_COLORS["accent"], thickness, shadow_offset=3)
+    except Exception:
+        pass
+
+
+def draw_progress_bar(img, current, total, bar_height=55, font_scale=2.4, thickness=6):
+    """Goruntunun en altinda frame ilerleme cubugu cizer.
+
+    - current: islenen frame indeksi (1'den baslar).
+    - total: toplam frame sayisi.
+    """
+    try:
+        h_img, w_img = img.shape[:2]
+        if total <= 0:
+            return
+        frac = max(0.0, min(1.0, float(current) / float(total)))
+        by0 = h_img - bar_height
+        by1 = h_img
+
+        # Arka plan
+        _draw_alpha_panel(img, 0, by0, w_img, by1,
+                          color=UI_COLORS["panel_bg"], alpha=0.72)
+
+        # Dolu kisim
+        fill_x = max(0, int(w_img * frac))
+        if fill_x > 0:
+            cv2.rectangle(img, (0, by0), (fill_x, by1), UI_COLORS["accent"], -1)
+
+        # Ayirici cizgi
+        cv2.line(img, (0, by0), (w_img, by0),
+                 UI_COLORS["panel_border"], max(2, thickness // 3), cv2.LINE_AA)
+
+        # Etiket: "12 / 86  |  ACC 91.7%"  -- dis fonksiyondan gelemez, sadece x/total
+        label = f"{current} / {total}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX,
+                                       font_scale, thickness)
+        tx = (w_img - tw) // 2
+        ty = by0 + (bar_height + th) // 2
+        _draw_text_with_shadow(img, label, (tx, ty),
+                               cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                               UI_COLORS["text_primary"], thickness, shadow_offset=3)
+    except Exception:
+        pass
 
 
 def _build_runtime_buttons():
@@ -1587,6 +1733,11 @@ PRED_BORDER = int(RUN_CFG["PRED_BORDER"])
 USE_PYRAMID = bool(RUN_CFG["USE_PYRAMID"])
 COARSE_SCALE = float(RUN_CFG["COARSE_SCALE"])
 ROI_PAD_FACTOR = float(RUN_CFG["ROI_PAD_FACTOR"])
+RAKIM_DUZELTME = int(RUN_CFG.get("RAKIM_DUZELTME", 26))
+BASARI_ESIGI_KM = float(RUN_CFG.get("BASARI_ESIGI_KM", 0.07))
+CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
+FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
+CAMERA_SENSOR_BY_MODEL = dict(RUN_CFG.get("CAMERA_SENSOR_BY_MODEL", {"L1D-20c": 13.2, "FC2204": 6.17}))
 
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
@@ -1767,14 +1918,15 @@ def match_three(img, templates):
             res_full[y1:y2 + 1, x1:x2 + 1] = res_roi
             return res_full
 
+        # Executor'u fonksiyon attribute olarak onbellekle; her cagirda yeniden olusturma.
+        if not hasattr(match_three, "_cpu_executor") or match_three._cpu_executor is None:
+            match_three._cpu_executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        ex = match_three._cpu_executor
         if USE_PYRAMID:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-                futs = [ex.submit(_match_pyramid, img_c, t) for t in tmps_c]
-                return tuple(f.result() for f in futs)
+            futs = [ex.submit(_match_pyramid, img_c, t) for t in tmps_c]
         else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-                futs = [ex.submit(_match_direct, img_c, t) for t in tmps_c]
-                return tuple(f.result() for f in futs)
+            futs = [ex.submit(_match_direct, img_c, t) for t in tmps_c]
+        return tuple(f.result() for f in futs)
 
     # GPU yol.
     try:
@@ -1885,7 +2037,15 @@ def _filter_candidates(paths, allowed_exts, label):
     return kept
 
 
-if __name__ == '__main__': 
+def run_pipeline(callbacks=None):
+    """Ana isleme hattini calistirir.
+
+    callbacks sozlugu (hepsi isteğe bağli):
+      'on_frame'       : fn(vis_bgr, metadata_dict) -- her frame hazir oldugunda
+      'on_log'         : fn(str) -- per-frame ozet log satirlari
+      'stop_check'     : fn() -> bool -- True donerse isleme durur
+      'ui_state_update': fn() -> dict -- runtime_ui_state'e merge edilecek dict
+    """
     # CUDA ortam bilgilerini bir kez logla (GPU/driver gorunurlugu icin).
     try:
         log_cuda_info_once()
@@ -2114,7 +2274,14 @@ if __name__ == '__main__':
         irtifa_dizisi=[]
         # 7) Her anlık görüntü için döngü
         for i in range(len(anlik_yol_list)):
-            
+            if callbacks and callbacks.get('stop_check') and callbacks['stop_check']():
+                break
+
+            # Harici callerdan UI durum guncelleme (Qt toggle'lar vs.)
+            _ui_upd = callbacks.get('ui_state_update') if callbacks else None
+            if _ui_upd:
+                runtime_ui_state.update(_ui_upd())
+
             # Bu karede anlamli bir kesisim tabanli tahmin uretildiyse True olur.
             intersection_found = False
             
@@ -2286,12 +2453,8 @@ if __name__ == '__main__':
 
             print(rakim)
 
-            rakim_duzeltme = 26
-            camera_sensor_by_model = {
-                "L1D-20c": 13.2,  # Mavic 2 Pro
-                "FC2204": 6.17,   # Mavic 2 Zoom
-            }
-            camera_sensor_genislik = camera_sensor_by_model.get(kamera_model)
+            rakim_duzeltme = RAKIM_DUZELTME
+            camera_sensor_genislik = CAMERA_SENSOR_BY_MODEL.get(kamera_model)
             if camera_sensor_genislik is None:
                 camera_sensor_genislik = float(RUN_CFG.get("DEFAULT_SENSOR_WIDTH_MM", 13.2))
                 print(f"Uyari: bilinmeyen kamera modeli ({kamera_model}), sensor genisligi fallback: {camera_sensor_genislik} mm")
@@ -2330,12 +2493,12 @@ if __name__ == '__main__':
             #################################################################################################
             
             # 7.1) Anlık görüntüyü oku ve yaw/ölçek ile döndürmeye hazırla
-            # Goruntuyu diskten oku (gri + renkli kopya).
-            image = cv2.imread(anlik_goruntu,0)
+            # Goruntuyu diskten bir kez renkli oku; gri versiyonu cvtColor ile uret (I/O tasarrufu).
             image_color = cv2.imread(anlik_goruntu, cv2.IMREAD_COLOR)
-            if image is None or image_color is None:
+            if image_color is None:
                 print("Anlik goruntu okunamadi, atlaniyor:", anlik_goruntu)
                 continue
+            image = cv2.cvtColor(image_color, cv2.COLOR_BGR2GRAY)
             
             # dim=(1000,750)
             
@@ -2410,9 +2573,9 @@ if __name__ == '__main__':
             # Kesenin merkezini bul (patch kirpma noktasi bu merkezden hesaplanir).
             center = (int(width/2), int(height/2))
             
-            fark=np.minimum(center[0],center[1])-272    # 544'lık frame'in elde edilen dikdörtgenin dışına taşmaması için yazıldı 
-            if fark>200:
-                fark=200
+            fark=np.minimum(center[0],center[1])-PATCH_HALF  # patch kirpma siniri
+            if fark > FARK_MAX:
+                fark = FARK_MAX
             elif fark<0:
                 print("merkezi dışarıda")
                 continue
@@ -2442,9 +2605,9 @@ if __name__ == '__main__':
             
             # cv2.imshow('Original image', image)
             # cv2.imshow('Rotated image', rotated_image)
-            if DEBUG:
+            if DEBUG and callbacks is None:
                 cv2.imshow('Rotated part', rotated_part2)
-                _ = cv2.waitKey(1) 
+                _ = cv2.waitKey(1)
             
             
             # 7.2) Template listesi (3 ölçek)
@@ -2475,7 +2638,7 @@ if __name__ == '__main__':
                 pre_list.append(t_resized)
 
             batch = np.stack(pre_list, axis=0)[..., None]
-            pred = model.predict(batch)
+            pred = model.predict(batch, verbose=0)
             if pred.ndim == 4:
                 pred = pred.squeeze(axis=-1)
 
@@ -2489,25 +2652,26 @@ if __name__ == '__main__':
             h,w =template[0].shape
                 
                 #plt.imshow(template[j], cmap = "gray")
-            if DEBUG:
+            if DEBUG and callbacks is None:
                 cv2.imshow("model uygulanmis", template[1])
-                _ = cv2.waitKey(1) 
+                _ = cv2.waitKey(1)
             # Merkez crop ile model cikisini alt-ust karsilastirmali goster.
-            try:
-                vis_crop = _compose_top_bottom(
-                    rotated_part2_color,
-                    template[1],
-                    top_title="Crop",
-                    bottom_title="Model",
-                    target_width=900,
-                    apply_colormap_bottom=False,
-                    caption_height=80,
-                    gap=10,
-                )
-                if vis_crop is not None:
-                    _show_image_fit("Crop vs Model", vis_crop, max_frac=0.75)
-            except Exception:
-                pass
+            if callbacks is None:
+                try:
+                    vis_crop = _compose_top_bottom(
+                        rotated_part2_color,
+                        template[1],
+                        top_title="Crop",
+                        bottom_title="Model",
+                        target_width=900,
+                        apply_colormap_bottom=False,
+                        caption_height=80,
+                        gap=10,
+                    )
+                    if vis_crop is not None:
+                        _show_image_fit("Crop vs Model", vis_crop, max_frac=0.75)
+                except Exception:
+                    pass
 
             # Anlik (orijinal) ve islenmis (model cikisi) goruntuyu yan yana hazirla.
             try:
@@ -2598,44 +2762,42 @@ if __name__ == '__main__':
             if (uzaklik_ab+uzaklik_bc-uzaklik_ac)<2 and benchmark==False:
                 cerceve_boyutu=cerceve_boyutu_deger
             else:
-                cerceve_boyutu+=100
-                
-                 
-                 #konum bulmak için kesişimler ve kesişim karelerinin koordinatları bulunuyor
-            kesisim_ab = intersection(a, b);
-            kesisim_bc = intersection(b, c);
-            kesisim_ac = intersection(a, c);
-                
-                
+                cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
+
+            #konum bulmak için kesişimler ve kesişim karelerinin koordinatları bulunuyor
+            kesisim_ab = intersection(a, b)
+            kesisim_bc = intersection(b, c)
+            kesisim_ac = intersection(a, c)
+
             if kesisim_ab!=() and kesisim_bc!=() and kesisim_ac!=():
                 kesisim_abc=intersection(kesisim_ab, kesisim_bc)
                 if kesisim_abc != ():
                     kare=(kesisim_abc[0],kesisim_abc[1],int(kesisim_abc[2]),int(kesisim_abc[3]))
                     print("konum: ",kare)
-                    cerceve_boyutu+=100
+                    cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                     intersection_found = True
-                
-            if not intersection_found and kesisim_ab!=() :
+
+            if not intersection_found and kesisim_ab!=():
                 kare=(kesisim_ab[0],kesisim_ab[1],int(kesisim_ab[2]),int(kesisim_ab[3]))
                 print("konum: ",kare)
-                cerceve_boyutu+=100
+                cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
-            elif not intersection_found and kesisim_bc!=() :
+            elif not intersection_found and kesisim_bc!=():
                 kare=(kesisim_bc[0],kesisim_bc[1],int(kesisim_bc[2]),int(kesisim_bc[3]))
                 print("konum: ",kare)
-                cerceve_boyutu+=100
+                cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
-            elif not intersection_found and kesisim_ac!=() :
+            elif not intersection_found and kesisim_ac!=():
                 kare=(kesisim_ac[0],kesisim_ac[1],int(kesisim_ac[2]),int(kesisim_ac[3]))
                 print("konum: ",kare)
-                cerceve_boyutu+=100
+                cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
-                        
+
             if not intersection_found:
                 print("kesişim yok")
                 kare=(0,0,0,0)
                 kare=b
-                cerceve_boyutu+=500
+                cerceve_boyutu = min(cerceve_boyutu + 500, CERCEVE_BOYUTU_MAX)
                 
             
             
@@ -2690,8 +2852,8 @@ if __name__ == '__main__':
             
             
             
-            # Başarı eşiği: 70 metre (0.07 km). Duruma göre TP/FP/TN/FN sayaçları güncellenir.
-            if(uzaklik<=0.07):
+            # Basari esigi RUN_CFG["BASARI_ESIGI_KM"] ile belirlenir (varsayilan 70 m).
+            if uzaklik <= BASARI_ESIGI_KM:
                 if intersection_found:
                     dogru_pozitif+=1
                 else:
@@ -2843,8 +3005,22 @@ if __name__ == '__main__':
                         thickness=10, line_type=cv2.LINE_AA, tipLength=0.25
                     )
 
-            cv2.circle(img, centerOfCircle, radius, (0,255,255), 25)   #tahmini konumu veren nokta
-            cv2.circle(img,(knm[1],knm[0]),radius,(0,255,0), 25)                   #gerçek konumu gösteren nokta
+            cv2.circle(img, centerOfCircle, radius, (0,255,255), 25)
+            cv2.circle(img, (knm[1],knm[0]), radius, (0,255,0), 25)
+            # Nokta etiketleri: KNM=tahmin (cyan), GPS=gercek konum (yesil)
+            _lbl_font = cv2.FONT_HERSHEY_SIMPLEX
+            _lbl_scale = 3.0
+            _lbl_thick = 8
+            _lbl_offset = 55
+            try:
+                cx_l, cy_l = centerOfCircle[0] + _lbl_offset, centerOfCircle[1] - _lbl_offset
+                cv2.putText(img, "KNM", (cx_l + 3, cy_l + 3), _lbl_font, _lbl_scale, (0,0,0), _lbl_thick + 2, cv2.LINE_AA)
+                cv2.putText(img, "KNM", (cx_l, cy_l), _lbl_font, _lbl_scale, (0,255,255), _lbl_thick, cv2.LINE_AA)
+                gx_l, gy_l = knm[1] + _lbl_offset, knm[0] - _lbl_offset
+                cv2.putText(img, "GPS", (gx_l + 3, gy_l + 3), _lbl_font, _lbl_scale, (0,0,0), _lbl_thick + 2, cv2.LINE_AA)
+                cv2.putText(img, "GPS", (gx_l, gy_l), _lbl_font, _lbl_scale, (0,255,0), _lbl_thick, cv2.LINE_AA)
+            except Exception:
+                pass
                     #plt.figure()
                     
                 
@@ -2883,42 +3059,62 @@ if __name__ == '__main__':
                 
             window_name = 'Image'
 
-            # 7.4) HUD: başlık (yaw), uçuş yüksekliği ve hatayı göster; ölçek çubuğu ve hedef işaretleri çiz
-            hud_lines = [
-                f"HDG: {yaw:.1f} deg",
-                f"ALT: {int(ucus_yuksekligi)} m",
-                f"ERR: {int(uzaklik*1000)} m",
-                f"SPD: {speed_mps:.2f} m/s ({speed_mps*3.6:.2f} km/h)",
-            ]
-            # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
-            _hud_font_scale = 4.5
-            _hud_thickness = 14
-            _hud_padding = 20
-            try:
-                _hud_sizes = [cv2.getTextSize(s, cv2.FONT_HERSHEY_SIMPLEX,
-                              _hud_font_scale, _hud_thickness)[0] for s in hud_lines]
-                _hud_max_h = max(h for (_, h) in _hud_sizes)
-                _hud_line_gap = int(_hud_max_h * 1.6)
-                _hud_panel_h = _hud_line_gap * len(hud_lines) + _hud_padding
-                _hud_y = max(150, res.shape[0] - _hud_panel_h - 40)
-            except Exception:
-                _hud_y = max(150, res.shape[0] - 600)
-            draw_info_panel(
-                res,
-                hud_lines,
-                top_left=(25, _hud_y),
-                font=cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale=_hud_font_scale,
-                thickness=_hud_thickness,
-                alpha=0.55,
-                padding=_hud_padding,
-                corner_radius=18,
-            )
+            # 7.4) HUD: navigasyon bilgilerini goster (yalnizca standalone modda)
+            _toplam_frame = len(anlik_yol_list)
+            _islenen_frame = i + 1
+            _acc_pct = (dogru_tahmin / _islenen_frame * 100.0) if _islenen_frame > 0 else 0.0
+            if callbacks is None:
+                hud_lines = [
+                    f"HDG: {yaw:.1f} deg",
+                    f"ALT: {int(ucus_yuksekligi)} m",
+                    f"ERR: {int(uzaklik * 1000)} m",
+                    f"SPD: {speed_mps:.2f} m/s ({speed_mps*3.6:.2f} km/h)",
+                    f"LAT: {lat_tahmin:.6f}",
+                    f"LON: {long_tahmin:.6f}",
+                    f"FRAME: {_islenen_frame}/{_toplam_frame}  ACC: {_acc_pct:.1f}%",
+                ]
+                # HUD panelini sol alt koseye yerlestir (butonlarla cakismasin)
+                _hud_font_scale = 4.5
+                _hud_thickness = 14
+                _hud_padding = 20
+                try:
+                    _hud_sizes = [cv2.getTextSize(s, cv2.FONT_HERSHEY_SIMPLEX,
+                                  _hud_font_scale, _hud_thickness)[0] for s in hud_lines]
+                    _hud_max_h = max(h for (_, h) in _hud_sizes)
+                    _hud_line_gap = int(_hud_max_h * 1.6)
+                    _hud_panel_h = _hud_line_gap * len(hud_lines) + _hud_padding
+                    _hud_y = max(150, res.shape[0] - _hud_panel_h - 40)
+                except Exception:
+                    _hud_y = max(150, res.shape[0] - 600)
+                draw_info_panel(
+                    res,
+                    hud_lines,
+                    top_left=(25, _hud_y),
+                    font=cv2.FONT_HERSHEY_SIMPLEX,
+                    font_scale=_hud_font_scale,
+                    thickness=_hud_thickness,
+                    alpha=0.55,
+                    padding=_hud_padding,
+                    corner_radius=18,
+                )
 
-            # Mekansal cozum biliniyorsa 100 m olcek cubugunu ciz.
+            # Mekansal cozum biliniyorsa 100 m olcek cubugunu ciz (rounded panel).
             try:
-                draw_scale_bar(res, mekansal_cozunurluk, scale_meters=100, margin=80, bar_height=40,
-                               color=(255,255,255), text_color=(255,255,255), font_scale=3, thickness=8)
+                draw_scale_bar(res, mekansal_cozunurluk, scale_meters=100, margin=120, bar_height=50,
+                               color=(255,255,255), text_color=(255,255,255), font_scale=3.5, thickness=9)
+            except Exception:
+                pass
+
+            # Sag ust kosede pusula: kuzey oku (beyaz) + heading oku (accent).
+            try:
+                draw_compass(res, yaw, margin=160, size=320, font_scale=2.8, thickness=7)
+            except Exception:
+                pass
+
+            # En altta frame ilerleme cubugu.
+            try:
+                draw_progress_bar(res, _islenen_frame, _toplam_frame,
+                                  bar_height=60, font_scale=2.5, thickness=7)
             except Exception:
                 pass
 
@@ -2934,54 +3130,81 @@ if __name__ == '__main__':
 
                 
                 
-            if UI_BUTTONS_ENABLED:
-                try:
-                    # Mouse callback icin goruntu boyutunu guncelle
-                    runtime_ui_ctx["img_size"] = (res.shape[1], res.shape[0])
-                    _draw_runtime_buttons(
-                        res,
-                        runtime_ui_state,
-                        runtime_ui_buttons,
-                        font_scale=UI_BUTTON_FONT_SCALE,
-                        thickness=UI_BUTTON_THICKNESS,
-                        ui_scale=UI_BUTTON_SCALE,
-                        display_size=(UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT),
+            # Harici callerlar (Qt UI) icin on_frame + on_log callback
+            if callbacks:
+                _cbs_n = len(anlik_yol_list)
+                _cbs_i = i + 1
+                _cbs_meta = {
+                    "hdg": yaw, "alt": int(ucus_yuksekligi),
+                    "err_m": int(uzaklik * 1000),
+                    "spd_ms": speed_mps, "spd_kmh": speed_mps * 3.6,
+                    "lat": lat_tahmin, "lon": long_tahmin,
+                    "frame": _cbs_i, "total": _cbs_n,
+                    "acc": (dogru_tahmin / _cbs_i * 100.0),
+                    "correct": dogru_tahmin, "wrong": yanlis_tahmin,
+                    "max_val2": float(max_val2),
+                    "calisma_s": time.time() - baslangic_zamani,
+                    "vis_crop":  rotated_part2_color.copy() if rotated_part2_color is not None else None,
+                    "vis_model": template[1].copy()         if template[1]          is not None else None,
+                }
+                if callbacks.get('on_frame'):
+                    callbacks['on_frame'](res.copy(), _cbs_meta)
+                if callbacks.get('on_log'):
+                    callbacks['on_log'](
+                        f"[{_cbs_i}/{_cbs_n}] ERR={int(uzaklik*1000)}m  "
+                        f"ACC={dogru_tahmin/_cbs_i*100:.1f}%  "
+                        f"TM={max_val2:.3f}  t={time.time()-baslangic_zamani:.2f}s"
                     )
-                except Exception:
-                    pass
 
-            cv2.namedWindow("konum", cv2.WINDOW_NORMAL)  
-            cv2.resizeWindow("konum", UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT)
-            if UI_BUTTONS_ENABLED and (not runtime_ui_cb_set):
-                try:
-                    cv2.setMouseCallback("konum", _runtime_buttons_mouse_cb, runtime_ui_ctx)
-                    runtime_ui_cb_set = True
-                except Exception:
-                    pass
-            cv2.imshow("konum", res)
-            key = cv2.waitKey(1) & 0xFF
-            if UI_BUTTONS_ENABLED:
-                # Klavye kisayollari:
-                # T=trajektori, I=ic cerceve, O=ROI cercevesi, R=TM kutulari, H=panel.
-                if key in (ord('t'), ord('T')):
-                    runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
-                elif key in (ord('i'), ord('I')):
-                    runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", False))
-                elif key in (ord('o'), ord('O')):
-                    runtime_ui_state["roi_frame"] = not bool(runtime_ui_state.get("roi_frame", True))
-                elif key in (ord('r'), ord('R')):
-                    runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
-                elif key in (ord('h'), ord('H')):
-                    runtime_ui_state["_panel_collapsed"] = not bool(runtime_ui_state.get("_panel_collapsed", False))
-            
-                # cv2.rectangle(img, top_left, bottom_right,(255,0,0),35)
-                # plt.figure()
-                # plt.subplot(121), plt.imshow(res, cmap = "gray")
-                # plt.title("Eşleşen Sonuç"), plt.axis("on")
-                # plt.subplot(122), plt.imshow(img)
-                # plt.title("Tespit edilen Sonuç"), plt.axis("on")
-                # plt.suptitle(meth)
-                # img = cv2.imread(harita,0)
+            if callbacks is None:
+                if UI_BUTTONS_ENABLED:
+                    try:
+                        # Mouse callback icin goruntu boyutunu guncelle
+                        runtime_ui_ctx["img_size"] = (res.shape[1], res.shape[0])
+                        _draw_runtime_buttons(
+                            res,
+                            runtime_ui_state,
+                            runtime_ui_buttons,
+                            font_scale=UI_BUTTON_FONT_SCALE,
+                            thickness=UI_BUTTON_THICKNESS,
+                            ui_scale=UI_BUTTON_SCALE,
+                            display_size=(UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT),
+                        )
+                    except Exception:
+                        pass
+
+                cv2.namedWindow("konum", cv2.WINDOW_NORMAL)
+                cv2.resizeWindow("konum", UI_WINDOW_WIDTH, UI_WINDOW_HEIGHT)
+                if UI_BUTTONS_ENABLED and (not runtime_ui_cb_set):
+                    try:
+                        cv2.setMouseCallback("konum", _runtime_buttons_mouse_cb, runtime_ui_ctx)
+                        runtime_ui_cb_set = True
+                    except Exception:
+                        pass
+                cv2.imshow("konum", res)
+                key = cv2.waitKey(1) & 0xFF
+                if UI_BUTTONS_ENABLED:
+                    # Klavye kisayollari:
+                    # T=trajektori, I=ic cerceve, O=ROI cercevesi, R=TM kutulari, H=panel.
+                    if key in (ord('t'), ord('T')):
+                        runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
+                    elif key in (ord('i'), ord('I')):
+                        runtime_ui_state["inner_frame"] = not bool(runtime_ui_state.get("inner_frame", False))
+                    elif key in (ord('o'), ord('O')):
+                        runtime_ui_state["roi_frame"] = not bool(runtime_ui_state.get("roi_frame", True))
+                    elif key in (ord('r'), ord('R')):
+                        runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
+                    elif key in (ord('h'), ord('H')):
+                        runtime_ui_state["_panel_collapsed"] = not bool(runtime_ui_state.get("_panel_collapsed", False))
+
+                    # cv2.rectangle(img, top_left, bottom_right,(255,0,0),35)
+                    # plt.figure()
+                    # plt.subplot(121), plt.imshow(res, cmap = "gray")
+                    # plt.title("Eşleşen Sonuç"), plt.axis("on")
+                    # plt.subplot(122), plt.imshow(img)
+                    # plt.title("Tespit edilen Sonuç"), plt.axis("on")
+                    # plt.suptitle(meth)
+                    # img = cv2.imread(harita,0)
         
         
             bitis_zamani = time.time()
@@ -3066,3 +3289,5 @@ if __name__ == '__main__':
         input("pause")
 
 
+if __name__ == '__main__':
+    run_pipeline()
