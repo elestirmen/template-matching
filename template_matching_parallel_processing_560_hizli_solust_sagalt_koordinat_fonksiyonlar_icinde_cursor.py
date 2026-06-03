@@ -14,11 +14,10 @@ Klasorler:
 - parcalar/: anlik goruntu klasoru
 """
 # -----------------------------------------------------------------------------
-# RUN_CFG (UST BLOK):
-# Bu blok erken asamada okunan UI/trajectory ve genel varsayilanlari tutar.
-# DOSYADA IKI RUN_CFG VARDIR:
-# 1) Bu ust blok: UI + trajectory + erken init degerleri.
-# 2) Asagidaki ikinci blok: ana pipeline'da kullanilan cekirdek eslestirme ayarlari.
+# RUN_CFG:
+# Tum calisma ayarlarini tutan TEK sozluk. Asagida okunduktan sonra
+# tip-guvenli sabitlere (bool/int/float) donusturulur. UI/trajectory,
+# eslestirme, veri yollari ve loglama ayarlari hepsi buradadir.
 #
 # Parametre mantigi (genel):
 # - "Boyut / alan / pad" degerini artirmak -> daha guvenli ama daha yavas.
@@ -93,9 +92,46 @@ RUN_CFG = {
     "CERCEVE_BOYUTU_MAX": 8000,  # Adaptif buyumede izin verilen maksimum cerceve boyutu.
     "FARK_MAX": 200,             # Patch kaydirma maksimum piksel siniri.
 
+    # Harita/kenar sabitleri (eskiden kod icinde gomulu sabit sayilardi):
+    "MAP_RES_CM_PER_PX": 29.85,  # Referans harita cozunurlugu (cm/piksel). Olcek ve HIZ hesabinda kullanilir.
+    "KENAR_SINIR_PX": 272,       # Harita kenarina bu kadar yakin konumlar atlanir (piksel).
+
+    # Kalman filtresi (gorsel konum tahminini zamansal filtreleme/yumusatma):
+    # - Sabit hiz (constant velocity) modeli; durum = [x, y, vx, vy].
+    # - KAPALIYKEN (False) mevcut davranis BIREBIR korunur (benchmark sayilari degismez).
+    # - Acikken: arama penceresi Kalman'in ongordugu konuma merkezlenir (hareketi
+    #   onceden tahmin eder), olcum guvene gore agirliklanir (uyarlanabilir R) ve
+    #   ongoruden cok uzak olcumler kapilama (gating) ile reddedilir -> GPS gerektirmez.
+    # Kalman = sabit-KONUM modeli (simulasyon projesindeki PositionKalmanFilter ile ayni).
+    # Hiz ekstrapole etmez; her gecerli olcumde olcume dogru cekilir -> sapamaz.
+    # Varsayilanlar simulasyon projesinden alindi (urgup, ~30cm/px harita).
+    "USE_KALMAN": False,             # True: tahmin Kalman ile filtrelenir. (yalnizca BENCHMARK=False'te etkin)
+    "KALMAN_PROCESS_NOISE": 50.0,    # Surec gurultu std (px). Buyudukce olcume daha cabuk uyar (az yumusatma).
+    "KALMAN_MEASUREMENT_NOISE": 8.0, # Olcum gurultu std (px). Bu veri seti hizli + olcum cok iyi oldugundan
+                                     #   simulasyon'un 80'i yerine KUCUK (~8px) secildi: iyi karelerde olcum neredeyse
+                                     #   aynen gecer (lag yok), kesisimsiz karelerde coast aykiriyi yutar. (urgup rotasi:
+                                     #   GPS'siz RMSE 180m -> 33m; GPS-koltuklu OFF=59m'yi bile geciyor.)
+    "KALMAN_CONF_GOOD": 1.0,         # 3'lu kesisim guveni (R bu degere bolunur; 1.0 = tam guven).
+    "KALMAN_CONF_OK": 0.5,           # Ikili kesisim guveni (daha dusuk -> olcume daha az guven).
+    "KALMAN_WINDOW_FOLLOWS": True,   # True (ONERILEN): arama cercevesi filtrelenmis Kalman konumuna odaklanir.
+                                     #   Kesisimsiz karelerde pencere coast edilmis (iyi) konumu takip eder -> kaba
+                                     #   aykiri/yanlis-eslesme kumelerinden kurtulur (GPS gerektirmeden).
+
+    # GPS tabanli kayip-onleme (300m geri donus). DIKKAT: gercek GPS hatasini kullanir,
+    # yani GPS-denied sahada GECERSIZDIR (yalnizca degerlendirme/benchmark icin bir koltuk degnegi).
+    # Adil (gorsel-yalniz) karsilastirma icin False yapin. Kalman acikken zaten devre disidir.
+    "USE_GPS_REVERT": True,          # True: mevcut davranis korunur. False: GPS koltuk degnegi kapali.
+
     # Calisma sonu bekleme
     "WAIT_PER_MODEL": False,  # True: her model dongusu sonunda input bekler.
     "WAIT_ON_EXIT": False,    # True: program bitiminde input bekler.
+
+    # Logging (opsiyonel teshis ciktisi):
+    # - Mevcut print() satirlari KORUNUR; bu ayarlar yalnizca ek logger'i etkiler.
+    # - Varsayilan "WARNING" oldugundan normal calismada YENI cikti uretilmez.
+    # - "DEBUG"/"INFO" yapilirsa sessiz hata bloklari ve ek teshisler gorunur olur.
+    "LOG_LEVEL": "WARNING",   # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+    "LOG_TO_FILE": False,     # True: ayrica tm_run.log dosyasina yazar.
 }
 
 # RUN_CFG -> tip guvenli sabitler.
@@ -143,6 +179,7 @@ from tensorflow.keras.layers import Conv2DTranspose
 import pickle
 import multiprocessing
 import warnings
+import logging
 import math
 import time
 import rasterio as rio
@@ -158,6 +195,51 @@ from pyproj import Transformer
 import concurrent.futures
 warnings.filterwarnings("ignore")
 dirname = os.path.dirname(os.path.abspath(__file__))
+
+
+# -----------------------------------------------------------------------------
+# Logging altyapisi (opsiyonel, davranis-koruyan):
+# - Mevcut print() ciktilari OLDUGU GIBI KORUNUR.
+# - Bu logger ek/teshis amaclidir; varsayilan seviye WARNING oldugundan
+#   normal calismada YENI cikti uretmez (DEBUG/INFO ciktilari bastirilir).
+# - RUN_CFG["LOG_LEVEL"] / RUN_CFG["LOG_TO_FILE"] ile yapilandirilir.
+# - Kullanim:  log.info(...) / log.debug(...) / log.warning(...) / log.error(...)
+# -----------------------------------------------------------------------------
+log = logging.getLogger("tm")
+
+
+def setup_logging(level=None, to_file=None):
+    """Modul logger'ini yapilandirir.
+
+    - Birden cok cagride yinelenen handler eklemez (idempotent).
+    - print() satirlarini ETKILEMEZ; yalnizca `log` nesnesini hazirlar.
+    """
+    if level is None:
+        level = RUN_CFG.get("LOG_LEVEL", "WARNING")
+    if isinstance(level, str):
+        level = getattr(logging, level.strip().upper(), logging.WARNING)
+    if to_file is None:
+        to_file = bool(RUN_CFG.get("LOG_TO_FILE", False))
+
+    log.setLevel(level)
+    log.propagate = False
+
+    if not any(getattr(h, "_tm_handler", False) for h in log.handlers):
+        fmt = logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s", "%H:%M:%S")
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        sh._tm_handler = True
+        log.addHandler(sh)
+        if to_file:
+            try:
+                fh = logging.FileHandler(os.path.join(dirname, "tm_run.log"), encoding="utf-8")
+                fh.setFormatter(fmt)
+                fh._tm_handler = True
+                log.addHandler(fh)
+            except Exception:
+                # Dosya handler'i kurulamazsa sessizce yalnizca konsola yaz.
+                pass
+    return log
 
 
 class _CompatConv2DTranspose(Conv2DTranspose):
@@ -500,25 +582,8 @@ def intersection(a,b):
     return (x, y, w, h)
 
 
-def dosyaya_yaz_t(sonuclar,dogru_tahmin,yanlis_tahmin):    
-    
-    #model_name="sonuclar_"+model_name
-    sonuclar_dosya = open("sonuclar.txt", "w")
-    # sonuclar = np.vstack((sonuclar,dogru_tahmin, yanlis_tahmin)).T
-    # print(sonuclar)
-    
-    df = pd.DataFrame(sonuclar, columns=['goruntu', 'sonuc', 'gercek_latitude', 'gercek_longitude', 'tahmini_latitude', 'tahmini_longitude'])
-    
-    # df.loc[len(df.index)] = ["","",str(dogru_tahmin)+" dogru", str(yanlis_tahmin)+" yanlis"] 
-
-    sonuclar_dosya.write(df.to_string())
-    sonuclar_dosya.close()
-    
-    df.to_csv("sonuclar.csv", index=False)
-    
-    
-
-
+# Not: Kullanilmayan eski `dosyaya_yaz_t()` fonksiyonu kaldirildi.
+# Sonuc yazimi `dosyaya_yaz()` uzerinden yapiliyor.
 import pandas as pd
 
 def dosyaya_yaz(sonuclar, dogru_tahmin, yanlis_tahmin):
@@ -1739,6 +1804,19 @@ CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
 FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
 CAMERA_SENSOR_BY_MODEL = dict(RUN_CFG.get("CAMERA_SENSOR_BY_MODEL", {"L1D-20c": 13.2, "FC2204": 6.17}))
 
+# Harita/kenar sabitleri (eskiden kod icinde gomulu sayilardi)
+MAP_RES_CM_PER_PX = float(RUN_CFG.get("MAP_RES_CM_PER_PX", 29.85))
+KENAR_SINIR_PX = int(RUN_CFG.get("KENAR_SINIR_PX", 272))
+
+# Kalman filtresi sabitleri (USE_KALMAN=False iken mevcut davranis korunur)
+USE_KALMAN = bool(RUN_CFG.get("USE_KALMAN", False))
+KALMAN_PROCESS_NOISE = float(RUN_CFG.get("KALMAN_PROCESS_NOISE", 50.0))
+KALMAN_MEASUREMENT_NOISE = float(RUN_CFG.get("KALMAN_MEASUREMENT_NOISE", 8.0))
+KALMAN_CONF_GOOD = float(RUN_CFG.get("KALMAN_CONF_GOOD", 1.0))
+KALMAN_CONF_OK = float(RUN_CFG.get("KALMAN_CONF_OK", 0.5))
+KALMAN_WINDOW_FOLLOWS = bool(RUN_CFG.get("KALMAN_WINDOW_FOLLOWS", True))
+USE_GPS_REVERT = bool(RUN_CFG.get("USE_GPS_REVERT", True))
+
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
 else:
@@ -1774,48 +1852,9 @@ def find_corner_coordinates(center_latitude, center_longitude, pixel_distance, G
 
 
 
-def match(img,template):
-    # CUDA uygunsa once GPU'da dene; basarisiz olursa CPU'ya geri don.
-    method = cv2.TM_CCOEFF_NORMED
-
-    # CUDA durum bayraklarini ilk cagride bir kez baslat.
-    global _CUDA_TM_INITIALIZED, _CUDA_TM_AVAILABLE, _CUDA_TM_DISABLED
-    try:
-        _CUDA_TM_INITIALIZED
-    except NameError:
-        _CUDA_TM_INITIALIZED = False
-        _CUDA_TM_AVAILABLE = False
-        _CUDA_TM_DISABLED = False
-
-    if not _CUDA_TM_INITIALIZED:
-        try:
-            _CUDA_TM_AVAILABLE = hasattr(cv2, 'cuda') and cv2.cuda.getCudaEnabledDeviceCount() > 0 and hasattr(cv2.cuda, 'createTemplateMatching')
-        except Exception:
-            _CUDA_TM_AVAILABLE = False
-        _CUDA_TM_INITIALIZED = True
-
-    if _CUDA_TM_AVAILABLE and not _CUDA_TM_DISABLED and img.dtype == np.uint8 and template.dtype == np.uint8 and img.ndim == 2 and template.ndim == 2:
-        try:
-            # Giris goruntusu ve template'i GPU'ya yukle.
-            g_img = cv2.cuda_GpuMat()
-            g_tmpl = cv2.cuda_GpuMat()
-            g_img.upload(img)
-            g_tmpl.upload(template)
-
-            # Kaynak tipini belirle (tek kanalli 8-bit).
-            src_type = cv2.CV_8UC1 if hasattr(cv2, 'CV_8UC1') else cv2.CV_8U
-            tm = cv2.cuda.createTemplateMatching(src_type, method)
-            g_res = tm.match(g_img, g_tmpl)
-            res = g_res.download()
-            return res
-        except Exception as e:
-            print("CUDA template matching kullanılamadı, CPU'ya düşülüyor:", e)
-            _CUDA_TM_DISABLED = True
-
-    # CPU yedek yol.
-    res = cv2.matchTemplate(img, template, method, None)
-    return res
-
+# Not: Eski tekil `match()` fonksiyonu kaldirildi (hicbir yerde cagrilmiyordu).
+# Template matching artik `match_three()` uzerinden yapiliyor; CUDA durum
+# baslatma mantigi `_init_cuda_tm_state()` icinde tek noktada toplanmistir.
 def _init_cuda_tm_state():
     global _CUDA_TM_INITIALIZED, _CUDA_TM_AVAILABLE, _CUDA_TM_DISABLED
     try:
@@ -2037,6 +2076,67 @@ def _filter_candidates(paths, allowed_exts, label):
     return kept
 
 
+# -----------------------------------------------------------------------------
+# Kalman filtresi (sabit-KONUM modeli, 2B) -- simulasyon projesindeki
+# PositionKalmanFilter ile ayni tasarim.
+# -----------------------------------------------------------------------------
+# Gorsel template-matching tahminini zamansal olarak yumusatir.
+#   Durum  : (x, y)  (x = sutun/col, y = satir/row; harita-piksel uzayinda)
+#   Olcum  : (x, y)  (uc template kesisiminin merkezi)
+#
+# Tasarim notu (NEDEN hiz durumu YOK):
+#   Sabit-HIZ modeli + innovation kapilamasi + pencere-takibi bu veri setinde
+#   sapmaya (divergence) yol aciyordu: filtre yanlis hizla "coast" edip arama
+#   penceresini suruklUyor, olcumler bozuluyor ve hata kendini besliyordu.
+#   Sabit-KONUM modeli bunu engeller: ileriye dogru hiz EKSTRAPOLE ETMEZ;
+#   her gecerli olcumde olcume dogru cekilir -> asla sapip kilitlenemez.
+# - predict(motion_x, motion_y): (varsa) bilinen/komut hareketini ekler ve
+#   belirsizligi (varyans) process_noise kadar buyutur. Offline tekrar oynatmada
+#   komut hareketi olmadigi icin (0, 0) verilir -> sadece belirsizlik buyur.
+# - update(mx, my, confidence): olcumle gunceller; confidence (0,1] buyudukce
+#   olcume daha cok guvenilir (R, confidence'a bolunur). Dusuk kaliteli kareler
+#   update'e hic sokulmaz (cagiran taraf karar verir) -> "coast".
+# Saf Python (math): cv2/tensorflow/numpy gerektirmez (birim testi kolaydir).
+class PositionKalmanFilter:
+    """Sabit-konum modelli 2B konum Kalman filtresi (per-eksen skaler)."""
+
+    def __init__(self, initial_position, process_noise=50.0, measurement_noise=80.0):
+        self._x = float(initial_position[0])
+        self._y = float(initial_position[1])
+        self._var_x = float(measurement_noise) ** 2
+        self._var_y = float(measurement_noise) ** 2
+        self._q = float(process_noise) ** 2       # surec gurultu varyansi
+        self._r = float(measurement_noise) ** 2   # olcum gurultu varyansi
+
+    def predict(self, motion_x=0.0, motion_y=0.0):
+        """(Varsa) bilinen hareketi uygula ve belirsizligi buyut."""
+        self._x += float(motion_x)
+        self._y += float(motion_y)
+        self._var_x += self._q
+        self._var_y += self._q
+
+    def update(self, measured_x, measured_y, confidence=1.0):
+        """Olcumle gunceller. confidence yuksek -> olcume daha cok guven."""
+        r_scaled = self._r / max(0.01, float(confidence))
+        k_x = self._var_x / (self._var_x + r_scaled)
+        k_y = self._var_y / (self._var_y + r_scaled)
+        self._x += k_x * (float(measured_x) - self._x)
+        self._y += k_y * (float(measured_y) - self._y)
+        self._var_x *= max(0.0, 1.0 - k_x)
+        self._var_y *= max(0.0, 1.0 - k_y)
+
+    @property
+    def position(self):
+        return (int(round(self._x)), int(round(self._y)))
+
+    def position_f(self):
+        return (self._x, self._y)
+
+    @property
+    def uncertainty_px(self):
+        return math.sqrt((self._var_x + self._var_y) / 2.0)
+
+
 def run_pipeline(callbacks=None):
     """Ana isleme hattini calistirir.
 
@@ -2046,11 +2146,18 @@ def run_pipeline(callbacks=None):
       'stop_check'     : fn() -> bool -- True donerse isleme durur
       'ui_state_update': fn() -> dict -- runtime_ui_state'e merge edilecek dict
     """
+    # Opsiyonel logger'i hazirla (varsayilan WARNING -> normalde sessiz).
+    try:
+        setup_logging()
+        log.info("run_pipeline baslatildi.")
+    except Exception:
+        pass
+
     # CUDA ortam bilgilerini bir kez logla (GPU/driver gorunurlugu icin).
     try:
         log_cuda_info_once()
     except Exception:
-        pass
+        log.debug("log_cuda_info_once basarisiz oldu.", exc_info=True)
     
     # 1) Yol/klasor hazirligi: harita, model, anlik goruntu ve DEM
     harita_yol = RUN_CFG["HARITA_DIR"]
@@ -2244,6 +2351,9 @@ def run_pipeline(callbacks=None):
         speed_vx_mps = 0.0
         speed_vy_mps = 0.0
         speed_mps = 0.0
+        # Kalman filtresi durumu (her harita/model cifti icin sifirlanir).
+        kf = None
+        kf_initialized = False
         
         model_yolu = model_path_list[k]
         model = load_model_compat(model_yolu)        
@@ -2348,42 +2458,43 @@ def run_pipeline(callbacks=None):
             
                        
                 
+            # --- Kalman: arama penceresi merkezi ---
+            # KALMAN_WINDOW_FOLLOWS acikken pencere, filtrelenmis Kalman konumuna
+            # odaklanir (tek-adim yanlis eslesmelere karsi daha dayanikli). Sabit-konum
+            # modeli ileriye hiz ekstrapole etmedigi icin pencere suruklenip sapamaz.
+            kf_pred_center = None  # (sutun, satir)
+            if USE_KALMAN and benchmark == False and KALMAN_WINDOW_FOLLOWS and kf_initialized and kf is not None:
+                kf_pred_center = kf.position  # (sutun, satir)
+
             # İlk karede EXIF konumuna yakın çevrede, sonraki karelerde bir önceki tahmine yakın çevrede ara
             if benchmark==False:
-                
+                # Arama cercevesi merkezi:
+                #  - ilk kare: EXIF/GPS pikseli (knm)
+                #  - sonraki kareler: bir onceki tahmin (konum)
+                #  - Kalman acik+WINDOW_FOLLOWS: filtrelenmis Kalman konumu
                 if i==0:
-                    sol=-int(cerceve_boyutu/2)+knm[0]
-                    sag=+int(cerceve_boyutu/2)+knm[0]
-                    ust=-int(cerceve_boyutu/2)+knm[1]
-                    alt=+int(cerceve_boyutu/2)+knm[1]
-                    
-                    if sol<0:
-                        sol=0
-                    if sag<0:
-                        sag= 0
-                    if ust<0:
-                        ust= 0
-                    if alt<0:
-                        alt= 0
-                    cerceve=img[sol:sag,ust:alt]
+                    merkez_satir, merkez_sutun = knm[0], knm[1]
                     konum=(knm[1],knm[0])
                 else:
-                    sol=-int(cerceve_boyutu/2)+konum[1]
-                    sag=+int(cerceve_boyutu/2)+konum[1]
-                    ust=-int(cerceve_boyutu/2)+konum[0]
-                    alt=+int(cerceve_boyutu/2)+konum[0]
-                    
-                    if sol<0:
-                        sol=0
-                    if sag<0:
-                        sag= 0
-                    if ust<0:
-                        ust= 0
-                    if alt<0:
-                        alt= 0
-                    cerceve=img[sol:sag,ust:alt]
-                
-                    
+                    merkez_satir, merkez_sutun = konum[1], konum[0]
+                if kf_pred_center is not None:
+                    merkez_sutun, merkez_satir = kf_pred_center[0], kf_pred_center[1]
+
+                sol=-int(cerceve_boyutu/2)+merkez_satir
+                sag=+int(cerceve_boyutu/2)+merkez_satir
+                ust=-int(cerceve_boyutu/2)+merkez_sutun
+                alt=+int(cerceve_boyutu/2)+merkez_sutun
+
+                if sol<0:
+                    sol=0
+                if sag<0:
+                    sag= 0
+                if ust<0:
+                    ust= 0
+                if alt<0:
+                    alt= 0
+                cerceve=img[sol:sag,ust:alt]
+
             else:
                 cerceve_boyutu=cerceve_boyutu_deger
                 sol=-int(cerceve_boyutu/2)+knm[0]
@@ -2417,10 +2528,10 @@ def run_pipeline(callbacks=None):
             
             
             
-            if knm[0]<272 or knm[0]>img.shape[0]-272:
+            if knm[0]<KENAR_SINIR_PX or knm[0]>img.shape[0]-KENAR_SINIR_PX:
                 print("dışarıda")
                 continue
-            elif knm[1]<272 or knm[1]>img.shape[1]-272:
+            elif knm[1]<KENAR_SINIR_PX or knm[1]>img.shape[1]-KENAR_SINIR_PX:
                 print("dışarıda")
                 continue
             
@@ -2477,7 +2588,7 @@ def run_pipeline(callbacks=None):
             if mekansal_cozunurluk <= 0:
                 print("Mekansal cozum gecersiz, atlaniyor:", mekansal_cozunurluk)
                 continue
-            olcek_scale_test = (mekansal_cozunurluk / 29.85)
+            olcek_scale_test = (mekansal_cozunurluk / MAP_RES_CM_PER_PX)
                 
                 
             print("kamera model= ",kamera_model)
@@ -2814,17 +2925,57 @@ def run_pipeline(callbacks=None):
             if konum_y>img.shape[1]:
                 konum_y=img.shape[1]-1
             if konum_x>img.shape[0]:
-                konum_x=img.shape[0]-1                
-                     
-            
-            
-            konum=(konum_y,konum_x)
-            
-           
-            
-            
-            
-            
+                konum_x=img.shape[0]-1
+
+
+
+            # Ham (filtrelenmemis) template-matching olcumu: (sutun, satir).
+            # ONEMLI: `konum` HAM olcum olarak kalir cunku bir SONRAKI karenin arama
+            # cercevesini surer (WINDOW_FOLLOWS=False iken). Kalman yalnizca CIKTIYI
+            # (konum_filt) yumusatir; boylece arama penceresi Kalman'dan AYRIK kalir ve
+            # filtre sapsa bile olcumler bozulmaz (geri-besleme dongusu kirilir).
+            konum_olcum = (konum_y, konum_x)
+            konum = konum_olcum
+            konum_filt = konum_olcum  # filtrelenmis cikti (varsayilan = ham)
+
+            # --- Kalman (sabit-konum) guncellemesi ---
+            if USE_KALMAN and benchmark == False:
+                if not kf_initialized:
+                    # Ilk gecerli olcumde filtreyi baslat.
+                    kf = PositionKalmanFilter(
+                        konum_olcum,
+                        process_noise=KALMAN_PROCESS_NOISE,
+                        measurement_noise=KALMAN_MEASUREMENT_NOISE,
+                    )
+                    kf_initialized = True
+                    # Ilk karede filtrelenmemis olcum kullanilir (konum_filt zaten = olcum).
+                else:
+                    # Offline tekrar oynatmada komut hareketi yok -> sadece belirsizligi buyut.
+                    kf.predict(0.0, 0.0)
+                    # Yalnizca KESISIM bulunan (guvenilir) karelerde olcumle guncelle;
+                    # aksi halde update YAPILMAZ -> filtre son konumda "coast" eder
+                    # (kaba aykiri/yanlis eslesmeleri bu sayede yutar).
+                    # Guven, kesisim seviyesinden gelir (3'lu > ikili).
+                    if intersection_found:
+                        if kesisim_ab != () and kesisim_bc != () and kesisim_ac != ():
+                            _conf = KALMAN_CONF_GOOD
+                        else:
+                            _conf = KALMAN_CONF_OK
+                        kf.update(konum_olcum[0], konum_olcum[1], _conf)
+                    # Filtrelenmis cikti konumu (sinir icinde kirp).
+                    fkx, fky = kf.position
+                    fkx = max(0, min(int(fkx), img.shape[1] - 1))
+                    fky = max(0, min(int(fky), img.shape[0] - 1))
+                    konum_filt = (fkx, fky)
+
+            # Cikti (lat/lon, cizim, hata) icin konum: Kalman acikken filtrelenmis, degilse ham.
+            kf_aktif = bool(USE_KALMAN and benchmark == False and kf_initialized)
+            konum_cikti = konum_filt if kf_aktif else konum
+
+
+
+
+
             #konum = (kare[0]+int(kare[2]/2),kare[1]+int(kare[3]/2))
             
             """
@@ -2832,7 +2983,7 @@ def run_pipeline(callbacks=None):
                 koordinatlar[1][konum[0]][konum[1]] ise modelin tahmin ettiği konumun koordinatlarını verir
                 ve aralarındaki uzaklık hesaplanır.
             """
-            long_tahmin, lat_tahmin = rc_to_ll(konum[1], konum[0])
+            long_tahmin, lat_tahmin = rc_to_ll(konum_cikti[1], konum_cikti[0])
             
                 
             uzaklik = haversine_distance(gps_latitude,gps_longitude,lat_tahmin,long_tahmin)  
@@ -2874,7 +3025,11 @@ def run_pipeline(callbacks=None):
                
                 
                
-            if uzaklik > 0.3 and benchmark == False:
+            # GPS tabanli geri donus (kayip onleme): yalnizca Kalman KAPALIYKEN.
+            # Kalman acikken bu islevi kapilama (gating) + coast GPS gerektirmeden gorur;
+            # ayrica bu blok gercek GPS hatasina (uzaklik) dayandigi icin GPS'siz
+            # sahada gecersizdir.
+            if USE_GPS_REVERT and (not USE_KALMAN) and uzaklik > 0.3 and benchmark == False:
                 # Ilk karede geri donus noktasi (0,0) olmasin; EXIF konumuna don.
                 if i == 0:
                     konum = (knm[1], knm[0])
@@ -2892,17 +3047,24 @@ def run_pipeline(callbacks=None):
             if benchmark==True:
                 cerceve_boyutu=cerceve_boyutu_deger
                 konum=(knm[1],knm[0])
-                
-            centerOfCircle = (int(konum[0]), int(konum[1]))
+
+            # Cizim/hiz icin gosterilecek konum: benchmark'ta knm, Kalman acikken
+            # filtrelenmis konum, aksi halde ham olcum. (uzaklik yukarida hesaplandi.)
+            konum_cikti = konum_filt if kf_aktif else konum
+            centerOfCircle = (int(konum_cikti[0]), int(konum_cikti[1]))
             pred_pt = (int(centerOfCircle[0]), int(centerOfCircle[1]))
             real_pt = (int(knm[1]), int(knm[0]))
 
-            # mekansal_cozunurluk birimi cm/px oldugu icin m/px'e cevir.
-            # Bu deger buyudukce ayni piksel hareketi daha yuksek hiz (m/s) uretir.
-            m_per_px = max(0.0, float(mekansal_cozunurluk) / 100.0)
+            # konum HARITA-piksel uzayinda; harita cozunurlugu sabit (~0.30 m/px).
+            # Bu nedenle hiz, drone'un anlik GSD'siyle degil, harita cozunurlugu
+            # (MAP_RES_CM_PER_PX) ile metreye cevrilir -> birim tutarliligi.
+            m_per_px = max(0.0, float(MAP_RES_CM_PER_PX) / 100.0)
             speed_vx_mps = 0.0
             speed_vy_mps = 0.0
             speed_mps = 0.0
+            # Hiz, ardisik (Kalman acikken filtrelenmis) tahmin merkezlerinin farkindan
+            # hesaplanir. Kalman acikken pred_pt zaten yumusatilmis konum oldugu icin
+            # hiz da daha az gurultuludur.
             if prev_pred_pt_for_speed is not None:
                 dt = 0.0
                 # Tercih edilen zaman farki: EXIF timestamp farki.
@@ -3290,4 +3452,5 @@ def run_pipeline(callbacks=None):
 
 
 if __name__ == '__main__':
+    setup_logging()
     run_pipeline()

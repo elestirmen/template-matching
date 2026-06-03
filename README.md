@@ -24,6 +24,7 @@ Bu proje, İHA (İnsansız Hava Aracı) / drone görüntülerini **referans orto
   - [Konum Belirleme (Kesişim Yöntemi)](#konum-belirleme-kesişim-yöntemi)
   - [Piramit Arama (Pyramid Search)](#piramit-arama-pyramid-search)
   - [CUDA GPU Hızlandırma](#cuda-gpu-hızlandırma)
+  - [Kalman Filtresi (Konum Takibi)](#kalman-filtresi-konum-takibi)
 - [Koordinat Dönüşümleri](#koordinat-dönüşümleri)
 - [Değerlendirme Metrikleri](#değerlendirme-metrikleri)
 - [Görselleştirme](#görselleştirme)
@@ -205,9 +206,7 @@ template matching/
 
 ## Yapilandirma (RUN_CFG)
 
-Tum calisma parametreleri dosyanin basindaki `RUN_CFG` sozlugunden yonetilir:
-
-> Not: Betikte iki `RUN_CFG` blogu vardir. Asil calismayi ikinci (dosyanin orta kisimlarindaki) blok belirler.
+Tum calisma parametreleri dosyanin basindaki tek `RUN_CFG` sozlugunden yonetilir. Bu sozluk okunduktan sonra tip-guvenli sabitlere (bool/int/float) donusturulur.
 
 | Parametre | Varsayilan | Aciklama |
 |-----------|-----------|----------|
@@ -217,7 +216,7 @@ Tum calisma parametreleri dosyanin basindaki `RUN_CFG` sozlugunden yonetilir:
 | `PRED_BORDER` | `16` | Model ciktisindan kirpilacak kenarlik (piksel) |
 | `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinlestir |
 | `COARSE_SCALE` | `0.5` | Piramit arama kaba olcek faktoru |
-| `ROI_PAD_FACTOR` | `2.0` | Piramit arama ince arama bolgesi genisleme katsayisi |
+| `ROI_PAD_FACTOR` | `0.4` | Piramit arama ince arama bolgesi genisleme katsayisi |
 | `CERCEVE_BOYUTU_NORMAL` | `2048` | Normal modda arama cercevesi boyutu (piksel) |
 | `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Benchmark modunda arama cercevesi boyutu (piksel) |
 | `HARITA_DIR` | `"haritalar"` | Harita dosyalarinin bulundugu klasor |
@@ -232,6 +231,35 @@ Tum calisma parametreleri dosyanin basindaki `RUN_CFG` sozlugunden yonetilir:
 | `USE_GPS_ALT_REF_SIGN` | `False` | GPS altitude referans isaretini uygula |
 | `WAIT_PER_MODEL` | `False` | Her model sonrasi durakla |
 | `WAIT_ON_EXIT` | `False` | Program sonunda durakla |
+| `LOG_LEVEL` | `"WARNING"` | Opsiyonel logger seviyesi (`DEBUG`/`INFO`/`WARNING`/`ERROR`). Varsayilan `WARNING` oldugundan normal calismada ek cikti uretmez |
+| `LOG_TO_FILE` | `False` | `True` ise loglar ayrica `tm_run.log` dosyasina yazilir |
+| `MAP_RES_CM_PER_PX` | `29.85` | Referans harita cozunurlugu (cm/piksel). Olcekleme ve hiz hesabinda kullanilir |
+| `KENAR_SINIR_PX` | `272` | Harita kenarina bu kadar yakin konumlar atlanir (piksel) |
+
+Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davranis birebir korunur:
+
+| Parametre | Varsayilan | Aciklama |
+|-----------|-----------|----------|
+| `USE_KALMAN` | `False` | `True` ise konum tahmini Kalman ile filtrelenir (yalnizca `BENCHMARK=False`'te etkin) |
+| `KALMAN_PROCESS_NOISE` | `50.0` | Surec gurultu std (px). Buyudukce olcume daha cabuk uyar (az yumusatma) |
+| `KALMAN_MEASUREMENT_NOISE` | `8.0` | Olcum gurultu std (px). Kucuk -> iyi karelerde olcum neredeyse aynen gecer (lag yok); aykiri yutma coast'tan gelir |
+| `KALMAN_CONF_GOOD` | `1.0` | 3'lu kesisim guveni (olcum gurultusu bu degere bolunur; `1.0` = tam guven) |
+| `KALMAN_CONF_OK` | `0.5` | Ikili kesisim guveni (daha dusuk -> olcume daha az guven) |
+| `KALMAN_WINDOW_FOLLOWS` | `True` | `True`: arama cercevesi (filtrelenmis) Kalman konumuna odaklanir; kesisimsiz karelerde coast edilmis iyi konumu takip eder -> aykiri kumelerden kurtarir |
+| `USE_GPS_REVERT` | `True` | Eski "300 m geri donus" kayip-onleme. **GERCEK GPS hatasini kullanir -> GPS-denied'da gecersiz**; adil (gorsel-yalniz) kiyas icin `False` yapin. Kalman acikken zaten devre disidir |
+
+> Sabit-konum modeli + kucuk olcum gurultusu + coast simulasyon projesinden esinlenildi;
+> `MEASUREMENT_NOISE` bu hizli veri setine gore (~80 yerine ~8) ayarlandi. Baska
+> platform/cozunurlukte yeniden ayarlanmasi gerekebilir.
+>
+> **Urgup guzergahi (216 kare, GPS'siz) sonuclari:**
+>
+> | Konfigurasyon | RMSE | MAE | Dogruluk(<70m) | Max hata |
+> |---|---|---|---|---|
+> | Gorsel-yalniz (Kalman yok, `USE_GPS_REVERT=False`) | 180 m | 46 m | %93.1 | 1280 m |
+> | **Kalman ON** (varsayilan ayarlar) | **33 m** | **18 m** | **%95.4** | **202 m** |
+>
+> Kalman, GPS kullanmadan kaba yanlis-eslesme kumelerini yutarak hatayi ~5x dusurur.
 
 UI ve gorunurluk odakli ayarlar (ust blok):
 
@@ -240,7 +268,7 @@ UI ve gorunurluk odakli ayarlar (ust blok):
 | `UI_BUTTONS_ENABLED` | `True` | Ekran ustu ac/kapa butonlari |
 | `UI_WINDOW_WIDTH` | `1000` | `konum` penceresi genisligi |
 | `UI_WINDOW_HEIGHT` | `1000` | `konum` penceresi yuksekligi |
-| `SHOW_INNER_FRAME` | `True` | Ic cerceve gorunurlugu |
+| `SHOW_INNER_FRAME` | `False` | Ic cerceve gorunurlugu (baslangic durumu) |
 | `SHOW_ROI_FRAME` | `True` | ROI cercevesi gorunurlugu |
 | `SHOW_TM_BOXES` | `True` | Template matching kutulari gorunurlugu |
 
@@ -348,6 +376,31 @@ python template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_f
 - `R`: TM kutulari ac/kapa
 - `H`: UI panelini daralt/genislet
 
+### Loglama
+
+Betikte `print()` tabanli mevcut ciktilar korunur. Bunlara ek olarak opsiyonel bir
+`logging` altyapisi vardir (`tm` adli logger). Varsayilan seviye `WARNING` oldugundan
+normal calismada **ek cikti uretmez**. Daha fazla teshis icin `RUN_CFG` icinde:
+
+```python
+"LOG_LEVEL": "INFO",   # veya "DEBUG"
+"LOG_TO_FILE": True,   # tm_run.log dosyasina da yazar
+```
+
+Kod icinden kullanim: `log.info(...)`, `log.debug(...)`, `log.warning(...)`, `log.error(...)`.
+
+### Testler
+
+Saf (yan etkisiz) yardimci/matematik fonksiyonlari icin birim testleri `tests/`
+klasorundedir. Uretim kodunu degistirmeden ana betigi modul gibi yukleyip dogrularlar.
+
+```bash
+# Proje bagimliliklarinin kurulu oldugu ortamda (orn. conda):
+python -m unittest discover -s tests -v
+```
+
+Gerekli bir bagimlilik (cv2/osgeo/tensorflow) yoksa testler hata vermeden atlanir (skip).
+
 ---
 
 ## Teknik Detaylar
@@ -446,6 +499,41 @@ Sistem otomatik olarak CUDA GPU varligini kontrol eder ve varsa kullanir:
 - GPU'ya gecis seffaftir: hata durumunda otomatik CPU fallback.
 - `match_three()`: GPU varsa goruntu bir kez GPU'ya yuklenir, 3 template sirayla eslestirilir.
 - CUDA bilgisi baslangicta `log_cuda_info_once()` ile loglanir.
+
+### Kalman Filtresi (Konum Takibi)
+
+`USE_KALMAN=True` oldugunda, her karenin ham template-matching kesisim merkezi dogrudan
+kullanilmak yerine **sabit-KONUM (constant position) Kalman filtresinden** gecirilir.
+Filtre `PositionKalmanFilter` sinifidir (saf Python `math`; ek bagimlilik yok) ve
+harita-piksel uzayinda calisir. Tasarim, `simulasyon` projesindeki ayni adli filtreyle
+birebir aynidir.
+
+- **Durum**: `(x, y)` (yalnizca konum). **Olcum**: `(x, y)` (kesisim merkezi).
+- **NEDEN hiz durumu yok**: Once denenen sabit-HIZ modeli + innovation kapilamasi +
+  pencere-takibi bu veri setinde **sapmaya** yol aciyordu — filtre yanlis hizla "coast"
+  edip arama penceresini suruklUyor, olcumler bozuluyor ve hata kendini besliyordu
+  (tum rotada RMSE 59 m -> 104 m). Sabit-KONUM modeli ileriye hiz EKSTRAPOLE ETMEZ;
+  her gecerli olcumde olcume dogru cekilir -> **asla sapip kilitlenemez**.
+- **Ongoru (predict)**: (Varsa) bilinen/komut hareketi eklenir ve belirsizlik
+  `KALMAN_PROCESS_NOISE` kadar buyutulur. Offline tekrar oynatmada komut hareketi
+  olmadigi icin `(0, 0)` verilir -> sadece belirsizlik buyur.
+- **Confidence-olcekli olcum gurultusu (R)**: Olcum gurultusu `R / confidence` olarak
+  olceklenir; guven yukseldikce olcume daha cok guvenilir. Guven kesisim seviyesinden
+  gelir: 3'lu kesisim -> `KALMAN_CONF_GOOD`, ikili -> `KALMAN_CONF_OK`.
+- **Kalite tabanli atlamak (coast)**: Kesisim **bulunamayan** (guvenilmez) karelerde
+  `update` HIC yapilmaz; filtre son konumda kalir. Karar olcum kalitesine dayanir
+  (ongoruden sapmaya degil), bu yuzden gercek bir maniv ra sirasinda iyi bir olcum
+  asla yanlislikla reddedilmez.
+- **Pencere-takibi**: `KALMAN_WINDOW_FOLLOWS=True` iken arama cercevesi filtrelenmis
+  Kalman konumuna merkezlenir; sabit-konum modeli sapamadigindan bu guvenlidir ve
+  tek-adim yanlis eslesmelere dayaniklilik saglar.
+- **GPS bagimsizligi**: GPS gerektirmez (GPS-denied'a uygun). GPS hatasina dayanan eski
+  "300 m geri donus" kurtarmasi yalnizca `USE_KALMAN=False` iken devrededir.
+- **Hiz**: HUD/ok icin hiz, ardisik (filtrelenmis) tahmin merkezlerinin farkindan
+  hesaplanir; Kalman acikken konum yumusatildigi icin hiz da daha az gurultuludur.
+
+> Not: Kalman yalnizca `BENCHMARK=False` (adaptif takip) modunda etkindir. `USE_KALMAN=False`
+> iken tum cikti ve davranis onceki surumle birebir aynidir.
 
 ---
 

@@ -4,10 +4,15 @@
 # Takip edilmesini istediklerimiz
 !.gitignore
 !template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_fonksiyonlar_icinde_cursor.py
+!konum_ui_qt.py
 !requirements.txt
 !*.md
 !*.MD
 !**/.gitkeep
+
+# Birim testleri (tests/ klasoru)
+!tests/
+!tests/**/*.py
 
 # Klasorlerin repoda gorunebilmesi icin klasorleri serbest birak
 !*/
