@@ -122,6 +122,17 @@ class TestPositionKalmanFilter(unittest.TestCase):
             meas_sqerr += (mx - true_x) ** 2 + (my - true_y) ** 2
         self.assertLess(filt_sqerr, meas_sqerr)
 
+    def test_reset_reseeds_to_measurement(self):
+        # reset() konumu olcume tasir ve belirsizligi olcum-gurultusu seviyesine ceker.
+        kf = self._make(0.0, 0.0, measurement_noise=80.0)
+        for _ in range(5):
+            kf.predict(0.0, 0.0)  # belirsizlik buyusun
+        u_inflated = kf.uncertainty_px
+        kf.reset((1234.0, 5678.0))
+        self.assertEqual(kf.position, (1234, 5678))
+        self.assertLess(kf.uncertainty_px, u_inflated)
+        self.assertAlmostEqual(kf.uncertainty_px, 80.0, delta=1e-6)
+
     def test_coast_when_no_update(self):
         # Update yapilmazsa konum sabit kalir (predict(0,0) sadece belirsizligi buyutur).
         kf = self._make(123.0, 456.0)

@@ -119,12 +119,13 @@ class ProcessingWorker(QThread):
         super().__init__()
         self._running = True
         self._mutex   = QMutex()
-        # UI gorunum durumu (Qt butonlari tarafindan degistiriliyor)
+        # UI gorunum/islev durumu (Qt butonlari tarafindan degistiriliyor)
         self._ui_state = {
             "trajectory":   bool(DRAW_TRAJECTORY),
             "inner_frame":  bool(RUN_CFG.get("SHOW_INNER_FRAME", False)),
             "roi_frame":    bool(RUN_CFG.get("SHOW_ROI_FRAME", True)),
             "tm_boxes":     bool(RUN_CFG.get("SHOW_TM_BOXES", True)),
+            "kalman":       bool(_tm.USE_KALMAN),  # Kalman filtresi calisma-aninda ac/kapa
         }
 
     def set_ui_state(self, key: str, value: bool):
@@ -371,13 +372,14 @@ class ControlPanel(QWidget):
         root.addWidget(self._separator())
 
         # Toggle'lar
-        toggle_lbl = QLabel("GORUNUM")
+        toggle_lbl = QLabel("GORUNUM / FILTRE")
         toggle_lbl.setFont(QFont("Segoe UI", 9))
         toggle_lbl.setStyleSheet(f"color:{C_MUTED};")
         root.addWidget(toggle_lbl)
 
         self._toggles: dict[str, QCheckBox] = {}
         toggle_defs = [
+            ("kalman",      "Kalman Filtresi", bool(_tm.USE_KALMAN)),
             ("trajectory",  "Trajektori",  bool(_tm.DRAW_TRAJECTORY)),
             ("roi_frame",   "ROI Cerceve", bool(_tm.RUN_CFG.get("SHOW_ROI_FRAME", True))),
             ("tm_boxes",    "TM Kutulari", bool(_tm.RUN_CFG.get("SHOW_TM_BOXES", True))),
@@ -428,6 +430,10 @@ class ControlPanel(QWidget):
         line.setFrameShape(QFrame.HLine)
         line.setStyleSheet(f"color:{C_BORDER};")
         return line
+
+    def current_toggle_states(self) -> dict:
+        """Tum toggle'larin guncel (checkbox) durumlari -> worker'a baslangicta uygulanir."""
+        return {k: bool(cb.isChecked()) for k, cb in self._toggles.items()}
 
     def append_log(self, msg: str):
         self.log_box.appendPlainText(msg)
@@ -519,6 +525,9 @@ class MainWindow(QMainWindow):
         if self._worker and self._worker.isRunning():
             return
         self._worker = ProcessingWorker()
+        # Baslamadan once yapilan toggle secimlerini (Kalman dahil) worker'a uygula.
+        for _k, _v in self._panel.current_toggle_states().items():
+            self._worker.set_ui_state(_k, _v)
         self._worker.frame_ready.connect(self._map.update_frame)
         self._worker.crop_ready.connect(self._on_crop_ready)
         self._worker.metrics_update.connect(self._panel.update_metrics)

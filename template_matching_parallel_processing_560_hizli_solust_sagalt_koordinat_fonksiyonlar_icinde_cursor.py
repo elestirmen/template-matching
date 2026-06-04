@@ -45,7 +45,7 @@ RUN_CFG = {
     # Veri yollari
     "HARITA_DIR": "haritalar",   # Referans harita klasoru.
     "MODEL_DIR": "model",        # Keras model klasoru.
-    "ANLIK_DIR": "guzergahlar/1_tezde_ucus_5",     # Islenecek anlik goruntu klasoru.
+    "ANLIK_DIR": "guzergahlar/guzergah_2_tezde_ucus_1",     # Islenecek anlik goruntu klasoru.
     "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
 
     # Dosya secimi:
@@ -2132,6 +2132,17 @@ class PositionKalmanFilter:
         self._var_x *= max(0.0, 1.0 - k_x)
         self._var_y *= max(0.0, 1.0 - k_y)
 
+    def reset(self, initial_position):
+        """Filtreyi verilen olcume yeniden tohumlar (re-acquisition / lock-in kirma).
+
+        Konum olcume tasinir, belirsizlik olcum gurultusu seviyesine sifirlanir
+        (filtre o olcume taze kilitlenir).
+        """
+        self._x = float(initial_position[0])
+        self._y = float(initial_position[1])
+        self._var_x = self._r
+        self._var_y = self._r
+
     @property
     def position(self):
         return (int(round(self._x)), int(round(self._y)))
@@ -2328,6 +2339,7 @@ def run_pipeline(callbacks=None):
         "inner_frame": bool(SHOW_INNER_FRAME),
         "roi_frame": bool(SHOW_ROI_FRAME),
         "tm_boxes": bool(SHOW_TM_BOXES),
+        "kalman": bool(USE_KALMAN),  # Kalman filtresi calisma-aninda acilip kapanabilir
         "_panel_collapsed": False,
         "_hover_key": None,
     }
@@ -2401,6 +2413,9 @@ def run_pipeline(callbacks=None):
             if _ui_upd:
                 runtime_ui_state.update(_ui_upd())
 
+            # Kalman calisma-aninda acilip kapanabilir (UI toggle). Bu karede gecerli durum:
+            kf_on = bool(runtime_ui_state.get("kalman", USE_KALMAN))
+
             # Bu karede anlamli bir kesisim tabanli tahmin uretildiyse True olur.
             intersection_found = False
             
@@ -2472,7 +2487,7 @@ def run_pipeline(callbacks=None):
             # odaklanir (tek-adim yanlis eslesmelere karsi daha dayanikli). Sabit-konum
             # modeli ileriye hiz ekstrapole etmedigi icin pencere suruklenip sapamaz.
             kf_pred_center = None  # (sutun, satir)
-            if USE_KALMAN and benchmark == False and KALMAN_WINDOW_FOLLOWS and kf_initialized and kf is not None:
+            if kf_on and benchmark == False and KALMAN_WINDOW_FOLLOWS and kf_initialized and kf is not None:
                 kf_pred_center = kf.position  # (sutun, satir)
 
             # İlk karede EXIF konumuna yakın çevrede, sonraki karelerde bir önceki tahmine yakın çevrede ara
@@ -2948,7 +2963,7 @@ def run_pipeline(callbacks=None):
             konum_filt = konum_olcum  # filtrelenmis cikti (varsayilan = ham)
 
             # --- Kalman (sabit-konum) guncellemesi ---
-            if USE_KALMAN and benchmark == False:
+            if kf_on and benchmark == False:
                 if not kf_initialized:
                     # Ilk gecerli olcumde filtreyi baslat.
                     kf = PositionKalmanFilter(
@@ -2973,12 +2988,7 @@ def run_pipeline(callbacks=None):
                         if _is_3way and _meas_far > KALMAN_REACQUIRE_JUMP_PX:
                             kf_reacq_count += 1
                             if kf_reacq_count >= KALMAN_REACQUIRE_FRAMES:
-                                # re-seed (saplanmayi kir): filtreyi olcume yeniden tohumla
-                                kf = PositionKalmanFilter(
-                                    konum_olcum,
-                                    process_noise=KALMAN_PROCESS_NOISE,
-                                    measurement_noise=KALMAN_MEASUREMENT_NOISE,
-                                )
+                                kf.reset(konum_olcum)   # re-seed (saplanmayi kir)
                                 kf_reacq_count = 0
                             # streak dolana kadar guncelleme yok (olasi aykiriyi beklet)
                         else:
@@ -3001,7 +3011,7 @@ def run_pipeline(callbacks=None):
                     konum_filt = (fkx, fky)
 
             # Cikti (lat/lon, cizim, hata) icin konum: Kalman acikken filtrelenmis, degilse ham.
-            kf_aktif = bool(USE_KALMAN and benchmark == False and kf_initialized)
+            kf_aktif = bool(kf_on and benchmark == False and kf_initialized)
             konum_cikti = konum_filt if kf_aktif else konum
 
 
@@ -3061,7 +3071,7 @@ def run_pipeline(callbacks=None):
             # Kalman acikken bu islevi kapilama (gating) + coast GPS gerektirmeden gorur;
             # ayrica bu blok gercek GPS hatasina (uzaklik) dayandigi icin GPS'siz
             # sahada gecersizdir.
-            if USE_GPS_REVERT and (not USE_KALMAN) and uzaklik > 0.3 and benchmark == False:
+            if USE_GPS_REVERT and (not kf_on) and uzaklik > 0.3 and benchmark == False:
                 # Ilk karede geri donus noktasi (0,0) olmasin; EXIF konumuna don.
                 if i == 0:
                     konum = (knm[1], knm[0])
