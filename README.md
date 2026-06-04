@@ -246,20 +246,33 @@ Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davran
 | `KALMAN_CONF_GOOD` | `1.0` | 3'lu kesisim guveni (olcum gurultusu bu degere bolunur; `1.0` = tam guven) |
 | `KALMAN_CONF_OK` | `0.5` | Ikili kesisim guveni (daha dusuk -> olcume daha az guven) |
 | `KALMAN_WINDOW_FOLLOWS` | `True` | `True`: arama cercevesi (filtrelenmis) Kalman konumuna odaklanir; kesisimsiz karelerde coast edilmis iyi konumu takip eder -> aykiri kumelerden kurtarir |
+| `KALMAN_REACQUIRE_FRAMES` | `2` | Ust uste bu kadar "uzak + yuksek-guvenli (3'lu kesisim)" olcumde filtre olcume yeniden tohumlanir (lock-in kirici) |
+| `KALMAN_REACQUIRE_JUMP_PX` | `300` | Olcum filtreden bu kadar (px) uzaksa "uzak" sayilir (~90 m) |
+| `KALMAN_LOST_SCORE` | `0.0` | `>0` ise TM skoru (`max_val2`) bunun altindaki kareler "kayip" sayilir (coast + pencere genislet). `0` = kapali. **Bu veri setinde iyi/kotu kareler ayni skor araliginda (~0.15-0.25) oldugundan ISE YARAMADI; `0`'da birakin** |
 | `USE_GPS_REVERT` | `True` | Eski "300 m geri donus" kayip-onleme. **GERCEK GPS hatasini kullanir -> GPS-denied'da gecersiz**; adil (gorsel-yalniz) kiyas icin `False` yapin. Kalman acikken zaten devre disidir |
 
 > Sabit-konum modeli + kucuk olcum gurultusu + coast simulasyon projesinden esinlenildi;
 > `MEASUREMENT_NOISE` bu hizli veri setine gore (~80 yerine ~8) ayarlandi. Baska
 > platform/cozunurlukte yeniden ayarlanmasi gerekebilir.
 >
-> **Urgup guzergahi (216 kare, GPS'siz) sonuclari:**
+> **Cok-rota sonuclari (4 Urgup guzergahi, hepsi GPS'siz; RMSE, m):**
 >
-> | Konfigurasyon | RMSE | MAE | Dogruluk(<70m) | Max hata |
-> |---|---|---|---|---|
-> | Gorsel-yalniz (Kalman yok, `USE_GPS_REVERT=False`) | 180 m | 46 m | %93.1 | 1280 m |
-> | **Kalman ON** (varsayilan ayarlar) | **33 m** | **18 m** | **%95.4** | **202 m** |
+> | Rota | Kalman ON | Gorsel-yalniz (KF yok, revert kapali) | OFF (GPS revert koltuk degnegi) |
+> |---|---|---|---|
+> | 1_tezde_5 | **37** | 180 | 59 |
+> | 3_tezde_7 | **231** | 329 | 202 |
+> | 2_tezde_6 | **90** | 2926 | 88 |
+> | 6_tezde_4 | **295** | 694 | 205 |
 >
-> Kalman, GPS kullanmadan kaba yanlis-eslesme kumelerini yutarak hatayi ~5x dusurur.
+> Kalman, **GPS kullanmadan** kaba yanlis-eslesme kumelerini coast ile yutar, lock-in
+> olursa yeniden-kazanim ile kurtarir. Iki rotada GPS-koltuklu OFF'a esit/ustun, zor
+> rotalarda ona yakin (ama GPS gerektirmez).
+>
+> **Daha genis test (toplam 8 guzergah):** Kalman 5 rotada net kazandirir, 2'sinde notr
+> (kolay rotada ihmal edilebilir ek maliyet), hicbirinde catastrophic degil. 2 rota
+> (4_tezde_8, guz4_tezde_3) intrinsik olarak basarisiz (dogruluk ~%0-50): gorsel
+> eslesmenin kendisi coker (muhtemelen harita kapsama / model uyumu) -> Kalman'in
+> cozemeyecegi bir veri sorunu. `KALMAN_LOST_SCORE` denendi; bu veri icin yarar saglamadi.
 
 UI ve gorunurluk odakli ayarlar (ust blok):
 
@@ -525,8 +538,15 @@ birebir aynidir.
   (ongoruden sapmaya degil), bu yuzden gercek bir maniv ra sirasinda iyi bir olcum
   asla yanlislikla reddedilmez.
 - **Pencere-takibi**: `KALMAN_WINDOW_FOLLOWS=True` iken arama cercevesi filtrelenmis
-  Kalman konumuna merkezlenir; sabit-konum modeli sapamadigindan bu guvenlidir ve
-  tek-adim yanlis eslesmelere dayaniklilik saglar.
+  Kalman konumuna merkezlenir; kesisimsiz karelerde coast edilmis (iyi) konumu takip
+  ederek kaba aykiri kumelerinden kurtarir.
+- **Yeniden-kazanim (re-acquisition)**: Pencere-takibinin nadiren yanlis bir bolgeye
+  "saplanmasini" (lock-in) kirar. Yuksek-guvenli (3'lu kesisim) bir olcum filtreden
+  `KALMAN_REACQUIRE_JUMP_PX`'ten uzakta ve bu durum `KALMAN_REACQUIRE_FRAMES` kez ust
+  uste teyit edilirse, filtre o olcume **yeniden tohumlanir**. Ayrica kayipken (uzun
+  coast / dusuk skor) arama cercevesi `CERCEVE_BOYUTU_MAX`'a genisletilir ki uzaktaki
+  gercek konum yeniden gorunur olsun. Bu mekanizma, cok-rota testinde catastrophic
+  bir lock-in'i (RMSE 1383 m -> 295 m) kirdi, diger rotalari bozmadan.
 - **GPS bagimsizligi**: GPS gerektirmez (GPS-denied'a uygun). GPS hatasina dayanan eski
   "300 m geri donus" kurtarmasi yalnizca `USE_KALMAN=False` iken devrededir.
 - **Hiz**: HUD/ok icin hiz, ardisik (filtrelenmis) tahmin merkezlerinin farkindan

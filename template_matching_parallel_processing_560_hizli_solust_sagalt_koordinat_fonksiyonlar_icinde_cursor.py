@@ -116,6 +116,10 @@ RUN_CFG = {
     "KALMAN_WINDOW_FOLLOWS": True,   # True (ONERILEN): arama cercevesi filtrelenmis Kalman konumuna odaklanir.
                                      #   Kesisimsiz karelerde pencere coast edilmis (iyi) konumu takip eder -> kaba
                                      #   aykiri/yanlis-eslesme kumelerinden kurtulur (GPS gerektirmeden).
+    # Yeniden-kazanim (re-acquisition): window-follow'un yanlis yere "saplanmasini" (lock-in) kirar.
+    "KALMAN_REACQUIRE_FRAMES": 2,    # Ust uste bu kadar "uzak + yuksek-guvenli (3'lu)" olcumde filtre olcume yeniden tohumlanir.
+    "KALMAN_REACQUIRE_JUMP_PX": 300, # Olcum filtreden bu kadar (px) uzaksa "uzak" sayilir (~90 m).
+    "KALMAN_LOST_SCORE": 0.0,        # >0 ise: TM skoru (max_val2) bunun altindaki kareler "kayip" sayilir (coast + pencere genislet). 0 = kapali.
 
     # GPS tabanli kayip-onleme (300m geri donus). DIKKAT: gercek GPS hatasini kullanir,
     # yani GPS-denied sahada GECERSIZDIR (yalnizca degerlendirme/benchmark icin bir koltuk degnegi).
@@ -1815,6 +1819,9 @@ KALMAN_MEASUREMENT_NOISE = float(RUN_CFG.get("KALMAN_MEASUREMENT_NOISE", 8.0))
 KALMAN_CONF_GOOD = float(RUN_CFG.get("KALMAN_CONF_GOOD", 1.0))
 KALMAN_CONF_OK = float(RUN_CFG.get("KALMAN_CONF_OK", 0.5))
 KALMAN_WINDOW_FOLLOWS = bool(RUN_CFG.get("KALMAN_WINDOW_FOLLOWS", True))
+KALMAN_REACQUIRE_FRAMES = int(RUN_CFG.get("KALMAN_REACQUIRE_FRAMES", 2))
+KALMAN_REACQUIRE_JUMP_PX = float(RUN_CFG.get("KALMAN_REACQUIRE_JUMP_PX", 300))
+KALMAN_LOST_SCORE = float(RUN_CFG.get("KALMAN_LOST_SCORE", 0.0))
 USE_GPS_REVERT = bool(RUN_CFG.get("USE_GPS_REVERT", True))
 
 if benchmark:
@@ -2354,6 +2361,8 @@ def run_pipeline(callbacks=None):
         # Kalman filtresi durumu (her harita/model cifti icin sifirlanir).
         kf = None
         kf_initialized = False
+        kf_reacq_count = 0  # ust uste uzak+guvenli olcum sayaci (re-seed icin)
+        kf_lost_count = 0   # ust uste kayip (coast/dusuk skor) kare sayaci (pencere genislet)
         
         model_yolu = model_path_list[k]
         model = load_model_compat(model_yolu)        
@@ -2952,16 +2961,39 @@ def run_pipeline(callbacks=None):
                 else:
                     # Offline tekrar oynatmada komut hareketi yok -> sadece belirsizligi buyut.
                     kf.predict(0.0, 0.0)
-                    # Yalnizca KESISIM bulunan (guvenilir) karelerde olcumle guncelle;
-                    # aksi halde update YAPILMAZ -> filtre son konumda "coast" eder
-                    # (kaba aykiri/yanlis eslesmeleri bu sayede yutar).
-                    # Guven, kesisim seviyesinden gelir (3'lu > ikili).
-                    if intersection_found:
-                        if kesisim_ab != () and kesisim_bc != () and kesisim_ac != ():
-                            _conf = KALMAN_CONF_GOOD
+                    _is_3way = (kesisim_ab != () and kesisim_bc != () and kesisim_ac != ())
+                    _meas_far = math.dist(konum_olcum, kf.position)  # olcum-filtre mesafesi (px)
+                    _poor_score = (KALMAN_LOST_SCORE > 0 and float(max_val2) < KALMAN_LOST_SCORE)
+
+                    if intersection_found and not _poor_score:
+                        _conf = KALMAN_CONF_GOOD if _is_3way else KALMAN_CONF_OK
+                        # YENIDEN-KAZANIM: yuksek-guvenli (3'lu) bir olcum filtreden COK uzaksa,
+                        # filtre muhtemelen yanlis yere saplanmis (lock-in) -> ust uste teyit edilince
+                        # olcume yeniden tohumla. Tek aykiriya kanmamak icin streak gerekir.
+                        if _is_3way and _meas_far > KALMAN_REACQUIRE_JUMP_PX:
+                            kf_reacq_count += 1
+                            if kf_reacq_count >= KALMAN_REACQUIRE_FRAMES:
+                                # re-seed (saplanmayi kir): filtreyi olcume yeniden tohumla
+                                kf = PositionKalmanFilter(
+                                    konum_olcum,
+                                    process_noise=KALMAN_PROCESS_NOISE,
+                                    measurement_noise=KALMAN_MEASUREMENT_NOISE,
+                                )
+                                kf_reacq_count = 0
+                            # streak dolana kadar guncelleme yok (olasi aykiriyi beklet)
                         else:
-                            _conf = KALMAN_CONF_OK
-                        kf.update(konum_olcum[0], konum_olcum[1], _conf)
+                            kf_reacq_count = 0
+                            kf.update(konum_olcum[0], konum_olcum[1], _conf)
+                        kf_lost_count = 0
+                    else:
+                        # Kesisim yok / skor dusuk -> coast (guncelleme yok) + kayip sayaci.
+                        kf_lost_count += 1
+
+                    # Kayipken (uzun coast) veya re-seed yolundayken arama penceresini genislet
+                    # ki uzaktaki GERCEK konum tekrar gorunur olsun (window-follow'u kurtarir).
+                    if kf_lost_count >= KALMAN_REACQUIRE_FRAMES or kf_reacq_count >= 1:
+                        cerceve_boyutu = CERCEVE_BOYUTU_MAX
+
                     # Filtrelenmis cikti konumu (sinir icinde kirp).
                     fkx, fky = kf.position
                     fkx = max(0, min(int(fkx), img.shape[1] - 1))
