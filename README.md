@@ -248,6 +248,17 @@ Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davran
 | `KALMAN_WINDOW_FOLLOWS` | `True` | `True`: arama cercevesi (filtrelenmis) Kalman konumuna odaklanir; kesisimsiz karelerde coast edilmis iyi konumu takip eder -> aykiri kumelerden kurtarir |
 | `KALMAN_REACQUIRE_FRAMES` | `2` | Ust uste bu kadar "uzak + yuksek-guvenli (3'lu kesisim)" olcumde filtre olcume yeniden tohumlanir (lock-in kirici) |
 | `KALMAN_REACQUIRE_JUMP_PX` | `300` | Olcum filtreden bu kadar (px) uzaksa "uzak" sayilir (~90 m) |
+| `KALMAN_STEP_GATE_MULT` | `4.0` | **Adaptif fiziksel hareket siniri (innovation gating).** Sinir, dronun son karelerdeki TIPIK (medyan) adim mesafesinin bu katidir. Boylece gercek hareket (~medyan adim) HEP gecer (filtre DONMAZ), yalnizca tipikin cok ustundeki sicramalar (yanlis eslesme) elenir: zayif (2'li) uzak olcum reddedilir; guclu (3'lu) uzak olcum ust uste `KALMAN_REACQUIRE_FRAMES` kez teyit edilirse re-seed edilir. Sabit px secmek GEREKMEZ (kare hizindan/IHA hizindan bagimsiz). `0` = adaptif kapali (sabit `KALMAN_MAX_STEP_PX` kullanilir). Cok eliyorsa BUYUT, az eliyorsa KUCULT |
+| `KALMAN_MAX_STEP_PX` | `250` | Adaptif kapinin TABANI (minimum kapi): yavas/duragan harekette gateti cok daraltmaz. `KALMAN_STEP_GATE_MULT=0` iken ise mutlak ust sinir olarak kullanilir. `0` + `MULT=0` -> kapi tamamen kapali (eski davranis: uzak yanlis eslesmeler tek karede ISINLANIR) |
+| `KALMAN_USE_MOTION` | `False` | **Hareket (hiz) ongorusu.** Simulasyon'da `predict()`'e KOMUT hareketi besleniyordu; offline'da komut yok -> dronun GOZLENEN hizi (ardisik kabul edilen olcumlerin yer degisimi, EMA) `predict()`'e beslenir: "bu yone/hizla gidiyordu, devam edecek". Faydasi: gate YON-DUYARLI olur (gercek ileri hareket reddedilmez, ters yondeki aykiri elenir) ve kisa coast'larda filtre olu-hesapla trajektoride ilerler (donmaz). **DIKKAT: hiz ekstrapolasyonu + pencere-takibi DAHA ONCE diverge ettirmisti** (bkz. `PositionKalmanFilter` notu); bu yuzden varsayilan KAPALI, coast'ta hiz sonumlenir, re-seed'de sifirlanir. Acmadan once RMSE'yi kiyaslayin |
+| `KALMAN_MOTION_EMA` | `0.5` | Hiz EMA yumusatma (0..1). Buyuk -> olcume cabuk uyum (gurultulu); kucuk -> daha duzgun ama donuslerde gec |
+| `KALMAN_MOTION_COAST_DECAY` | `0.5` | Coast karelerinde hizi bu oranla sonumler (drift sinirla). `0` -> coast'ta hemen dur (sabit-konum gibi); `1` -> tam dead-reckon (drift riski) |
+| `KALMAN_LOST_GROWTH_PX` | `800` | Kayip (surekli coast) durumunda arama penceresinin KADEMELI buyume adimi (px/kare), `CERCEVE_BOYUTU_MAX` ile sinirli. Pencere ANIDEN MAX'a ziplamaz -> tek aykiri olcum tum haritayi taratmaz. `KALMAN_COV_GATE` acikken kullanilmaz |
+| `KALMAN_COV_GATE` | `False` | **COVARYANS-TABANLI ILKELI MOD.** Acikken yukaridaki ad-hoc kapilarin (`MAX_STEP`/`STEP_GATE_MULT`/`LOST_GROWTH`) YERINE kapi ve arama penceresi DOGRUDAN filtrenin kovaryansindan turetilir: innovation kapisi `= GATE_SIGMA*sqrt(P+R)`, pencere `~ 2*ROI_SIGMA*sqrt(P+R)+sablon`, process-noise (q) gercek hareket olcegine (medyan adim) baglanir. Boylece **donma/isinlama/pencere-patlamasi ucu TEK ilkeli mekanizmayla** cozulur (coast'ta P buyur -> kapi/pencere yumusakca acilir, update sonrasi toparlar). Varsayilan KAPALI; acmak icin `True` yapip RMSE'yi kiyaslayin. `KALMAN_USE_MOTION` ile birlikte en iyi |
+| `KALMAN_GATE_SIGMA` | `3.0` | (COV modu) Innovation kapisi sigma: kabul esigi `= sigma*sqrt(P+R)`. Cok eliyorsa BUYUT, az eliyorsa KUCULT |
+| `KALMAN_ROI_SIGMA` | `4.0` | (COV modu) Arama penceresi yari-genisligi sigma: `~ 2*sigma*sqrt(P+R)+sablon`. Gercek konumu icermesi icin `GATE_SIGMA`'dan biraz buyuk tutulur |
+| `KALMAN_COV_MOTION_FRAC` | `0.4` | (COV modu) `USE_MOTION` acikken q'yu medyan adimin bu katina indirir (artik belirsizlik yalniz hizdaki SAPMA -> daha siki kapi/pencere). `USE_MOTION` kapaliyken yok sayilir |
+| `KALMAN_GAIN_MAX` | `0.6` | **Kalman kazanci (gain) TAVANI (0..1].** Tahmin tek olcumde olcume EN FAZLA bu oranda cekilir; kalani ongoruden harmanlanir -> **CIKTI YUMUSAR, sicrama azalir.** Ozellikle COV modunda kazanc ~1.0 oldugundan cikti olcumu neredeyse aynen izler (sicrar); bu tavan onu kirar. `1.0` -> tavansiz (eski davranis). Kucuk -> daha az sicrama AMA daha cok lag (lag'i `KALMAN_USE_MOTION` ile telafi edin: ongoru hareketi tasir, tavan yalniz gurultuyu yumusatir) |
 | `KALMAN_LOST_SCORE` | `0.0` | `>0` ise TM skoru (`max_val2`) bunun altindaki kareler "kayip" sayilir (coast + pencere genislet). `0` = kapali. **Bu veri setinde iyi/kotu kareler ayni skor araliginda (~0.15-0.25) oldugundan ISE YARAMADI; `0`'da birakin** |
 | `USE_GPS_REVERT` | `True` | Eski "300 m geri donus" kayip-onleme. **GERCEK GPS hatasini kullanir -> GPS-denied'da gecersiz**; adil (gorsel-yalniz) kiyas icin `False` yapin. Kalman acikken zaten devre disidir |
 
@@ -273,6 +284,54 @@ Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davran
 > (4_tezde_8, guz4_tezde_3) intrinsik olarak basarisiz (dogruluk ~%0-50): gorsel
 > eslesmenin kendisi coker (muhtemelen harita kapsama / model uyumu) -> Kalman'in
 > cozemeyecegi bir veri sorunu. `KALMAN_LOST_SCORE` denendi; bu veri icin yarar saglamadi.
+
+### Lokalizasyon kalitesi, sensor fuzyonu ve tanilama (`simulasyon` projesinden)
+
+Asagidaki parametreler, `gps_denied_autonomy.py` modulundeki (simulasyon projesiyle
+ortak, saf Python) fonksiyonlari devreye alir. **Tum bayraklar varsayilan `False`;
+KAPALIYKEN mevcut davranis (Kalman dahil) BIREBIR korunur.**
+
+Kompozit lokalizasyon kalitesi (`USE_QUALITY`) -- uc sablonun normalize skor +
+**geometrik tutarliligindan** (uc kutu merkez yayilimi) [0,1] surekli bir guven uretir
+ve `is_reliable` bayragiyla guvenilmez kareleri isaretler. Acikken Kalman, ikili
+`1.0/0.5` guven yerine bu surekli guvenle beslenir; `is_reliable=False` kareler coast
+edilir (ham skor esigi `KALMAN_LOST_SCORE`'un yerine ilkesel "kayip" tespiti).
+
+| Parametre | Varsayilan | Aciklama |
+|-----------|-----------|----------|
+| `USE_QUALITY` | `False` | `True`: kompozit guven hesaplanir ve Kalman gate'ine beslenir |
+| `QUALITY_SCORE_THRESHOLD` | `0.35` | Normalize skor TABANI esigi (altinda guvenilmez) |
+| `QUALITY_CONFIDENCE_THRESHOLD` | `0.40` | Kompozit guven esigi (altinda guvenilmez) |
+| `QUALITY_SPREAD_THRESHOLD_PX` | `120.0` | Uc kutu merkez yayilimi esigi (px); ustunde geometrik tutarsiz |
+
+Sensor fuzyonu (`USE_FUSION`) -- ham olcumu onceki **cikti** konumuyla guvene gore
+harmanlar; `FUSION_MAX_JUMP_PX*1.75`'i asan sicramalari reddeder (tek-adim yanlis
+eslesmelere dayanikli). Yalnizca Kalman KAPALIYKEN ciktiyi etkiler (cift-yumusatma
+olmasin); benchmark'ta da devre disidir.
+
+| Parametre | Varsayilan | Aciklama |
+|-----------|-----------|----------|
+| `USE_FUSION` | `False` | `True`: ham olcum, onceki cikti konumuyla harmanlanir |
+| `FUSION_BLEND_GAIN` | `0.75` | Harmanlama kazanci; efektif = `gain * confidence` |
+| `FUSION_MAX_JUMP_PX` | `600.0` | Olcum priordan bu*1.75'ten uzaksa reddedilir (prior korunur) |
+
+Tanilama (`DIAGNOSTIC_ENABLED` / `LOG_QUALITY_CSV`) -- islenen her goruntu icin
+`diagnostics/diag_<ts>_m<k>/` altina **triptych PNG** (crop \| model cikisi \|
+eslesen referans bolge) + `case_*_meta.json` ve dongu sonunda `summary.json` yazar;
+ayrica `tani_kalite.csv`'ye kare-bazli skor/guven/yayilma/neden/hata kaydeder. Tez ve
+teshis icin (ornegin yuksek-irtifa rotalarinda gorsel eslesmenin nerede coktugunu
+incelemek); varsayilan KAPALI (ek I/O maliyeti). Tum I/O `try/except` ile korunur.
+
+| Parametre | Varsayilan | Aciklama |
+|-----------|-----------|----------|
+| `DIAGNOSTIC_ENABLED` | `False` | `True`: kare-bazli triptych PNG + meta JSON + summary.json |
+| `DIAGNOSTIC_OUTPUT_DIR` | `"diagnostics"` | Cikti kok klasoru |
+| `LOG_QUALITY_CSV` | `False` | `True`: kare-bazli kalite metrikleri `tani_kalite.csv`'ye yazilir |
+
+> Not: `USE_QUALITY` / `USE_FUSION` / `DIAGNOSTIC_ENABLED` / `LOG_QUALITY_CSV`'den
+> herhangi biri acik oldugunda kalite metrigi hesaplanir; hepsi kapaliyken hic
+> hesaplanmaz (sifir ek maliyet). Birim testleri: `tests/test_quality.py` (saf
+> Python; agir bagimlilik gerektirmez).
 
 UI ve gorunurluk odakli ayarlar (ust blok):
 

@@ -45,7 +45,7 @@ RUN_CFG = {
     # Veri yollari
     "HARITA_DIR": "haritalar",   # Referans harita klasoru.
     "MODEL_DIR": "model",        # Keras model klasoru.
-    "ANLIK_DIR": "guzergahlar/guzergah_2_tezde_ucus_1",     # Islenecek anlik goruntu klasoru.
+    "ANLIK_DIR": "guzergahlar/guzergah_4_tezde_ucus_3",     # Islenecek anlik goruntu klasoru.
     "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
 
     # Dosya secimi:
@@ -105,7 +105,7 @@ RUN_CFG = {
     # Kalman = sabit-KONUM modeli (simulasyon projesindeki PositionKalmanFilter ile ayni).
     # Hiz ekstrapole etmez; her gecerli olcumde olcume dogru cekilir -> sapamaz.
     # Varsayilanlar simulasyon projesinden alindi (urgup, ~30cm/px harita).
-    "USE_KALMAN": False,             # True: tahmin Kalman ile filtrelenir. (yalnizca BENCHMARK=False'te etkin)
+    "USE_KALMAN": True,             # True: tahmin Kalman ile filtrelenir. (yalnizca BENCHMARK=False'te etkin)
     "KALMAN_PROCESS_NOISE": 50.0,    # Surec gurultu std (px). Buyudukce olcume daha cabuk uyar (az yumusatma).
     "KALMAN_MEASUREMENT_NOISE": 8.0, # Olcum gurultu std (px). Bu veri seti hizli + olcum cok iyi oldugundan
                                      #   simulasyon'un 80'i yerine KUCUK (~8px) secildi: iyi karelerde olcum neredeyse
@@ -120,6 +120,94 @@ RUN_CFG = {
     "KALMAN_REACQUIRE_FRAMES": 2,    # Ust uste bu kadar "uzak + yuksek-guvenli (3'lu)" olcumde filtre olcume yeniden tohumlanir.
     "KALMAN_REACQUIRE_JUMP_PX": 300, # Olcum filtreden bu kadar (px) uzaksa "uzak" sayilir (~90 m).
     "KALMAN_LOST_SCORE": 0.0,        # >0 ise: TM skoru (max_val2) bunun altindaki kareler "kayip" sayilir (coast + pencere genislet). 0 = kapali.
+    # Fiziksel hareket siniri (innovation gating): IHA tek karede isinlanamaz.
+    # Olcum, filtrenin ongordugu konumdan EFEKTIF KAPI'dan uzaksa, tek-kare sicrama
+    # "fiziksel olarak imkansiz" sayilir -> o tek olcumle filtre ZIPLAMAZ:
+    #   - 2'li (zayif) uzak olcum  -> reddedilir (coast).
+    #   - 3'lu (guclu) uzak olcum  -> ust uste KALMAN_REACQUIRE_FRAMES kez teyit
+    #     edilirse re-seed (gercek konum degisimi/lock-in kurtarma); aksi halde coast.
+    #
+    # EFEKTIF KAPI = ADAPTIF (onerilen): dronun son karelerdeki TIPIK (medyan) adim
+    # mesafesinin KALMAN_STEP_GATE_MULT katidir. Boylece gercek hareket (~medyan adim)
+    # HEP gecer; sadece tipikin cok ustundeki sicramalar elenir -> kare hizindan/IHA
+    # hizindan bagimsiz; sabit px secmek gerekmez (sabit deger ya isinlamaya ya da
+    # filtrenin DONMASINA yol acar -> bu yuzden adaptif).
+    "KALMAN_STEP_GATE_MULT": 4.0,   # Medyan adimin kac kati sinir olsun. 0 = adaptif KAPALI.
+    # Taban (minimum) kapi: yavas/duragan harekette gateti cok daraltmaz. Adaptif
+    # KAPALIYKEN (MULT=0) mutlak ust sinir olarak kullanilir. 0 + MULT=0 -> kapi tamamen kapali.
+    "KALMAN_MAX_STEP_PX": 250,
+
+    # Hareket (hiz) ongorusu: simulasyon'da predict()'e KOMUT hareketi (hangi tusa basildiysa,
+    # basliga gore donduruldu) besleniyordu. Offline'da komut yok -> dronun GOZLENEN hizini
+    # (ardisik KABUL EDILEN olcumlerin yer degisimi, EMA ile yumusatilmis) predict()'e besleriz:
+    # "son karelerde bu yone/hizla gidiyordu, bir sonraki karede de devam edecek". Faydasi:
+    #   (1) gate YON-DUYARLI olur (gercek ileri hareket reddedilmez, ters yondeki aykiri elenir),
+    #   (2) kisa coast'larda filtre olu-hesapla (dead-reckoning) trajektoride ilerler (donmaz).
+    # DIKKAT: hiz ekstrapolasyonu + pencere-takibi DAHA ONCE diverge ettirmisti (bkz.
+    # PositionKalmanFilter notu). Bu yuzden VARSAYILAN KAPALI; coast'ta hiz SONUMLENIR (drift
+    # fade) ve re-seed'de sifirlanir. Acmadan once bir rotada RMSE'yi kiyaslayin.
+    "KALMAN_USE_MOTION": False,        # True: gozlenen hiz predict()'e beslenir (hareket ongorusu).
+    "KALMAN_MOTION_EMA": 0.5,          # Hiz EMA yumusatma (0..1; buyuk=cabuk uyum/gurultulu, kucuk=duzgun/gec).
+    "KALMAN_MOTION_COAST_DECAY": 0.5,  # Coast karelerinde hizi bu oranla sonumle (0=hemen dur, 1=tam dead-reckon).
+
+    # Kayip (surekli coast) durumunda arama penceresinin KADEMELI buyume adimi (px/kare).
+    # Pencere aniden CERCEVE_BOYUTU_MAX'a ziplamaz; her kayip karede bu kadar buyur (uste
+    # CERCEVE_BOYUTU_MAX ile sinirli). Boylece tek aykiri olcum tum haritayi taratmaz.
+    # Buyukse daha hizli (ama daha sicrayan) genisleme; >=CERCEVE_BOYUTU_MAX -> eski "aniden MAX".
+    # NOT: KALMAN_COV_GATE acikken bu kullanilmaz (pencere covaryanstan turetilir).
+    "KALMAN_LOST_GROWTH_PX": 800,
+
+    # COVARYANS-TABANLI MOD (ilkeli birlestirme): acikken yukaridaki ad-hoc kapilarin
+    # (MAX_STEP/STEP_GATE_MULT/LOST_GROWTH) YERINE, kapi ve arama penceresi DOGRUDAN
+    # filtrenin kovaryansindan turetilir:
+    #   - innovation kapisi  = KALMAN_GATE_SIGMA * sqrt(P + R)   (Mahalanobis)
+    #   - arama penceresi     ~ KALMAN_ROI_SIGMA * sqrt(P + R)   (+ sablon payi)
+    #   - process noise (q)   = gercek hareket olcegine (medyan adim) baglanir; boylece
+    #                           ongoru belirsizligi gercek karemarasi hareketi KAPSAR
+    #                           -> gercek hareket donmaz, coast'ta P buyuyup pencere/kapi
+    #                           yumusakca acilir, update sonrasi yeniden sikilesir.
+    # Bu mod donma/isinlama/pencere-patlamasi ucunu TEK ilkeli mekanizmayla cozer.
+    # VARSAYILAN KAPALI (mevcut davranis korunur); acmak icin True yapip bir rotada
+    # RMSE'yi kiyaslayin. KALMAN_USE_MOTION ile birlikte en iyi sonucu verir.
+    "KALMAN_COV_GATE": False,        # True: covaryans-tabanli innovation kapisi + ROI.
+    "KALMAN_GATE_SIGMA": 3.0,        # Innovation kapisi (sigma): kabul esigi = sigma*sqrt(P+R).
+    "KALMAN_ROI_SIGMA": 4.0,         # ROI yari-genisligi (sigma): pencere ~ 2*sigma*sqrt(P+R)+sablon.
+    "KALMAN_COV_MOTION_FRAC": 0.4,   # USE_MOTION acikken q'yu medyan adimin bu katina indir (artik
+                                     #   belirsizlik yalniz hizdaki SAPMA; daha siki kapi/pencere).
+
+    # Kalman kazanci (gain) TAVANI (0..1]: tahmin tek olcumde olcume EN FAZLA bu oranda
+    # cekilir; kalani ongoruden harmanlanir -> CIKTI YUMUSAR, sicrama azalir. Ozellikle
+    # covaryans modunda kazanc ~1.0 oldugundan cikti olcumu neredeyse aynen izler (sicrar);
+    # bu tavan onu kirar. 1.0 -> tavansiz (mevcut). Kucuk -> daha az sicrama AMA daha cok lag
+    # (lag'i azaltmak icin KALMAN_USE_MOTION ile birlikte kullanin: ongoru hareketi tasir,
+    # tavan yalniz gurultuyu yumusatir).
+    "KALMAN_GAIN_MAX": 0.3,
+
+    # Lokalizasyon kalitesi / kompozit guven skoru (simulasyon projesindeki
+    # gps_denied_autonomy modulu ile ayni). KAPALIYKEN (False) mevcut davranis
+    # BIREBIR korunur (Kalman ikili guven 1.0/0.5 mantigi degismez).
+    # Acikken: 3 sablonun normalize skor + GEOMETRIK tutarliligindan (uc kutu
+    # merkez yayilimi) [0,1] surekli guven uretilir; Kalman bu guvenle beslenir
+    # ve guvenilmez kareler `is_reliable=False` ile coast edilir (ham skor esigi
+    # KALMAN_LOST_SCORE'un yerine ilkesel bir "kayip" tespiti).
+    "USE_QUALITY": False,                  # True: kompozit guven hesaplanir ve Kalman gate'ine beslenir.
+    "QUALITY_SCORE_THRESHOLD": 0.35,       # Normalize skor TABANI esigi (altinda guvenilmez). CCOEFF_NORMED ~0.5-0.6 normalize olur.
+    "QUALITY_CONFIDENCE_THRESHOLD": 0.40,  # Kompozit guven esigi (altinda guvenilmez).
+    "QUALITY_SPREAD_THRESHOLD_PX": 120.0,  # Uc kutu merkez yayilimi esigi (px); ustunde geometrik tutarsiz -> guvenilmez.
+
+    # Sensor fuzyonu (olcum-onceki konum harmanlama + sicrama reddi). YALNIZCA
+    # Kalman KAPALIYKEN ciktiyi etkiler (Kalman acikken cift-yumusatma olmasin).
+    # KAPALIYKEN (False) cikti = ham olcum (mevcut davranis).
+    "USE_FUSION": False,             # True: ham olcum, onceki CIKTI konumuyla guvene gore harmanlanir.
+    "FUSION_BLEND_GAIN": 0.75,       # Harmanlama kazanci; efektif = gain*confidence.
+    "FUSION_MAX_JUMP_PX": 600.0,     # Olcum priordan bu*1.75'ten uzaksa reddedilir (prior korunur).
+
+    # Tanilama (diagnostic) ciktisi: islenen her goruntu icin diagnostics/ altina
+    # triptych PNG (crop | model cikisi | eslesen referans bolge) + meta JSON; dongu
+    # sonunda summary.json. Tez/teshis icin; varsayilan KAPALI (ek I/O maliyeti).
+    "DIAGNOSTIC_ENABLED": False,           # True: kare-bazli triptych + JSON yazilir.
+    "DIAGNOSTIC_OUTPUT_DIR": "diagnostics",# Cikti kok klasoru.
+    "LOG_QUALITY_CSV": False,              # True: kare-bazli kalite metrikleri tani_kalite_<ts>.csv'ye yazilir.
 
     # GPS tabanli kayip-onleme (300m geri donus). DIKKAT: gercek GPS hatasini kullanir,
     # yani GPS-denied sahada GECERSIZDIR (yalnizca degerlendirme/benchmark icin bir koltuk degnegi).
@@ -197,8 +285,28 @@ from PIL.ExifTags import TAGS
 from affine import Affine
 from pyproj import Transformer
 import concurrent.futures
+import json
 warnings.filterwarnings("ignore")
 dirname = os.path.dirname(os.path.abspath(__file__))
+
+# Lokalizasyon kalitesi / sensor fuzyonu yardimcilari (saf Python; ek bagimlilik yok).
+# importlib ile (tests / konum_ui_qt) yuklendiginde de bulunabilmesi icin betik
+# dizinini sys.path'e ekle. Bu fonksiyonlar yalnizca ilgili RUN_CFG bayraklari
+# acikken kullanilir; KAPALIYKEN davranis BIREBIR korunur.
+import sys as _sys
+if dirname not in _sys.path:
+    _sys.path.insert(0, dirname)
+from gps_denied_autonomy import (
+    LocalizationQuality,
+    compute_localization_quality,
+    fuse_measurement_with_prior,
+    plan_kalman_measurement_action,
+    effective_step_gate_px,
+    blend_velocity_ema,
+    median_of,
+    innovation_gate_px,
+    covariance_window_size_px,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -1822,7 +1930,32 @@ KALMAN_WINDOW_FOLLOWS = bool(RUN_CFG.get("KALMAN_WINDOW_FOLLOWS", True))
 KALMAN_REACQUIRE_FRAMES = int(RUN_CFG.get("KALMAN_REACQUIRE_FRAMES", 2))
 KALMAN_REACQUIRE_JUMP_PX = float(RUN_CFG.get("KALMAN_REACQUIRE_JUMP_PX", 300))
 KALMAN_LOST_SCORE = float(RUN_CFG.get("KALMAN_LOST_SCORE", 0.0))
+KALMAN_MAX_STEP_PX = float(RUN_CFG.get("KALMAN_MAX_STEP_PX", 250))
+KALMAN_STEP_GATE_MULT = float(RUN_CFG.get("KALMAN_STEP_GATE_MULT", 4.0))
+KALMAN_USE_MOTION = bool(RUN_CFG.get("KALMAN_USE_MOTION", False))
+KALMAN_MOTION_EMA = float(RUN_CFG.get("KALMAN_MOTION_EMA", 0.5))
+KALMAN_MOTION_COAST_DECAY = float(RUN_CFG.get("KALMAN_MOTION_COAST_DECAY", 0.5))
+KALMAN_LOST_GROWTH_PX = float(RUN_CFG.get("KALMAN_LOST_GROWTH_PX", 800))
+KALMAN_COV_GATE = bool(RUN_CFG.get("KALMAN_COV_GATE", False))
+KALMAN_GATE_SIGMA = float(RUN_CFG.get("KALMAN_GATE_SIGMA", 3.0))
+KALMAN_ROI_SIGMA = float(RUN_CFG.get("KALMAN_ROI_SIGMA", 4.0))
+KALMAN_COV_MOTION_FRAC = float(RUN_CFG.get("KALMAN_COV_MOTION_FRAC", 0.4))
+KALMAN_GAIN_MAX = float(RUN_CFG.get("KALMAN_GAIN_MAX", 0.6))
 USE_GPS_REVERT = bool(RUN_CFG.get("USE_GPS_REVERT", True))
+
+# Lokalizasyon kalitesi / sensor fuzyonu / tanilama (USE_*=False iken davranis korunur)
+USE_QUALITY = bool(RUN_CFG.get("USE_QUALITY", False))
+QUALITY_SCORE_THRESHOLD = float(RUN_CFG.get("QUALITY_SCORE_THRESHOLD", 0.35))
+QUALITY_CONFIDENCE_THRESHOLD = float(RUN_CFG.get("QUALITY_CONFIDENCE_THRESHOLD", 0.40))
+QUALITY_SPREAD_THRESHOLD_PX = float(RUN_CFG.get("QUALITY_SPREAD_THRESHOLD_PX", 120.0))
+USE_FUSION = bool(RUN_CFG.get("USE_FUSION", False))
+FUSION_BLEND_GAIN = float(RUN_CFG.get("FUSION_BLEND_GAIN", 0.75))
+FUSION_MAX_JUMP_PX = float(RUN_CFG.get("FUSION_MAX_JUMP_PX", 600.0))
+DIAGNOSTIC_ENABLED = bool(RUN_CFG.get("DIAGNOSTIC_ENABLED", False))
+DIAGNOSTIC_OUTPUT_DIR = str(RUN_CFG.get("DIAGNOSTIC_OUTPUT_DIR", "diagnostics"))
+LOG_QUALITY_CSV = bool(RUN_CFG.get("LOG_QUALITY_CSV", False))
+# Kare-bazli kalite metrigi gereken durumlar (herhangi biri acik>sa hesapla).
+NEED_QUALITY = bool(USE_QUALITY or USE_FUSION or DIAGNOSTIC_ENABLED or LOG_QUALITY_CSV)
 
 if benchmark:
     cerceve_boyutu_deger = int(RUN_CFG["CERCEVE_BOYUTU_BENCHMARK"])
@@ -2115,18 +2248,30 @@ class PositionKalmanFilter:
         self._q = float(process_noise) ** 2       # surec gurultu varyansi
         self._r = float(measurement_noise) ** 2   # olcum gurultu varyansi
 
-    def predict(self, motion_x=0.0, motion_y=0.0):
-        """(Varsa) bilinen hareketi uygula ve belirsizligi buyut."""
+    def predict(self, motion_x=0.0, motion_y=0.0, process_var=None):
+        """(Varsa) bilinen hareketi uygula ve belirsizligi buyut.
+
+        process_var verilirse bu kare icin surec gurultu varyansi olarak onun yerine
+        kullanilir (covaryans-tabanli mod: q gercek hareket olcegine baglanir). None ->
+        yapilandirilan sabit q (mevcut davranis).
+        """
         self._x += float(motion_x)
         self._y += float(motion_y)
-        self._var_x += self._q
-        self._var_y += self._q
+        q = self._q if process_var is None else max(0.0, float(process_var))
+        self._var_x += q
+        self._var_y += q
 
-    def update(self, measured_x, measured_y, confidence=1.0):
-        """Olcumle gunceller. confidence yuksek -> olcume daha cok guven."""
+    def update(self, measured_x, measured_y, confidence=1.0, gain_max=1.0):
+        """Olcumle gunceller. confidence yuksek -> olcume daha cok guven.
+
+        gain_max (0,1]: Kalman kazancina TAVAN. <1 ise tahmin tek olcumde olcume
+        en fazla bu oranda cekilir (kalani ongoruden) -> CIKTI YUMUSAR (sicrama azalir).
+        1.0 -> tavansiz (mevcut davranis). Kucuk -> daha az sicrama ama daha cok lag.
+        """
         r_scaled = self._r / max(0.01, float(confidence))
-        k_x = self._var_x / (self._var_x + r_scaled)
-        k_y = self._var_y / (self._var_y + r_scaled)
+        k_cap = max(0.0, min(1.0, float(gain_max)))
+        k_x = min(self._var_x / (self._var_x + r_scaled), k_cap)
+        k_y = min(self._var_y / (self._var_y + r_scaled), k_cap)
         self._x += k_x * (float(measured_x) - self._x)
         self._y += k_y * (float(measured_y) - self._y)
         self._var_x *= max(0.0, 1.0 - k_x)
@@ -2153,6 +2298,60 @@ class PositionKalmanFilter:
     @property
     def uncertainty_px(self):
         return math.sqrt((self._var_x + self._var_y) / 2.0)
+
+    @property
+    def position_var_mean(self):
+        """Ortalama konum belirsizligi varyansi P = (var_x + var_y)/2 (covaryans-tabanli kapi/ROI icin)."""
+        return (self._var_x + self._var_y) / 2.0
+
+    @property
+    def measurement_var(self):
+        """Olcum gurultu varyansi R (covaryans-tabanli kapi icin)."""
+        return self._r
+
+
+def _diag_to_bgr(panel):
+    """Gri/renkli paneli 3 kanalli BGR'ye getirir (None ise kucuk siyah kare)."""
+    if panel is None:
+        return np.zeros((64, 64, 3), dtype=np.uint8)
+    arr = np.asarray(panel)
+    if arr.ndim == 2:
+        return cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    if arr.ndim == 3 and arr.shape[2] == 3:
+        return arr.astype(np.uint8)
+    return cv2.cvtColor(np.squeeze(arr).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+
+
+def make_diagnostic_triptych(panels, titles, target_height=420, gap=12, caption_h=44):
+    """Verilen panelleri (crop | model | eslesen referans) yan yana, baslikli birlestirir.
+
+    Saf gorsellestirme; uretim akisini etkilemez. Hata olursa cagiran try/except ile yutar.
+    """
+    cells = []
+    for panel, title in zip(panels, titles):
+        bgr = _diag_to_bgr(panel)
+        ph, pw = bgr.shape[:2]
+        scale = target_height / float(max(1, ph))
+        new_w = max(1, int(round(pw * scale)))
+        resized = cv2.resize(bgr, (new_w, target_height), interpolation=cv2.INTER_AREA)
+        cap = np.zeros((caption_h, new_w, 3), dtype=np.uint8)
+        cap[:] = (40, 40, 40)
+        cv2.putText(cap, str(title), (8, caption_h - 14),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2, cv2.LINE_AA)
+        cells.append(np.vstack([cap, resized]))
+
+    total_h = max(c.shape[0] for c in cells)
+    sep = np.zeros((total_h, gap, 3), dtype=np.uint8)
+    sep[:] = (20, 20, 20)
+    out = []
+    for idx, cell in enumerate(cells):
+        if cell.shape[0] != total_h:
+            pad = np.zeros((total_h - cell.shape[0], cell.shape[1], 3), dtype=np.uint8)
+            cell = np.vstack([cell, pad])
+        if idx > 0:
+            out.append(sep)
+        out.append(cell)
+    return np.hstack(out)
 
 
 def run_pipeline(callbacks=None):
@@ -2375,7 +2574,16 @@ def run_pipeline(callbacks=None):
         kf_initialized = False
         kf_reacq_count = 0  # ust uste uzak+guvenli olcum sayaci (re-seed icin)
         kf_lost_count = 0   # ust uste kayip (coast/dusuk skor) kare sayaci (pencere genislet)
-        
+        kf_prev_meas = None    # adaptif kapi: onceki HAM olcum (adim mesafesi icin)
+        kf_step_history = []   # adaptif kapi: son karelerin ham adim mesafeleri (medyan icin)
+        kf_vel = (0.0, 0.0)    # hareket ongorusu: tahmini hiz (px/kare), kabul edilen olcumlerden
+        kf_prev_acc_meas = None  # hareket ongorusu: onceki KABUL EDILEN ham olcum (hiz icin)
+        kf_fusion_prev = None  # USE_FUSION: onceki (harmanlanmis) cikti konumu
+        diag_dir = None        # DIAGNOSTIC/LOG_QUALITY: lazily olusturulan cikti klasoru
+        quality_csv_writer = None
+        quality_csv_file = None
+        diag_summary_rows = []
+
         model_yolu = model_path_list[k]
         model = load_model_compat(model_yolu)        
         
@@ -2418,7 +2626,9 @@ def run_pipeline(callbacks=None):
 
             # Bu karede anlamli bir kesisim tabanli tahmin uretildiyse True olur.
             intersection_found = False
-            
+            # Hangi kesisim modu kullanildi (kalite agirligi icin): abc/ab/bc/ac/center_fallback.
+            intersection_mode = "center_fallback"
+
             baslangic_zamani = time.time()
 
             
@@ -2911,22 +3121,26 @@ def run_pipeline(callbacks=None):
                     print("konum: ",kare)
                     cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                     intersection_found = True
+                    intersection_mode = "abc"
 
             if not intersection_found and kesisim_ab!=():
                 kare=(kesisim_ab[0],kesisim_ab[1],int(kesisim_ab[2]),int(kesisim_ab[3]))
                 print("konum: ",kare)
                 cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
+                intersection_mode = "ab"
             elif not intersection_found and kesisim_bc!=():
                 kare=(kesisim_bc[0],kesisim_bc[1],int(kesisim_bc[2]),int(kesisim_bc[3]))
                 print("konum: ",kare)
                 cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
+                intersection_mode = "bc"
             elif not intersection_found and kesisim_ac!=():
                 kare=(kesisim_ac[0],kesisim_ac[1],int(kesisim_ac[2]),int(kesisim_ac[3]))
                 print("konum: ",kare)
                 cerceve_boyutu = min(cerceve_boyutu + 100, CERCEVE_BOYUTU_MAX)
                 intersection_found = True
+                intersection_mode = "ac"
 
             if not intersection_found:
                 print("kesişim yok")
@@ -2962,6 +3176,23 @@ def run_pipeline(callbacks=None):
             konum = konum_olcum
             konum_filt = konum_olcum  # filtrelenmis cikti (varsayilan = ham)
 
+            # --- Lokalizasyon kalitesi (kompozit guven) ---
+            # Yalnizca ilgili bayrak(lar) acikken hesaplanir; KAPALIYKEN quality=None
+            # ve asagidaki Kalman gate'i mevcut ikili guven mantigina birebir doner.
+            # Yontem TM_CCOEFF_NORMED (match_three) -> is_sqdiff_method=False.
+            quality = None
+            if NEED_QUALITY:
+                quality = compute_localization_quality(
+                    [max_val1, max_val2, max_val3],
+                    [a, b, c],
+                    kare,
+                    intersection_mode,
+                    False,
+                    QUALITY_SCORE_THRESHOLD,
+                    QUALITY_CONFIDENCE_THRESHOLD,
+                    QUALITY_SPREAD_THRESHOLD_PX,
+                )
+
             # --- Kalman (sabit-konum) guncellemesi ---
             if kf_on and benchmark == False:
                 if not kf_initialized:
@@ -2972,37 +3203,120 @@ def run_pipeline(callbacks=None):
                         measurement_noise=KALMAN_MEASUREMENT_NOISE,
                     )
                     kf_initialized = True
+                    kf_prev_meas = konum_olcum  # adaptif kapi: ilk olcumu adim referansi yap
                     # Ilk karede filtrelenmemis olcum kullanilir (konum_filt zaten = olcum).
                 else:
-                    # Offline tekrar oynatmada komut hareketi yok -> sadece belirsizligi buyut.
-                    kf.predict(0.0, 0.0)
+                    # Hareket olcegi (medyan adim): covaryans modunda process noise'u buna baglar.
+                    _motion_scale = (median_of(kf_step_history)
+                                     if len(kf_step_history) >= 3 else None)
+                    _process_var = None
+                    if KALMAN_COV_GATE and _motion_scale is not None:
+                        # q std = gercek hareket olcegi; USE_MOTION'da artik belirsizlik
+                        # yalniz hizdaki SAPMA oldugundan kucultulur (daha siki kapi/pencere).
+                        _q_std = _motion_scale * (KALMAN_COV_MOTION_FRAC if KALMAN_USE_MOTION else 1.0)
+                        _process_var = _q_std * _q_std
+
+                    # Predict: KALMAN_USE_MOTION acikken dronun GOZLENEN hizi (kf_vel) komut
+                    # hareketi gibi beslenir; kapaliyken (0,0). process_var (covaryans modu)
+                    # verilirse bu kareye ozel q kullanilir, yoksa sabit q (mevcut davranis).
+                    if KALMAN_USE_MOTION:
+                        kf.predict(kf_vel[0], kf_vel[1], _process_var)
+                    else:
+                        kf.predict(0.0, 0.0, _process_var)
+                    _pred_var_mean = kf.position_var_mean  # ongoru (predict sonrasi) belirsizligi
                     _is_3way = (kesisim_ab != () and kesisim_bc != () and kesisim_ac != ())
-                    _meas_far = math.dist(konum_olcum, kf.position)  # olcum-filtre mesafesi (px)
+                    _meas_far = math.dist(konum_olcum, kf.position)  # olcum-ongoru mesafesi (px)
                     _poor_score = (KALMAN_LOST_SCORE > 0 and float(max_val2) < KALMAN_LOST_SCORE)
 
-                    if intersection_found and not _poor_score:
-                        _conf = KALMAN_CONF_GOOD if _is_3way else KALMAN_CONF_OK
-                        # YENIDEN-KAZANIM: yuksek-guvenli (3'lu) bir olcum filtreden COK uzaksa,
-                        # filtre muhtemelen yanlis yere saplanmis (lock-in) -> ust uste teyit edilince
-                        # olcume yeniden tohumla. Tek aykiriya kanmamak icin streak gerekir.
-                        if _is_3way and _meas_far > KALMAN_REACQUIRE_JUMP_PX:
-                            kf_reacq_count += 1
-                            if kf_reacq_count >= KALMAN_REACQUIRE_FRAMES:
-                                kf.reset(konum_olcum)   # re-seed (saplanmayi kir)
-                                kf_reacq_count = 0
-                            # streak dolana kadar guncelleme yok (olasi aykiriyi beklet)
-                        else:
-                            kf_reacq_count = 0
-                            kf.update(konum_olcum[0], konum_olcum[1], _conf)
-                        kf_lost_count = 0
+                    # Olcum guvenilir mi + olcum guveni:
+                    # - USE_QUALITY: kompozit kaliteden (skor + geometrik tutarlilik) gelir.
+                    # - Aksi halde: mevcut ikili mantik (kesisim var + skor iyi; 3'lu=GOOD, ikili=OK).
+                    # KAPALIYKEN iki ifade de eski degerlere BIREBIR esittir.
+                    if USE_QUALITY and quality is not None:
+                        _reliable = bool(quality.is_reliable)
+                        _conf = float(quality.confidence)
                     else:
-                        # Kesisim yok / skor dusuk -> coast (guncelleme yok) + kayip sayaci.
+                        _reliable = bool(intersection_found and not _poor_score)
+                        _conf = KALMAN_CONF_GOOD if _is_3way else KALMAN_CONF_OK
+
+                    # KAPI ESIGI:
+                    # - COVARYANS modu: innovation kapisi = KALMAN_GATE_SIGMA*sqrt(P+R)
+                    #   (P=ongoru belirsizligi, R=olcum gurultusu). Coast'ta P buyur -> kapi acilir;
+                    #   update sonrasi P kuculur -> kapi sikilesir. Tek ilkeli buyukluk, sihirli px yok.
+                    # - Aksi halde: adaptif medyan kapi (dronun tipik adiminin kati).
+                    # Warmup'ta (yeterli ornek yok) kapi 0 -> klasik (3'lu+reacq) yol; hareket olcegi ogrenilir.
+                    if KALMAN_COV_GATE:
+                        if _motion_scale is not None:
+                            _gate_px = innovation_gate_px(_pred_var_mean, kf.measurement_var, KALMAN_GATE_SIGMA)
+                            _reacq_px = _gate_px       # covaryans modu: reacq da ayni esikten
+                        else:
+                            # warmup: kapi YOK ve reacq da YOK (reacq_px=inf) -> normal update;
+                            # boylece filtre ilk karelerde hareketi izleyip hareket olcegini ogrenir.
+                            _gate_px = 0.0
+                            _reacq_px = float("inf")
+                    else:
+                        _gate_px = effective_step_gate_px(
+                            kf_step_history, KALMAN_STEP_GATE_MULT, KALMAN_MAX_STEP_PX,
+                        )
+                        _reacq_px = KALMAN_REACQUIRE_JUMP_PX
+
+                    # YENIDEN-KAZANIM (saf karar fonksiyonu):
+                    # - Olcum kapidan uzaksa tek olcumle filtreyi ZIPLATMA: zayif (2'li) uzak olcum
+                    #   reddedilir; guclu (3'lu) uzak olcum ust uste teyit edilince re-seed edilir
+                    #   (lock-in / gercek konum degisimi kurtarma).
+                    # - Kapi 0 (warmup/kapali) iken: yalnizca klasik (3'lu + reacq) yol; digerleri update.
+                    _action, kf_reacq_count = plan_kalman_measurement_action(
+                        _reliable, _is_3way, _meas_far,
+                        _gate_px, _reacq_px,
+                        kf_reacq_count, KALMAN_REACQUIRE_FRAMES,
+                    )
+                    if _action == "update":
+                        kf.update(konum_olcum[0], konum_olcum[1], _conf, KALMAN_GAIN_MAX)
+                        kf_lost_count = 0
+                    elif _action == "reseed":
+                        kf.reset(konum_olcum)   # kalici uzak 3'lu teyit -> re-seed
+                        kf_lost_count = 0
+                    elif _action == "reacq_wait":
+                        # uzak 3'lu ama streak dolmadi -> guncelleme yok (olasi aykiriyi beklet)
+                        kf_lost_count = 0
+                    elif _action == "coast_outlier":
+                        # fiziksel kapiyi asan 2'li olcum -> reddet (coast) + kayip say
+                        kf_lost_count += 1
+                    else:  # "coast_unreliable": kesisim yok / skor dusuk / kalite guvenilmez
                         kf_lost_count += 1
 
-                    # Kayipken (uzun coast) veya re-seed yolundayken arama penceresini genislet
-                    # ki uzaktaki GERCEK konum tekrar gorunur olsun (window-follow'u kurtarir).
-                    if kf_lost_count >= KALMAN_REACQUIRE_FRAMES or kf_reacq_count >= 1:
-                        cerceve_boyutu = CERCEVE_BOYUTU_MAX
+                    # Hareket (hiz) ongorusunu guncelle: hiz, ardisik KABUL EDILEN ham
+                    # olcumlerin yer degisiminden (EMA) gelir. Coast'ta hiz SONUMLENIR
+                    # (yanlis dead-reckon driftini sinirla); re-seed'de SIFIRLANIR (taze konum).
+                    if KALMAN_USE_MOTION:
+                        if _action == "update":
+                            if kf_prev_acc_meas is not None:
+                                _disp = (konum_olcum[0] - kf_prev_acc_meas[0],
+                                         konum_olcum[1] - kf_prev_acc_meas[1])
+                                kf_vel = blend_velocity_ema(kf_vel, _disp, KALMAN_MOTION_EMA)
+                            kf_prev_acc_meas = konum_olcum
+                        elif _action == "reseed":
+                            kf_vel = (0.0, 0.0)            # taze konum -> hiz bilinmiyor
+                            kf_prev_acc_meas = konum_olcum
+                        else:  # coast (outlier / unreliable / reacq_wait)
+                            kf_vel = (kf_vel[0] * KALMAN_MOTION_COAST_DECAY,
+                                      kf_vel[1] * KALMAN_MOTION_COAST_DECAY)
+
+                    # ARAMA PENCERESI BOYUTU:
+                    # - COVARYANS modu: pencere DOGRUDAN kovaryanstan turetilir
+                    #   (~2*ROI_SIGMA*sqrt(P+R)+sablon). Belirsizlik buyukse genis, kuculunce dar;
+                    #   coast'ta yumusakca acilir, update sonrasi toparlar -> "aniden korkunc buyume" yok.
+                    # - Aksi halde: kayip (surekli coast) durumunda KADEMELI buyut (aniden MAX yok).
+                    #   Iyi hizalamada pencere zaten tabana doner (yukaridaki uclu-hizalama testi).
+                    if KALMAN_COV_GATE:
+                        if _motion_scale is not None:
+                            cerceve_boyutu = int(round(covariance_window_size_px(
+                                _pred_var_mean, kf.measurement_var, KALMAN_ROI_SIGMA,
+                                PATCH_SIZE, cerceve_boyutu_deger, CERCEVE_BOYUTU_MAX,
+                            )))
+                        # warmup: pencere mevcut (taban) degerinde kalir
+                    elif kf_lost_count >= KALMAN_REACQUIRE_FRAMES:
+                        cerceve_boyutu = min(cerceve_boyutu + KALMAN_LOST_GROWTH_PX, CERCEVE_BOYUTU_MAX)
 
                     # Filtrelenmis cikti konumu (sinir icinde kirp).
                     fkx, fky = kf.position
@@ -3010,9 +3324,29 @@ def run_pipeline(callbacks=None):
                     fky = max(0, min(int(fky), img.shape[0] - 1))
                     konum_filt = (fkx, fky)
 
+                    # Adaptif kapi gecmisini guncelle: ham olcum adim mesafesi (medyan icin).
+                    # Esik bu kareden ONCEKI gecmisten hesaplandi; simdi guncel adimi ekle.
+                    if kf_prev_meas is not None:
+                        kf_step_history.append(math.dist(konum_olcum, kf_prev_meas))
+                        if len(kf_step_history) > 12:
+                            kf_step_history = kf_step_history[-12:]
+                    kf_prev_meas = konum_olcum
+
             # Cikti (lat/lon, cizim, hata) icin konum: Kalman acikken filtrelenmis, degilse ham.
             kf_aktif = bool(kf_on and benchmark == False and kf_initialized)
             konum_cikti = konum_filt if kf_aktif else konum
+
+            # --- Sensor fuzyonu (yalnizca Kalman KAPALIYKEN ciktiyi etkiler) ---
+            # Ham olcum, onceki CIKTI konumuyla guvene gore harmanlanir; cok uzak
+            # sicramalar reddedilir (tek-adim yanlis eslesmelerine dayanikli). Kalman
+            # aktifken cift-yumusatma olmamasi icin uygulanmaz; benchmark'ta da kapali.
+            if USE_FUSION and benchmark == False and not kf_aktif and quality is not None:
+                _fused, _fusion_ok, _fusion_jump = fuse_measurement_with_prior(
+                    kf_fusion_prev, konum_olcum, quality,
+                    FUSION_MAX_JUMP_PX, FUSION_BLEND_GAIN,
+                )
+                konum_cikti = _fused
+                kf_fusion_prev = _fused
 
 
 
@@ -3083,7 +3417,81 @@ def run_pipeline(callbacks=None):
             
                 
             # dosyaya_yaz(sonuclar,dogru_tahmin,yanlis_tahmin)  # Döngü sonunda bir defa yazılacak
-                
+
+            # --- Kalite CSV + tanilama (diagnostic) ciktisi ---
+            # Yalnizca LOG_QUALITY_CSV / DIAGNOSTIC_ENABLED acikken; uretim akisini
+            # etkilemez. Tum blok try/except ile korunur: tani ciktisi asla calismayi
+            # cokertmez. `img` burada hala GRI (BGR'ye cevrilmeden once kirpiliyor).
+            if (LOG_QUALITY_CSV or DIAGNOSTIC_ENABLED) and quality is not None:
+                try:
+                    if diag_dir is None:
+                        _ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        diag_dir = os.path.join(dirname, DIAGNOSTIC_OUTPUT_DIR,
+                                                "diag_{}_m{}".format(_ts, k))
+                        os.makedirs(diag_dir, exist_ok=True)
+                    _img_name = os.path.basename(str(anlik_yol_list[i]))
+                    _model_name = os.path.basename(str(model_list[k]))
+                    _err_m = float(uzaklik) * 1000.0
+
+                    if LOG_QUALITY_CSV:
+                        if quality_csv_writer is None:
+                            quality_csv_file = open(
+                                os.path.join(diag_dir, "tani_kalite.csv"),
+                                "w", newline="", encoding="utf-8",
+                            )
+                            quality_csv_writer = csv.writer(quality_csv_file)
+                            quality_csv_writer.writerow([
+                                "goruntu", "model", "kesisim_modu", "kesisim_var",
+                                "skor_min", "skor_ort", "yayilma_px", "guven",
+                                "guvenilir", "neden", "hata_m", "kalman_aktif",
+                                "ucus_yuksekligi",
+                            ])
+                        quality_csv_writer.writerow([
+                            _img_name, _model_name, intersection_mode,
+                            int(intersection_found), round(quality.score_floor, 4),
+                            round(quality.score_mean, 4),
+                            round(quality.center_spread_px, 2),
+                            round(quality.confidence, 4), int(quality.is_reliable),
+                            quality.reason, round(_err_m, 2), int(kf_aktif),
+                            round(float(ucus_yuksekligi), 2),
+                        ])
+
+                    _meta = {
+                        "goruntu": _img_name,
+                        "model": _model_name,
+                        "kesisim_modu": intersection_mode,
+                        "kesisim_var": bool(intersection_found),
+                        "skorlar": [float(max_val1), float(max_val2), float(max_val3)],
+                        "skor_min": quality.score_floor,
+                        "skor_ort": quality.score_mean,
+                        "yayilma_px": quality.center_spread_px,
+                        "guven": quality.confidence,
+                        "guvenilir": bool(quality.is_reliable),
+                        "neden": quality.reason,
+                        "gercek_latlon": [float(gps_latitude), float(gps_longitude)],
+                        "tahmin_latlon": [float(lat_tahmin), float(long_tahmin)],
+                        "hata_m": _err_m,
+                        "kalman_aktif": bool(kf_aktif),
+                        "ucus_yuksekligi": float(ucus_yuksekligi),
+                    }
+                    diag_summary_rows.append(_meta)
+
+                    if DIAGNOSTIC_ENABLED:
+                        _matched_ref = img[max(0, top_left2[1]):top_left2[1] + h,
+                                           max(0, top_left2[0]):top_left2[0] + w]
+                        _trip = make_diagnostic_triptych(
+                            [rotated_part2_color, template[1], _matched_ref],
+                            ["Crop (merkez)", "Model cikisi", "Eslesen referans"],
+                        )
+                        _base = "case_m{}_{:03d}_{}".format(
+                            k, i + 1, os.path.splitext(_img_name)[0])
+                        cv2.imwrite(os.path.join(diag_dir, _base + "_triptych.png"), _trip)
+                        with open(os.path.join(diag_dir, _base + "_meta.json"),
+                                  "w", encoding="utf-8") as _jf:
+                            json.dump(_meta, _jf, ensure_ascii=False, indent=2)
+                except Exception as _diag_e:
+                    log.warning("tanilama ciktisi yazilamadi: %s", _diag_e)
+
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
             
             if benchmark==True:
@@ -3437,8 +3845,45 @@ def run_pipeline(callbacks=None):
             rmse_degeri = float('nan')
             mae_degeri = float('nan')
             standart_sapma_degeri = float('nan')
-        
-        
+
+        # --- Tanilama ozeti (summary.json) + kalite CSV kapatma ---
+        if diag_dir is not None:
+            try:
+                if quality_csv_file is not None:
+                    quality_csv_file.close()
+                    quality_csv_file = None
+                    quality_csv_writer = None
+                _n = len(diag_summary_rows)
+                _reliable_n = sum(1 for r in diag_summary_rows if r.get("guvenilir"))
+                _mean_conf = (sum(float(r.get("guven", 0.0)) for r in diag_summary_rows) / _n) if _n else 0.0
+                _spreads = [float(r.get("yayilma_px", 0.0)) for r in diag_summary_rows
+                            if math.isfinite(float(r.get("yayilma_px", float("inf"))))]
+                _mean_spread = (sum(_spreads) / len(_spreads)) if _spreads else float("nan")
+                _summary = {
+                    "model": os.path.basename(str(model_list[k])),
+                    "kare_sayisi": _n,
+                    "guvenilir_kare": _reliable_n,
+                    "guvenilir_oran": round(_reliable_n / _n, 4) if _n else 0.0,
+                    "ortalama_guven": round(_mean_conf, 4),
+                    "ortalama_yayilma_px": (round(_mean_spread, 2)
+                                            if math.isfinite(_mean_spread) else None),
+                    "rmse_m": (round(float(rmse_degeri) * 1000.0, 2)
+                               if uzaklik_hatalari.size > 0 else None),
+                    "mae_m": (round(float(mae_degeri) * 1000.0, 2)
+                              if uzaklik_hatalari.size > 0 else None),
+                    "std_m": (round(float(standart_sapma_degeri) * 1000.0, 2)
+                              if uzaklik_hatalari.size > 0 else None),
+                    "dogru_tahmin": int(dogru_tahmin),
+                    "yanlis_tahmin": int(yanlis_tahmin),
+                    "kareler": diag_summary_rows,
+                }
+                with open(os.path.join(diag_dir, "summary.json"), "w", encoding="utf-8") as _sf:
+                    json.dump(_summary, _sf, ensure_ascii=False, indent=2)
+                print("tanilama ozeti yazildi:", os.path.join(diag_dir, "summary.json"))
+            except Exception as _sum_e:
+                log.warning("tanilama ozeti yazilamadi: %s", _sum_e)
+
+
         # Yeni verilen değerler için tekrar hesaplama yapılıyor
 
 

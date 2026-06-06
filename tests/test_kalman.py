@@ -140,6 +140,35 @@ class TestPositionKalmanFilter(unittest.TestCase):
             kf.predict(0.0, 0.0)  # update yok -> coast
         self.assertEqual(kf.position, (123, 456))
 
+    def test_predict_process_var_override(self):
+        # predict(process_var=...) bu kareye ozel q kullanir (covaryans modu).
+        kf = self._make(0.0, 0.0, process_noise=10.0, measurement_noise=10.0)
+        v0 = kf.position_var_mean
+        kf.predict(0.0, 0.0, process_var=40000.0)  # std 200 -> var +40000
+        self.assertAlmostEqual(kf.position_var_mean, v0 + 40000.0, delta=1e-6)
+
+    def test_gain_max_caps_movement(self):
+        # gain_max=0.5 -> olcume EN FAZLA %50 cekilir (tavansiz ~tam cekerdi).
+        kf = self._make(0.0, 0.0, process_noise=1000.0, measurement_noise=1.0)
+        kf.predict(0.0, 0.0)  # var cok buyur -> tavansiz kazanc ~1.0
+        kf.update(100.0, 0.0, confidence=1.0, gain_max=0.5)
+        self.assertAlmostEqual(kf.position[0], 50, delta=2)  # ~%50
+
+    def test_gain_max_one_is_uncapped(self):
+        # gain_max=1.0 -> mevcut davranis (yuksek var'da olcume neredeyse tam oturur).
+        kf = self._make(0.0, 0.0, process_noise=1000.0, measurement_noise=1.0)
+        kf.predict(0.0, 0.0)
+        kf.update(100.0, 0.0, confidence=1.0, gain_max=1.0)
+        self.assertGreater(kf.position[0], 95)
+
+    def test_lower_gain_max_smooths_more(self):
+        # Dusuk tavan -> olcume daha az cekilir (daha cok yumusatma).
+        a = self._make(0.0, 0.0, process_noise=1000.0, measurement_noise=1.0); a.predict(0.0, 0.0)
+        b = self._make(0.0, 0.0, process_noise=1000.0, measurement_noise=1.0); b.predict(0.0, 0.0)
+        a.update(100.0, 0.0, confidence=1.0, gain_max=0.3)
+        b.update(100.0, 0.0, confidence=1.0, gain_max=0.8)
+        self.assertLess(a.position[0], b.position[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
