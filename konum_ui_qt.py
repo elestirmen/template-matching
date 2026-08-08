@@ -332,13 +332,14 @@ class ControlPanel(QWidget):
         self.c_hdg  = MetricCard("HDG",   "°")
         self.c_alt  = MetricCard("ALT",   " m")
         self.c_err  = MetricCard("ERR",   " m")
-        self.c_spd  = MetricCard("SPD",   " km/h")
+        self.c_spd  = MetricCard("LOC SPD", " km/h")
+        self.c_of_spd = MetricCard("OF SPD", " km/h")
         self.c_lat  = MetricCard("LAT",   "",  wide=True)
         self.c_lon  = MetricCard("LON",   "",  wide=True)
         self.c_acc  = MetricCard("ACC",   "%")
         self.c_tm   = MetricCard("TM",    "")
-        for idx, card in enumerate([self.c_hdg, self.c_alt, self.c_err, self.c_spd,
-                                    self.c_acc, self.c_tm]):
+        for idx, card in enumerate([self.c_hdg, self.c_alt, self.c_err, self.c_tm,
+                                    self.c_spd, self.c_of_spd, self.c_acc]):
             grid.addWidget(card, idx // 2, idx % 2)
         root.addLayout(grid)
 
@@ -449,6 +450,12 @@ class ControlPanel(QWidget):
         self.c_alt.set_value(f"{m.get('alt', 0)}")
         self.c_err.set_value(f"{m.get('err_m', 0)}")
         self.c_spd.set_value(f"{m.get('spd_kmh', 0):.1f}")
+        if m.get("of_spd_valid", False):
+            self.c_of_spd.set_value(f"{m.get('of_spd_kmh', 0):.1f}")
+            self.c_of_spd.set_color(C_SUCCESS)
+        else:
+            self.c_of_spd.set_value("--")
+            self.c_of_spd.set_color(C_MUTED)
         self.c_lat.set_value(f"{m.get('lat', 0):.6f}")
         self.c_lon.set_value(f"{m.get('lon', 0):.6f}")
         self.c_acc.set_value(f"{acc:.1f}")

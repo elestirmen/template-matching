@@ -49,7 +49,7 @@ RUN_CFG = {
     # Veri yollari
     "HARITA_DIR": "haritalar",   # Referans harita klasoru.
     "MODEL_DIR": "model",        # Keras model klasoru.
-    "ANLIK_DIR": "guzergahlar/4_tezde_ucus_8",     # Islenecek anlik goruntu klasoru.
+    "ANLIK_DIR": "guzergahlar/1_tezde_ucus_5",     # Islenecek anlik goruntu klasoru.
     "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
 
     # Dosya secimi:
@@ -102,6 +102,15 @@ RUN_CFG = {
     # Harita/kenar sabitleri (eskiden kod icinde gomulu sabit sayilardi):
     "MAP_RES_CM_PER_PX": 29.85,  # Referans harita cozunurlugu (cm/piksel). Olcek ve HIZ hesabinda kullanilir.
     "KENAR_SINIR_PX": 272,       # Harita kenarina bu kadar yakin konumlar atlanir (piksel).
+
+    # GPS/konum tahmininden bagimsiz alternatif hiz: ardisik kamera karelerinde
+    # sparse Lucas-Kanade optical flow + RANSAC benzerlik donusumu.
+    "OPTICAL_FLOW_SPEED_ENABLED": True,
+    "OPTICAL_FLOW_MAX_DIMENSION": 960,  # Islem maliyeti icin uzun kenar ust siniri.
+    "OPTICAL_FLOW_MAX_CORNERS": 800,
+    "OPTICAL_FLOW_MIN_TRACKS": 20,
+    "OPTICAL_FLOW_MIN_INLIER_RATIO": 0.45,
+    "OPTICAL_FLOW_RANSAC_THRESHOLD_PX": 2.5,
 
     # Kalman filtresi (gorsel konum tahminini zamansal filtreleme/yumusatma):
     # - Sabit hiz (constant velocity) modeli; durum = [x, y, vx, vy].
@@ -367,6 +376,7 @@ from gps_denied_autonomy import (
     innovation_gate_px,
     covariance_window_size_px,
 )
+from optical_flow_speed import OpticalFlowSpeed, OpticalFlowSpeedEstimator
 
 
 # -----------------------------------------------------------------------------
@@ -2640,6 +2650,14 @@ def run_pipeline(callbacks=None):
         speed_vx_mps = 0.0
         speed_vy_mps = 0.0
         speed_mps = 0.0
+        optical_flow_speed = OpticalFlowSpeed(reason="disabled")
+        optical_flow_estimator = OpticalFlowSpeedEstimator(
+            max_dimension=int(RUN_CFG.get("OPTICAL_FLOW_MAX_DIMENSION", 960)),
+            max_corners=int(RUN_CFG.get("OPTICAL_FLOW_MAX_CORNERS", 800)),
+            min_tracks=int(RUN_CFG.get("OPTICAL_FLOW_MIN_TRACKS", 20)),
+            min_inlier_ratio=float(RUN_CFG.get("OPTICAL_FLOW_MIN_INLIER_RATIO", 0.45)),
+            ransac_threshold_px=float(RUN_CFG.get("OPTICAL_FLOW_RANSAC_THRESHOLD_PX", 2.5)),
+        )
         # Kalman filtresi durumu (her harita/model cifti icin sifirlanir).
         kf = None
         kf_initialized = False
@@ -2927,6 +2945,14 @@ def run_pipeline(callbacks=None):
                 print("Anlik goruntu okunamadi, atlaniyor:", anlik_goruntu)
                 continue
             image = cv2.cvtColor(image_color, cv2.COLOR_BGR2GRAY)
+            if bool(RUN_CFG.get("OPTICAL_FLOW_SPEED_ENABLED", True)):
+                optical_flow_speed = optical_flow_estimator.update(
+                    image,
+                    frame_timestamp,
+                    float(mekansal_cozunurluk) / 100.0,
+                )
+            else:
+                optical_flow_speed = OpticalFlowSpeed(reason="disabled")
             
             # dim=(1000,750)
             
@@ -3795,7 +3821,12 @@ def run_pipeline(callbacks=None):
                     f"HDG: {yaw:.1f} deg",
                     f"ALT: {int(ucus_yuksekligi)} m",
                     f"ERR: {int(uzaklik * 1000)} m",
-                    f"SPD: {speed_mps:.2f} m/s ({speed_mps*3.6:.2f} km/h)",
+                    f"LOC SPD: {speed_mps:.2f} m/s ({speed_mps*3.6:.2f} km/h)",
+                    (
+                        f"OF SPD: {optical_flow_speed.speed_mps:.2f} m/s "
+                        f"({optical_flow_speed.speed_mps*3.6:.2f} km/h)"
+                        if optical_flow_speed.valid else "OF SPD: --"
+                    ),
                     f"LAT: {lat_tahmin:.6f}",
                     f"LON: {long_tahmin:.6f}",
                     f"FRAME: {_islenen_frame}/{_toplam_frame}  ACC: {_acc_pct:.1f}%",
@@ -3865,6 +3896,12 @@ def run_pipeline(callbacks=None):
                     "hdg": yaw, "alt": int(ucus_yuksekligi),
                     "err_m": int(uzaklik * 1000),
                     "spd_ms": speed_mps, "spd_kmh": speed_mps * 3.6,
+                    "of_spd_ms": optical_flow_speed.speed_mps,
+                    "of_spd_kmh": optical_flow_speed.speed_mps * 3.6,
+                    "of_spd_valid": optical_flow_speed.valid,
+                    "of_tracks": optical_flow_speed.tracked_points,
+                    "of_inlier_ratio": optical_flow_speed.inlier_ratio,
+                    "of_reason": optical_flow_speed.reason,
                     "lat": lat_tahmin, "lon": long_tahmin,
                     "frame": _cbs_i, "total": _cbs_n,
                     "acc": (dogru_tahmin / _cbs_i * 100.0),
@@ -3880,7 +3917,10 @@ def run_pipeline(callbacks=None):
                     callbacks['on_log'](
                         f"[{_cbs_i}/{_cbs_n}] ERR={int(uzaklik*1000)}m  "
                         f"ACC={dogru_tahmin/_cbs_i*100:.1f}%  "
-                        f"TM={max_val2:.3f}  t={time.time()-baslangic_zamani:.2f}s"
+                        f"TM={max_val2:.3f}  LOC_SPD={speed_mps:.2f}m/s  "
+                        f"OF_SPD={optical_flow_speed.speed_mps:.2f}m/s"
+                        f"{' ' if optical_flow_speed.valid else ' (' + optical_flow_speed.reason + ') '}"
+                        f"t={time.time()-baslangic_zamani:.2f}s"
                     )
 
             if callbacks is None:
