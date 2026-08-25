@@ -1,12 +1,15 @@
 ﻿# UAV Görüntü Konumlandırma - Template Matching ile Derin Öğrenme Destekli Jeolokalizasyon
 
-Bu proje, İHA (İnsansız Hava Aracı) / drone görüntülerini **referans ortofoto harita** üzerinde otomatik olarak konumlandıran bir bilgisayarlı görü sistemidir. Derin öğrenme tabanlı öznitelik çıkarımı ile çok ölçekli template matching yöntemini birleştirerek, GPS'ten bağımsız veya GPS doğrulamalı konum tahmini gerçekleştirir.
+Bu proje, İHA (İnsansız Hava Aracı) görüntülerini **referans ortofoto harita** üzerinde otomatik olarak konumlandırmayı araştıran deneysel bir bilgisayarlı görü sistemidir. Derin öğrenme tabanlı görüntü dönüşümünü çok ölçekli template matching ile birleştirir; kontrollü GPS-merkezli benchmark ve ardışık görsel takip senaryolarını ayrı çalışma modları olarak destekler.
+
+> **Araştırma prototipi:** Yazılım, akademik deney ve yöntem geliştirme amacı taşır. Emniyet kritik seyrüsefer veya tek başına gerçek uçuş kontrolü için doğrulanmış bir ürün değildir. Varsayılan parametreler Ürgüp çevresindeki yaklaşık 30 cm/piksel veriye özgüdür; farklı bölge, irtifa ve sensörlerde yeniden kalibrasyon gerekir.
 
 ---
 
 ## İçindekiler
 
 - [Genel Bakış](#genel-bakış)
+- [Akademik Çerçeve](#akademik-çerçeve)
 - [Sistem Mimarisi](#sistem-mimarisi)
 - [Çalışma Akışı (Pipeline)](#çalışma-akışı-pipeline)
 - [Klasör Yapısı](#klasör-yapısı)
@@ -27,10 +30,13 @@ Bu proje, İHA (İnsansız Hava Aracı) / drone görüntülerini **referans orto
   - [Kalman Filtresi (Konum Takibi)](#kalman-filtresi-konum-takibi)
 - [Koordinat Dönüşümleri](#koordinat-dönüşümleri)
 - [Değerlendirme Metrikleri](#değerlendirme-metrikleri)
+- [Deney Protokolü ve Yeniden Üretilebilirlik](#deney-protokolü-ve-yeniden-üretilebilirlik)
 - [Görselleştirme](#görselleştirme)
 - [Çıktı Dosyaları](#çıktı-dosyaları)
 - [Kamera Desteği](#kamera-desteği)
 - [Sınırlamalar ve Notlar](#sınırlamalar-ve-notlar)
+- [Atıf](#atıf)
+- [Lisans](#lisans)
 
 ---
 
@@ -47,6 +53,38 @@ Sistem, bir drone'un çektiği anlık görüntüleri georeferanslı bir ortofoto
 7. Referans haritanın ilgili bölgesinde **template matching** (Normalized Cross-Correlation) yapılır.
 8. Üç eşleşmenin kesişim alanından **nihai konum** belirlenir.
 9. Tahmin edilen konum ile gerçek GPS konumu arasındaki hata hesaplanır.
+
+---
+
+## Akademik Çerçeve
+
+### Araştırma problemi
+
+Temel problem, bir hava görüntüsünün georeferanslı referans haritadaki konumunu görsel içerikten kestirmek ve bu kestirimi ardışık karelerde kararlı biçimde sürdürmektir. Proje özellikle şu araştırma sorularına odaklanır:
+
+1. DEM ve kamera geometrisiyle hesaplanan GSD, sorgu ile harita arasındaki ölçek farkını ne ölçüde azaltır?
+2. Öğrenilmiş görüntü dönüşümü ile klasik normalize çapraz korelasyon birlikte kullanıldığında çapraz-kaynak eşleşme yapılabilir mi?
+3. Üç yükseklik/ölçek hipotezinin geometrik kesişimi tek bir eşleşmeye göre daha kararlı konum üretir mi?
+4. Kalite kapılama, Kalman süzgeci ve yeniden kazanım ardışık karelerdeki yanlış sıçramaları azaltır mı?
+5. Görsel konumdan ve optik akıştan elde edilen ayrı hız kanalları hangi koşullarda tutarlı sonuç verir?
+
+### Yöntemsel katkılar
+
+- Merkez, sol-üst ve sağ-alt DEM örneklerinden üretilen üç ölçek hipotezi
+- `544 × 544 × 1` sorguların tek batch içinde Keras modeliyle dönüştürülmesi
+- CPU veya uygun OpenCV-CUDA kurulumu üzerinde piramit NCC araması
+- Eşleşme skorunu ve adayların geometrik yayılımını birleştiren isteğe bağlı kalite ölçümü
+- Güven ağırlıklı Kalman güncellemesi, hareket kapısı ve kayıp sonrası yeniden kazanım
+- Lokalizasyon hızından bağımsız, Lucas–Kanade + RANSAC tabanlı optik akış hız kestirimi
+
+### Deney modlarının anlamı
+
+| Mod | Arama merkezi | Uygun kullanım | Bilimsel sınır |
+|---|---|---|---|
+| `BENCHMARK=True` | Her karede EXIF/GPS merkezli sabit pencere | Model ve eşleştirici bileşenlerini kontrollü karşılaştırma | Uçtan uca GPS-denied otonomi sonucu değildir; gerçek konum aramayı sınırlar |
+| `BENCHMARK=False` | Önceki görsel/filtrelenmiş konumu izleyen adaptif pencere | Ardışık takip ve yeniden kazanım deneyi | Başlatma, arama ve değerlendirme bilgilerinin ayrılığı ayrıca denetlenmelidir |
+
+Adil bir GPS-denied deneyde gelecek karelerin gerçek konumu arama merkezi, hareket öncülü, kurtarma veya filtre güncellemesinde kullanılmamalıdır. Gerçek GPS yalnızca değerlendirme etiketi olarak tutulmalı ve `USE_GPS_REVERT=False` olmalıdır.
 
 ---
 
@@ -221,13 +259,16 @@ Tum calisma parametreleri dosyanin basindaki tek `RUN_CFG` sozlugunden yonetilir
 | `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Benchmark modunda arama cercevesi boyutu (piksel) |
 | `HARITA_DIR` | `"haritalar"` | Harita dosyalarinin bulundugu klasor |
 | `MODEL_DIR` | `"model"` | Keras model dosyalarinin bulundugu klasor |
-| `ANLIK_DIR` | `"parcalar"` | Drone goruntularinin bulundugu klasor |
+| `ANLIK_DIR` | `"guzergahlar/1_tezde_ucus_5"` | Drone goruntularinin bulundugu klasor |
 | `DEM_PATH` | `"ana_harita_urgup_30_cm_utm_elevation.tif"` | DEM raster dosyasi yolu |
 | `HARITA_DOSYALARI` | `[]` | Belirli harita dosyalari listesi (bos = klasordeki tumu) |
 | `MODEL_DOSYALARI` | `[]` | Belirli model dosyalari listesi (bos = klasordeki tumu) |
 | `SORT_INPUTS` | `False` | Girdi dosyalarini alfabetik sirala |
+| `MAX_FRAMES` | `0` | `0`: tum kareler; `>0`: yalniz ilk N kare (hizli kontrol icin) |
 | `DEFAULT_FOCAL_LENGTH_MM` | `8.8` | EXIF'te yoksa varsayilan odak uzakligi (mm) |
 | `DEFAULT_SENSOR_WIDTH_MM` | `13.2` | Bilinmeyen kamera icin varsayilan sensor genisligi (mm) |
+| `YAW_OFFSET_DEG` | `0.0` | EXIF yaw degerine uygulanan kalibrasyon ofseti (derece) |
+| `USE_ROUTE_PROFILES` | `True` | Bilinen rotalara ait dogrulanmis profil farklarini uygula |
 | `USE_GPS_ALT_REF_SIGN` | `False` | GPS altitude referans isaretini uygula |
 | `WAIT_PER_MODEL` | `False` | Her model sonrasi durakla |
 | `WAIT_ON_EXIT` | `False` | Program sonunda durakla |
@@ -235,36 +276,36 @@ Tum calisma parametreleri dosyanin basindaki tek `RUN_CFG` sozlugunden yonetilir
 | `LOG_TO_FILE` | `False` | `True` ise loglar ayrica `tm_run.log` dosyasina yazilir |
 | `MAP_RES_CM_PER_PX` | `29.85` | Referans harita cozunurlugu (cm/piksel). Olcekleme ve hiz hesabinda kullanilir |
 | `KENAR_SINIR_PX` | `272` | Harita kenarina bu kadar yakin konumlar atlanir (piksel) |
+| `OPTICAL_FLOW_SPEED_ENABLED` | `True` | Konum kestiriminden ayri optik-akis hiz kanalini etkinlestirir |
 
-Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davranis birebir korunur:
+Kalman filtresi (konum takibi) ayarlari:
 
 | Parametre | Varsayilan | Aciklama |
 |-----------|-----------|----------|
-| `USE_KALMAN` | `False` | `True` ise konum tahmini Kalman ile filtrelenir (yalnizca `BENCHMARK=False`'te etkin) |
-| `KALMAN_PROCESS_NOISE` | `50.0` | Surec gurultu std (px). Buyudukce olcume daha cabuk uyar (az yumusatma) |
-| `KALMAN_MEASUREMENT_NOISE` | `8.0` | Olcum gurultu std (px). Kucuk -> iyi karelerde olcum neredeyse aynen gecer (lag yok); aykiri yutma coast'tan gelir |
+| `USE_KALMAN` | `True` | Konum tahminini Kalman ile filtreler; `KALMAN_IN_BENCHMARK=False` iken yalniz takip modunda etkindir |
+| `KALMAN_PROCESS_NOISE` | `30.0` | Surec gurultu std (px). Buyudukce olcume daha cabuk uyar (az yumusatma) |
+| `KALMAN_MEASUREMENT_NOISE` | `12.0` | Olcum gurultu std (px); guven degeriyle uyarlanir |
 | `KALMAN_CONF_GOOD` | `1.0` | 3'lu kesisim guveni (olcum gurultusu bu degere bolunur; `1.0` = tam guven) |
 | `KALMAN_CONF_OK` | `0.5` | Ikili kesisim guveni (daha dusuk -> olcume daha az guven) |
 | `KALMAN_WINDOW_FOLLOWS` | `True` | `True`: arama cercevesi (filtrelenmis) Kalman konumuna odaklanir; kesisimsiz karelerde coast edilmis iyi konumu takip eder -> aykiri kumelerden kurtarir |
-| `KALMAN_REACQUIRE_FRAMES` | `2` | Ust uste bu kadar "uzak + yuksek-guvenli (3'lu kesisim)" olcumde filtre olcume yeniden tohumlanir (lock-in kirici) |
-| `KALMAN_REACQUIRE_JUMP_PX` | `300` | Olcum filtreden bu kadar (px) uzaksa "uzak" sayilir (~90 m) |
-| `KALMAN_STEP_GATE_MULT` | `4.0` | **Adaptif fiziksel hareket siniri (innovation gating).** Sinir, dronun son karelerdeki TIPIK (medyan) adim mesafesinin bu katidir. Boylece gercek hareket (~medyan adim) HEP gecer (filtre DONMAZ), yalnizca tipikin cok ustundeki sicramalar (yanlis eslesme) elenir: zayif (2'li) uzak olcum reddedilir; guclu (3'lu) uzak olcum ust uste `KALMAN_REACQUIRE_FRAMES` kez teyit edilirse re-seed edilir. Sabit px secmek GEREKMEZ (kare hizindan/IHA hizindan bagimsiz). `0` = adaptif kapali (sabit `KALMAN_MAX_STEP_PX` kullanilir). Cok eliyorsa BUYUT, az eliyorsa KUCULT |
-| `KALMAN_MAX_STEP_PX` | `250` | Adaptif kapinin TABANI (minimum kapi): yavas/duragan harekette gateti cok daraltmaz. `KALMAN_STEP_GATE_MULT=0` iken ise mutlak ust sinir olarak kullanilir. `0` + `MULT=0` -> kapi tamamen kapali (eski davranis: uzak yanlis eslesmeler tek karede ISINLANIR) |
-| `KALMAN_USE_MOTION` | `False` | **Hareket (hiz) ongorusu.** Simulasyon'da `predict()`'e KOMUT hareketi besleniyordu; offline'da komut yok -> dronun GOZLENEN hizi (ardisik kabul edilen olcumlerin yer degisimi, EMA) `predict()`'e beslenir: "bu yone/hizla gidiyordu, devam edecek". Faydasi: gate YON-DUYARLI olur (gercek ileri hareket reddedilmez, ters yondeki aykiri elenir) ve kisa coast'larda filtre olu-hesapla trajektoride ilerler (donmaz). **DIKKAT: hiz ekstrapolasyonu + pencere-takibi DAHA ONCE diverge ettirmisti** (bkz. `PositionKalmanFilter` notu); bu yuzden varsayilan KAPALI, coast'ta hiz sonumlenir, re-seed'de sifirlanir. Acmadan once RMSE'yi kiyaslayin |
-| `KALMAN_MOTION_EMA` | `0.5` | Hiz EMA yumusatma (0..1). Buyuk -> olcume cabuk uyum (gurultulu); kucuk -> daha duzgun ama donuslerde gec |
-| `KALMAN_MOTION_COAST_DECAY` | `0.5` | Coast karelerinde hizi bu oranla sonumler (drift sinirla). `0` -> coast'ta hemen dur (sabit-konum gibi); `1` -> tam dead-reckon (drift riski) |
+| `KALMAN_REACQUIRE_FRAMES` | `1` | Bu kadar uzak ve yuksek-guvenli olcumde filtre yeniden tohumlanir |
+| `KALMAN_REACQUIRE_JUMP_PX` | `700` | Olcum filtreden bu kadar uzaktaysa yeniden kazanma adayi sayilir |
+| `KALMAN_STEP_GATE_MULT` | `8.0` | Adaptif hareket kapisini son karelerin medyan adimiyla olceklendirir |
+| `KALMAN_MAX_STEP_PX` | `700` | Adaptif kapinin tabani; adaptif kapaliyken mutlak sinir |
+| `KALMAN_USE_MOTION` | `True` | Kabul edilen olcumlerden turetilen hareketi ongoruye besler |
+| `KALMAN_MOTION_EMA` | `0.2` | Hareket hizinin EMA yumusatma katsayisi |
+| `KALMAN_MOTION_COAST_DECAY` | `0.7` | Coast karelerinde hareketin sonumlenme orani |
 | `KALMAN_LOST_GROWTH_PX` | `800` | Kayip (surekli coast) durumunda arama penceresinin KADEMELI buyume adimi (px/kare), `CERCEVE_BOYUTU_MAX` ile sinirli. Pencere ANIDEN MAX'a ziplamaz -> tek aykiri olcum tum haritayi taratmaz. `KALMAN_COV_GATE` acikken kullanilmaz |
 | `KALMAN_COV_GATE` | `False` | **COVARYANS-TABANLI ILKELI MOD.** Acikken yukaridaki ad-hoc kapilarin (`MAX_STEP`/`STEP_GATE_MULT`/`LOST_GROWTH`) YERINE kapi ve arama penceresi DOGRUDAN filtrenin kovaryansindan turetilir: innovation kapisi `= GATE_SIGMA*sqrt(P+R)`, pencere `~ 2*ROI_SIGMA*sqrt(P+R)+sablon`, process-noise (q) gercek hareket olcegine (medyan adim) baglanir. Boylece **donma/isinlama/pencere-patlamasi ucu TEK ilkeli mekanizmayla** cozulur (coast'ta P buyur -> kapi/pencere yumusakca acilir, update sonrasi toparlar). Varsayilan KAPALI; acmak icin `True` yapip RMSE'yi kiyaslayin. `KALMAN_USE_MOTION` ile birlikte en iyi |
 | `KALMAN_GATE_SIGMA` | `3.0` | (COV modu) Innovation kapisi sigma: kabul esigi `= sigma*sqrt(P+R)`. Cok eliyorsa BUYUT, az eliyorsa KUCULT |
 | `KALMAN_ROI_SIGMA` | `4.0` | (COV modu) Arama penceresi yari-genisligi sigma: `~ 2*sigma*sqrt(P+R)+sablon`. Gercek konumu icermesi icin `GATE_SIGMA`'dan biraz buyuk tutulur |
 | `KALMAN_COV_MOTION_FRAC` | `0.4` | (COV modu) `USE_MOTION` acikken q'yu medyan adimin bu katina indirir (artik belirsizlik yalniz hizdaki SAPMA -> daha siki kapi/pencere). `USE_MOTION` kapaliyken yok sayilir |
-| `KALMAN_GAIN_MAX` | `0.6` | **Kalman kazanci (gain) TAVANI (0..1].** Tahmin tek olcumde olcume EN FAZLA bu oranda cekilir; kalani ongoruden harmanlanir -> **CIKTI YUMUSAR, sicrama azalir.** Ozellikle COV modunda kazanc ~1.0 oldugundan cikti olcumu neredeyse aynen izler (sicrar); bu tavan onu kirar. `1.0` -> tavansiz (eski davranis). Kucuk -> daha az sicrama AMA daha cok lag (lag'i `KALMAN_USE_MOTION` ile telafi edin: ongoru hareketi tasir, tavan yalniz gurultuyu yumusatir) |
+| `KALMAN_GAIN_MAX` | `0.35` | Tek guncellemede olcume dogru uygulanabilecek azami Kalman kazanci |
 | `KALMAN_LOST_SCORE` | `0.0` | `>0` ise TM skoru (`max_val2`) bunun altindaki kareler "kayip" sayilir (coast + pencere genislet). `0` = kapali. **Bu veri setinde iyi/kotu kareler ayni skor araliginda (~0.15-0.25) oldugundan ISE YARAMADI; `0`'da birakin** |
-| `USE_GPS_REVERT` | `True` | Eski "300 m geri donus" kayip-onleme. **GERCEK GPS hatasini kullanir -> GPS-denied'da gecersiz**; adil (gorsel-yalniz) kiyas icin `False` yapin. Kalman acikken zaten devre disidir |
+| `USE_GPS_REVERT` | `False` | Gercek GPS hatasini kullanan eski kurtarma; GPS-denied deneyde kapali kalmalidir |
 
-> Sabit-konum modeli + kucuk olcum gurultusu + coast simulasyon projesinden esinlenildi;
-> `MEASUREMENT_NOISE` bu hizli veri setine gore (~80 yerine ~8) ayarlandi. Baska
-> platform/cozunurlukte yeniden ayarlanmasi gerekebilir.
+> Kalman parametreleri bu veri setindeki coklu rota deneyleriyle ayarlanmistir.
+> Baska platform, kare hizi veya harita cozunurlugunde yeniden kalibrasyon gerekir.
 >
 > **Cok-rota sonuclari (4 Urgup guzergahi, hepsi GPS'siz; RMSE, m):**
 >
@@ -284,6 +325,10 @@ Kalman filtresi (konum takibi) ayarlari -- `USE_KALMAN=False` iken mevcut davran
 > (4_tezde_8, guz4_tezde_3) intrinsik olarak basarisiz (dogruluk ~%0-50): gorsel
 > eslesmenin kendisi coker (muhtemelen harita kapsama / model uyumu) -> Kalman'in
 > cozemeyecegi bir veri sorunu. `KALMAN_LOST_SCORE` denendi; bu veri icin yarar saglamadi.
+>
+> **Sonuc kokeni notu:** Bu sayilar kesifsel proje kayitlaridir. Tam yapilandirma,
+> kaynak commit'i, veri bolunmesi, kare muhasebesi ve varlik parmak izleriyle
+> eslestirilmeden yayimlanmis temel sonuc olarak kullanilmamalidir.
 
 ### Lokalizasyon kalitesi, sensor fuzyonu ve tanilama (`simulasyon` projesinden)
 
@@ -350,7 +395,7 @@ UI ve gorunurluk odakli ayarlar (ust blok):
 
 ### 1. Python Ortami
 
-Python 3.8+ onerilir. Sanal ortam olusturup bagimliliklari kurun:
+Python 3.11 onerilir. Windows'ta GDAL/rasterio kurulumu icin Conda kullanmak daha guvenilirdir:
 
 ```bash
 python -m venv venv
@@ -556,7 +601,8 @@ Kesisim alaninin **merkez noktasi** nihai konum tahmini olarak kabul edilir.
 1. **Kaba Arama**: Goruntu ve template `COARSE_SCALE` (0.5) oraninda kucultulur, template matching uygulanir.
 2. **Ince Arama**: Kaba aramanin buldugu konumun cevresinde (`ROI_PAD_FACTOR` genisliginde) tam cozunurlukle arama yapilir.
 
-Bu yontem, buyuk haritalar uzerinde arama suresini **2-4 kat** azaltir.
+Bu yontem buyuk haritalarda arama suresini azaltabilir; hiz kazanci harita boyutu,
+ROI ve donanima bagli oldugundan her deney ortaminda yeniden olculmelidir.
 
 ### CUDA GPU Hizlandirma
 
@@ -656,6 +702,34 @@ Her model-harita cifti tamamlandiginda asagidaki metrikler hesaplanir:
 
 ---
 
+## Deney Protokolü ve Yeniden Üretilebilirlik
+
+Akademik bir kosu icin yalnizca ortalama dogruluk veya RMSE raporlamak yeterli
+degildir. Her deneyde asagidaki bilgiler birlikte saklanmalidir:
+
+1. Git commit kimligi ve calisma agacinin temiz/kirli durumu
+2. Cozumlenmis `RUN_CFG`, rota profili ve rastgelelik kaynaklari
+3. Python, TensorFlow, OpenCV, GDAL, rasterio ve CUDA/cuDNN surumleri
+4. Harita, model, DEM ve sorgu verilerinin kimligi; mumkunse SHA-256 degerleri
+5. Denenen, kabul edilen, reddedilen, atlanan ve hata veren kare sayilari
+6. Metre cinsinden medyan, MAE, RMSE, P95 ve 70 m basari orani
+7. Kapsama, ardisk reddetme, yeniden kazanma suresi ve kare gecikmesi
+8. Arama merkezinde veya kurtarmada kullanilan tum oracle bilgiler
+
+`experiment_tracking.py`, deney manifesti ve kare-bazli durum muhasebesi icin
+yardimci siniflar saglar. Uretilen manifest, kare CSV'si ve ozet gercekten mevcut
+degilse bir kosu tamamlanmis sayilmamalidir.
+
+> **Kosullu metrik uyarisi:** Hata yalnizca kabul edilen karelerde hesaplaniyorsa
+> kapsama orani da verilmelidir. Aksi halde cok sayida zor kareyi reddeden bir
+> yontem oldugundan daha basarili gorunebilir.
+
+Veri bolme islemi mekansal blok veya bagimsiz rota duzeyinde yapilmalidir. Birbirine
+cok yakin ardisk karelerin egitim ve test kumelerine dagitilmasi mekansal sizintiya
+ve iyimser sonuclara yol acar.
+
+---
+
 ## Gorsellestirme
 
 Sistem calisirken birden fazla OpenCV penceresi acilir:
@@ -722,10 +796,24 @@ Bilinmeyen kamera modelleri icin `DEFAULT_SENSOR_WIDTH_MM` (varsayilan: 13.2 mm)
 - **Bellek**: Buyuk ortofoto haritalar yuksek RAM tuketebilir. `OPENCV_IO_MAX_IMAGE_PIXELS` siniri `2^40`'a ayarlanmistir.
 - **Yaw Destegi**: Yaw bilgisi DJI MakerNote formatinda beklenir. Diger drone ureticileri icin ozel parse gerekebilir.
 - **Basari Esigi**: Varsayilan olarak 70 metre mesafe basarili konum tahmini olarak kabul edilir.
-- **Adaptif Takip**: 300 metreden buyuk hata durumunda, bir onceki konuma geri donulur (kayip onleme mekanizmasi).
+- **Adaptif Takip**: Arama penceresi Kalman/kalite politikasina gore izlenir ve kayip durumunda kontrollu buyutulur. GPS tabanli eski geri donus varsayilan olarak kapalidir.
+- **Benchmark Siniri**: `BENCHMARK=True`, aramayi gercek GPS cevresinde sinirladigi icin tam GPS-denied otonomi performansini olcmez.
+- **Veri Setine Ozguluk**: Rota profilleri ve ayarlanmis esikler bagimsiz test verisine aktarilirken yeniden dogrulanmalidir.
+
+---
+
+## Atıf
+
+Bu depo icin henuz dogrulanmis bir `CITATION.cff`, DOI veya yayimlanmis bibliyografik
+kayit bulunmamaktadir. Ilgili tez/makale yayimlandiginda yazar, baslik, kurum, yil,
+surum ve kalici baglanti bilgileriyle atif yapilmalidir. Bu bilgiler kesinlesmeden
+tahmini bir BibTeX kaydi kullanilmamalidir.
 
 ---
 
 ## Lisans
 
-Bu proje, Kapadokya Universitesi tez calismasi kapsaminda gelistirilmistir.
+Bu proje, Kapadokya Universitesi tez calismasi kapsaminda gelistirilmistir. Depoda
+ayri bir `LICENSE` dosyasi bulunmamaktadir; kaynak kodun erisilebilir olmasi otomatik
+olarak yeniden dagitim veya turev eser izni vermez. Kullanim ve lisanslama icin proje
+sahipleriyle iletisime gecilmelidir.
