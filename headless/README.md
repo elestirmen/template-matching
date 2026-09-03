@@ -147,3 +147,9 @@ journalctl -u visnav -f
 - **GDAL/rasterio import hatası** → conda-forge ile kurun (Bölüm 1).
 - **Klasör bulunamadı (`Harita/Model/Anlik klasoru bulunamadi`)** → Linux harf
   duyarlılığı; `haritalar/model/guzergahlar` adlarını birebir kontrol edin.
+
+---
+
+## License
+
+This project is dual-licensed under the MIT License and Apache License 2.0.

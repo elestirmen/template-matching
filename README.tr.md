@@ -865,4 +865,4 @@ Bu depo için henüz doğrulanmış bir `CITATION.cff`, DOI veya yayımlanmış 
 
 ## Lisans
 
-Bu proje, Kapadokya Üniversitesi tez çalışması kapsamında geliştirilmiştir. Depoda ayrı bir `LICENSE` dosyası bulunmamaktadır; kaynak kodun erişilebilir olması otomatik olarak yeniden dağıtım veya türev eser izni vermez. Kullanım ve lisanslama için proje sahipleriyle iletişime geçilmelidir.
+Bu proje MIT Lisansı ve Apache Lisansı 2.0 altında çift lisanslıdır.

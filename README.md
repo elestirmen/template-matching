@@ -799,4 +799,5 @@ There is no published `CITATION.cff` or DOI for this repository yet. When the re
 ---
 
 ## License
-This project was developed within the scope of a thesis study at Cappadocia University. There is no separate `LICENSE` file; accessibility to the source code does not automatically grant permission for redistribution or derivative works. Contact the project owners for usage and licensing.
+
+This project is dual-licensed under the MIT License and Apache License 2.0.
