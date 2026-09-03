@@ -419,8 +419,25 @@ All runtime parameters are managed from a single `RUN_CFG` dictionary near the t
 | `KALMAN_WARMUP_RESEED` | `False` | `True`: during warmup, re-seed the state to the raw measurement every frame |
 | `KALMAN_IN_BENCHMARK` | `False` | `True`: also apply the Kalman output filter while `BENCHMARK=True` |
 | `KALMAN_RAW_ON_UPDATE` | `True` | `True`: report the raw measurement on accepted updates, and the Kalman output only on coast/outlier frames |
-| `KALMAN_LOST_SCORE` | `0.0` | If `>0`, TM score below this means "lost" frame. Left at `0` for this dataset. |
+| `KALMAN_LOST_SCORE` | `0.0` | If `>0`, TM score below this means "lost" frame. **Tried on this dataset and it didn't help** — good and bad frames land in the same ~0.15–0.25 score band, so `max_val2` isn't a reliable quality signal here. Left at `0`; don't re-try without new evidence. |
 | `USE_GPS_REVERT` | `False` | Old recovery using true GPS error; must remain off in GPS-denied experiments |
+
+> Kalman parameters were tuned against this dataset's multi-route experiments; recalibrate for a different platform, frame rate, or map resolution.
+>
+> **Multi-route results (4 Ürgüp routes, all GPS-denied; RMSE, m):**
+>
+> | Route | Kalman ON | Visual-only (no KF, revert off) | OFF (GPS-revert crutch) |
+> |---|---|---|---|
+> | 1_tezde_5 | **37** | 180 | 59 |
+> | 3_tezde_7 | **231** | 329 | 202 |
+> | 2_tezde_6 | **90** | 2926 | 88 |
+> | 6_tezde_4 | **295** | 694 | 205 |
+>
+> Without using GPS, the Kalman filter absorbs coarse mismatch clusters by coasting, and recovers from lock-in via reacquisition. It matches or beats the GPS-crutched OFF baseline on two routes and stays close on the harder ones — without needing GPS.
+>
+> **Broader test (8 routes total):** Kalman clearly helps on 5 routes, is neutral on 2 (negligible extra cost on an easy route), and is catastrophic on none. Two routes (`4_tezde_8`, `guz4_tezde_3`) fail intrinsically (~0–50% accuracy): the visual match itself collapses (likely map coverage / model mismatch) — a data problem Kalman cannot fix. See the high-altitude domain-shift note in [Limitations and Notes](#limitations-and-notes).
+>
+> **Provenance note:** these numbers are exploratory project records. Do not cite them as a published baseline result without matching them to a full configuration, source commit, data split, frame accounting, and asset fingerprints — see [Experiment Protocol and Reproducibility](#experiment-protocol-and-reproducibility).
 
 ### Localization Quality, Sensor Fusion & Diagnostics
 
@@ -650,17 +667,39 @@ The system automatically checks for CUDA GPU presence and transparently uses it 
 Independently of the position pipeline, `optical_flow_speed.py` tracks sparse Lucas–Kanade features between consecutive drone frames, filters them with a RANSAC similarity fit, and converts the inlier median displacement into a real-world speed using `MAP_RES_CM_PER_PX` and the EXIF timestamp delta. Enabled by default (`OPTICAL_FLOW_SPEED_ENABLED`); tunable via the `OPTICAL_FLOW_*` parameters (frame downscale, corner count, minimum tracks/inlier ratio, RANSAC threshold).
 
 ### Kalman Filter (Position Tracking)
-When `USE_KALMAN=True`, the raw intersection center is smoothed using a Constant-Position Kalman filter operating in map-pixel space. This handles noisy measurements and incorporates an adaptive window, motion predictions, and coasting without requiring GPS data.
+When `USE_KALMAN=True`, the raw intersection center is smoothed using a Constant-Position Kalman filter (state = `(x, y)` only, in map-pixel space) instead of the more common constant-velocity design. This was a deliberate choice, not the default: an earlier constant-*velocity* model plus innovation gating plus window-following **diverged** on this dataset — the filter would coast in the wrong direction, drag the search window with it, corrupt subsequent measurements, and feed the error back into itself (route-wide RMSE went from 59 m to 104 m). The constant-position model never extrapolates a velocity forward — every valid measurement pulls it back — so it cannot run away and lock onto the wrong region the same way. It handles noisy measurements and incorporates an adaptive window, motion predictions, and coasting, all without requiring GPS data. See the empirical results table in [Configuration (RUN_CFG)](#configuration-run_cfg) for route-level numbers.
 
 ---
 
 ## Coordinate Transformations
-The system performs conversions between WGS84, Map Pixel coordinates, and UTM utilizing the `pyproj.Transformer`.
+
+| Transformation | Function | Description |
+|---|---|---|
+| WGS84 -> Pixel | `piksel_bul()` / `piksel_bul_fast()` | Converts a GPS coordinate to a map pixel position |
+| Pixel -> WGS84 | `koordinat_bul()` / `make_rc_to_ll()` | Converts a pixel position to a geographic coordinate |
+| WGS84 -> UTM | `latlon_to_utm()` | Converts latitude/longitude to a UTM coordinate |
+| Haversine | `haversine_distance()` | Great-circle distance between two geographic coordinates |
+| Quick Distance | `quick_distance()` | Approximate distance (fast path) |
+| Quick Distance UTM | `quick_distance_utm()` | UTM-based distance calculation |
+
+**CRS transforms**: `pyproj.Transformer` converts between EPSG:4326 (WGS84) and the map's/DEM's local CRS.
 
 ---
 
 ## Evaluation Metrics
-The main run reports RMSE, MAE, standard deviation, Precision, Recall, and F-score to `sonuclar.csv` / `sonuclar.txt` / `modele_gore_sonuclar.txt`. When run through `run_localization.py`, `experiment_tracking.FrameStatusRecorder.summary()` additionally derives coverage (`accepted / attempted`), p50/p95/max/MAE/RMSE over only the *accepted* frames, and dropout statistics (longest rejected streak, recovery-event count and length) — see [Experiment Protocol and Reproducibility](#experiment-protocol-and-reproducibility).
+The main run reports the following to `sonuclar.csv` / `sonuclar.txt` / `modele_gore_sonuclar.txt`:
+
+**Distance metrics** — RMSE (root mean square error), MAE (mean absolute error), and standard deviation of the error distribution.
+
+**Classification metrics** (threshold: 70 m) — a prediction is scored against whether it falls within `BASARI_ESIGI_KM` and whether a template intersection was found at all:
+- **True Positive (TP)** — correct position found and an intersection exists
+- **False Positive (FP)** — wrong position found but an intersection exists
+- **True Negative (TN)** — wrong position and no intersection
+- **False Negative (FN)** — correct position but no intersection
+
+**Derived metrics** — Precision = TP / (TP + FP); Recall = TP / (TP + FN); F-score = 2 × (Precision × Recall) / (Precision + Recall); accuracy % = correct predictions / total × 100.
+
+When run through `run_localization.py`, `experiment_tracking.FrameStatusRecorder.summary()` additionally derives coverage (`accepted / attempted`), p50/p95/max/MAE/RMSE over only the *accepted* frames, and dropout statistics (longest rejected streak, recovery-event count and length) — see [Experiment Protocol and Reproducibility](#experiment-protocol-and-reproducibility).
 
 ---
 
@@ -692,7 +731,36 @@ When citing numbers from this project (in a thesis, paper, or report), state exp
 ---
 
 ## Visualization
-Multiple OpenCV windows are used. The main window ("konum") shows the reference map, bounding boxes for the 3 scales, search frames, trajectory, and a HUD (Head-Up Display) with flight telemetry. The Qt front-end (`konum_ui_qt.py`) renders the same information inside a PyQt5 window with additional live metric cards.
+Multiple OpenCV windows are used.
+
+### Main map window ("konum")
+- Zoomed-in view of the reference map
+- **Red box**: Template 1 (top-left scale) match position
+- **Green box**: Template 2 (center scale) match position
+- **Blue box**: Template 3 (bottom-right scale) match position
+- **Black box**: search frame bounds
+- **Orange box**: ROI frame (toggle)
+- **Yellow dot**: predicted position
+- **Green dot**: true GPS position
+- **Aircraft icon**: true position and heading
+- **Yellow trail / Green trail**: predicted/true trajectory (toggle)
+- **Light-blue arrow**: computed speed vector
+
+### HUD (Head-Up Display)
+- **HDG**: yaw/heading angle (degrees)
+- **ALT**: flight altitude (meters)
+- **ERR**: position error (meters)
+- **SPD**: speed (`m/s` and `km/h`)
+- **Scale bar**: 100-meter reference bar
+- **Crosshair**: screen center
+
+The Qt front-end (`konum_ui_qt.py`) renders the same information inside a PyQt5 window with additional live metric cards.
+
+> Note: the speed vector is computed and drawn as an arrow on the map; its components are not broken out separately in the HUD text.
+
+### Crop vs. model window
+- Top: cropped and rotated drone image (color)
+- Bottom: Keras model output (grayscale)
 
 ---
 
