@@ -613,7 +613,7 @@ Eight suites, split by dependency weight:
 | `test_localization_policy.py` | `test_optical_flow_speed.py` (`cv2`, `numpy`) |
 | `test_run_localization.py` | `test_tracking_filter.py` (`numpy`) |
 
-`.github/workflows/unit-tests.yml` runs only the left column, on a bare `actions/setup-python` runner with no install step — none of those four import a third-party package. The right column needs the full `visual_navigation` environment from [Installation](#installation).
+`.github/workflows/unit-tests.yml` runs only the left column, on a bare `actions/setup-python` runner with no install step — none of those four import a third-party package. The right column needs the full `visual_navigation` environment from [Installation](#installation): those tests load the main script dynamically via `importlib.util` and are wrapped in `unittest.skipIf`, so a missing dependency (cv2/osgeo/tensorflow) skips them cleanly instead of failing.
 
 ---
 
@@ -700,7 +700,7 @@ Multiple OpenCV windows are used. The main window ("konum") shows the reference 
 - `sonuclar.csv` / `sonuclar.txt` — latest run, detailed per-frame results.
 - `modele_gore_sonuclar.txt` — latest run, summary metrics per model.
 - `run_artifacts/<run_id>/` (git-ignored) — `run_manifest.json` plus per-model `frame_status_m*.csv` / `frame_summary_m*.json`, written when `WRITE_RUN_ARTIFACTS` is set (currently only via `run_localization.py`).
-- `diagnostics/` (git-ignored) — per-frame triptych PNGs (crop | model output | matched reference region) + meta JSON, plus a run-end `summary.json`, when `DIAGNOSTIC_ENABLED=True`.
+- `diagnostics/diag_<timestamp>_m<model_index>/` (git-ignored) — per-frame triptych PNGs (crop | model output | matched reference region) + meta JSON, plus a run-end `summary.json`, when `DIAGNOSTIC_ENABLED=True`.
 - `tani_kalite_<timestamp>.csv` — per-frame quality metrics when `LOG_QUALITY_CSV=True`.
 - `results/` (git-ignored) — archived manual/sweep runs, including `results/kalman_sweep/`.
 - `tm_run.log` — optional logger output file when `LOG_TO_FILE=True`.
