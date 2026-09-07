@@ -1,0 +1,3 @@
+# Optional desktop interface; install in the existing visual_navigation environment.
+-r requirements.txt
+PyQt5>=5.15,<6

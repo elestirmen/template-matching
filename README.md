@@ -584,6 +584,7 @@ Set the `DEBUG` value to `True` in `RUN_CFG` to display intermediate images on t
 ### Alternative Front-Ends
 
 - **Qt control panel** — `python konum_ui_qt.py` runs the same pipeline behind a PyQt5 window with a background worker thread, live metric cards, and the same visibility toggles as the OpenCV HUD. Requires `PyQt5` (`pip install PyQt5`).
+  The desktop viewer now shares the Mission Control design system with the Visual and TERCOM simulators. Start it with `baslat_ui.cmd` in the Windows `visual_navigation` environment; see [desktop UI and shared template](DESIGN_SYSTEM.md) for layout, dependencies and validation.
 - **Headless / server mode** — `python headless/run_headless.py` runs the identical pipeline with every OpenCV window suppressed, for a Linux server with no display; periodically saves annotated PNG frames instead. See [headless/README.md](headless/README.md) for setup, a `systemd` service example, and troubleshooting.
 
 ### Reproducible Experiment Runs

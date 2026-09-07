@@ -1,39 +1,23 @@
-"""
-konum_ui_qt.py  —  PyQt5 tabanli navigasyon goruntuleyicisi.
+"""Mission Control template-matching viewer, using the shared Mission UI shell."""
 
-Mimarisi:
-  - ProcessingWorker (QThread): tum image-processing + ML islemlerini arka planda calistirir.
-  - MapDisplay       (QLabel) : her frame'i numpy -> QPixmap olarak gosterir.
-  - ControlPanel     (QWidget): toggle'lar, canli metrik kartlari, log ciktisi.
-  - MainWindow       (QMainWindow): QSplitter ile sol (harita) + sag (kontrol) duzeni.
-
-Kullanim:
-    python konum_ui_qt.py
-"""
-
-import sys
-import os
-import threading
-import math
-import time
 import importlib.util
+import os
+import sys
+from numbers import Real
 
-import numpy as np
 import cv2
-
+import numpy as np
+from PyQt5.QtCore import QMutex, QMutexLocker, Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QFont, QImage, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
-    QSplitter, QFrame, QCheckBox, QPushButton, QProgressBar,
-    QPlainTextEdit, QScrollArea, QSizePolicy, QStatusBar, QGridLayout,
-    QGroupBox, QSpacerItem,
+    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow,
+    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
+    QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer, QMutex, QMutexLocker
-from PyQt5.QtGui import QImage, QPixmap, QFont, QPalette, QColor
 
+from mission_ui import APP_STYLE, COLORS, create_footer, create_header, set_status
+from mission_ui import MetricCard as SharedMetricCard
 
-# ---------------------------------------------------------------------------
-# Ana islem modulunu yukle (if __name__=='__main__' blogu calistirilmaz)
-# ---------------------------------------------------------------------------
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _CORE_PY = os.path.join(_HERE,
     "template_matching_parallel_processing_560_hizli_solust_sagalt_koordinat_fonksiyonlar_icinde_cursor.py")
@@ -89,43 +73,23 @@ benchmark              = _tm.benchmark
 dirname                = _tm.dirname
 
 
-# ---------------------------------------------------------------------------
-# Renk paleti (Qt stylesheet'te kullanilacak)
-# ---------------------------------------------------------------------------
-C_BG       = "#1a1b2e"
-C_PANEL    = "#1e2030"
-C_BORDER   = "#3a3d55"
-C_ACCENT   = "#4285f4"
-C_SUCCESS  = "#4caf50"
-C_WARN     = "#ff9800"
-C_TEXT     = "#e8eaf0"
-C_MUTED    = "#7b7f9e"
-C_CARD_BG  = "#252740"
-C_ON       = "#4caf50"
-C_OFF      = "#3a3d55"
-
-
-# ---------------------------------------------------------------------------
-# ProcessingWorker
-# ---------------------------------------------------------------------------
 class ProcessingWorker(QThread):
-    frame_ready     = pyqtSignal(object)          # numpy BGR array
-    crop_ready      = pyqtSignal(object, object)  # (crop_bgr, model_gray)
-    metrics_update  = pyqtSignal(dict)            # metrik sozlugu
-    log_signal      = pyqtSignal(str)             # konsol satiri
-    finished_signal = pyqtSignal(dict)            # son metrikler
+    frame_ready = pyqtSignal(object)
+    crop_ready = pyqtSignal(object, object)
+    metrics_update = pyqtSignal(dict)
+    log_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
         self._running = True
-        self._mutex   = QMutex()
-        # UI gorunum/islev durumu (Qt butonlari tarafindan degistiriliyor)
+        self._mutex = QMutex()
         self._ui_state = {
-            "trajectory":   bool(DRAW_TRAJECTORY),
-            "inner_frame":  bool(RUN_CFG.get("SHOW_INNER_FRAME", False)),
-            "roi_frame":    bool(RUN_CFG.get("SHOW_ROI_FRAME", True)),
-            "tm_boxes":     bool(RUN_CFG.get("SHOW_TM_BOXES", True)),
-            "kalman":       bool(_tm.USE_KALMAN),  # Kalman filtresi calisma-aninda ac/kapa
+            "trajectory": bool(DRAW_TRAJECTORY),
+            "inner_frame": bool(RUN_CFG.get("SHOW_INNER_FRAME", False)),
+            "roi_frame": bool(RUN_CFG.get("SHOW_ROI_FRAME", True)),
+            "tm_boxes": bool(RUN_CFG.get("SHOW_TM_BOXES", True)),
+            "kalman": bool(_tm.USE_KALMAN),
         }
 
     def set_ui_state(self, key: str, value: bool):
@@ -139,418 +103,337 @@ class ProcessingWorker(QThread):
     def stop(self):
         self._running = False
 
-    def _log(self, msg: str):
-        self.log_signal.emit(str(msg))
-
-    # ------------------------------------------------------------------
     def run(self):
-        def _on_frame(vis_bgr, metadata):
+        def on_frame(vis_bgr, metadata):
             self.frame_ready.emit(vis_bgr)
-            vc = metadata.pop('vis_crop',  None)
-            vm = metadata.pop('vis_model', None)
-            self.metrics_update.emit(metadata)
-            if vc is not None and vm is not None:
-                self.crop_ready.emit(vc, vm)
+            self.metrics_update.emit({k: v for k, v in metadata.items() if k not in ("vis_crop", "vis_model")})
+            crop, model = metadata.get("vis_crop"), metadata.get("vis_model")
+            if crop is not None and model is not None:
+                self.crop_ready.emit(crop, model)
 
-        def _on_log(msg):
-            self.log_signal.emit(str(msg))
-
-        def _stop_check():
-            return not self._running
-
-        def _ui_state_update():
+        def ui_state_update():
             with QMutexLocker(self._mutex):
                 return dict(self._ui_state)
 
-        callbacks = {
-            'on_frame':        _on_frame,
-            'on_log':          _on_log,
-            'stop_check':      _stop_check,
-            'ui_state_update': _ui_state_update,
-        }
+        result = {}
         try:
-            _tm.run_pipeline(callbacks)
+            _tm.run_pipeline({
+                "on_frame": on_frame,
+                "on_log": lambda msg: self.log_signal.emit(str(msg)),
+                "stop_check": lambda: not self._running,
+                "ui_state_update": ui_state_update,
+            })
+            result = {"tamamlandi": self._running, "stopped": not self._running}
         except Exception as exc:
+            result = {"tamamlandi": False, "error": str(exc)}
             self.log_signal.emit(f"HATA: {exc}")
-        self.finished_signal.emit({"tamamlandi": True})
+        self.finished_signal.emit(result)
 
 
-# ---------------------------------------------------------------------------
-# MapDisplay — numpy BGR -> QPixmap
-# ---------------------------------------------------------------------------
 class MapDisplay(QLabel):
-    def __init__(self):
-        super().__init__()
+    """Keep the source pixmap so panel resizing never stretches a previous preview."""
+
+    def __init__(self, placeholder="Başlatıldığında operasyon haritası burada görüntülenecek"):
+        super().__init__(placeholder)
+        self.setObjectName("ImageWell")
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumSize(700, 700)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setStyleSheet(f"background: {C_BG}; border-radius: 6px;")
-        self.setText("Baslatilmasi bekleniyor...")
-        self.setFont(QFont("Segoe UI", 14))
-        self.setStyleSheet(f"background:{C_BG}; color:{C_MUTED}; border-radius:6px;")
+        self.setWordWrap(True)
+        self.setMinimumSize(160, 100)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self._source = None
 
     def update_frame(self, arr: np.ndarray):
-        try:
-            h, w = arr.shape[:2]
-            rgb  = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
-            qi   = QImage(rgb.data, w, h, rgb.strides[0], QImage.Format_RGB888)
-            pix  = QPixmap.fromImage(qi).scaled(
-                self.width(), self.height(),
-                Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.setPixmap(pix)
-        except Exception:
-            pass
+        if arr is None or arr.size == 0:
+            return
+        rgb = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB if arr.ndim == 2 else cv2.COLOR_BGR2RGB)
+        rgb = np.ascontiguousarray(rgb)
+        h, w = rgb.shape[:2]
+        image = QImage(rgb.data, w, h, rgb.strides[0], QImage.Format_RGB888).copy()
+        self._source = QPixmap.fromImage(image)
+        self._rescale()
+
+    def _rescale(self):
+        if self._source is not None:
+            self.setPixmap(self._source.scaled(self.contentsRect().size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale()
 
 
-# ---------------------------------------------------------------------------
-# SmallImagePanel — baslikli kucuk goruntu paneli
-# ---------------------------------------------------------------------------
-class SmallImagePanel(QWidget):
-    def __init__(self, title: str):
+class SmallImagePanel(QFrame):
+    def __init__(self, title: str, placeholder: str):
         super().__init__()
-        self.setStyleSheet(f"background:{C_BG}; border:1px solid {C_BORDER}; border-radius:6px;")
+        self.setObjectName("EvidenceCard")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(2)
-
-        lbl_title = QLabel(title)
-        lbl_title.setAlignment(Qt.AlignCenter)
-        lbl_title.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        lbl_title.setStyleSheet(f"color:{C_MUTED}; background:transparent; border:none;")
-        layout.addWidget(lbl_title)
-
-        self._img = QLabel()
-        self._img.setAlignment(Qt.AlignCenter)
-        self._img.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._img.setStyleSheet("background:transparent; border:none;")
-        layout.addWidget(self._img)
+        layout.setContentsMargins(8, 8, 8, 8)
+        label = QLabel(title)
+        label.setObjectName("SectionTitle")
+        layout.addWidget(label)
+        self._img = MapDisplay(placeholder)
+        self._img.setAccessibleName(title)
+        layout.addWidget(self._img, 1)
 
     def update_frame(self, arr):
-        try:
-            if arr is None:
-                return
-            if arr.ndim == 2:
-                arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
-            h, w = arr.shape[:2]
-            rgb  = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
-            qi   = QImage(rgb.data, w, h, rgb.strides[0], QImage.Format_RGB888)
-            pix  = QPixmap.fromImage(qi).scaled(
-                self._img.width() or 300, self._img.height() or 200,
-                Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self._img.setPixmap(pix)
-        except Exception:
-            pass
+        self._img.update_frame(arr)
 
 
-# ---------------------------------------------------------------------------
-# MetricCard — tek bir metrik gosteren kart
-# ---------------------------------------------------------------------------
-class MetricCard(QFrame):
+class MetricCard(SharedMetricCard):
     def __init__(self, label: str, unit: str = "", wide: bool = False):
-        super().__init__()
+        super().__init__(label)
         self._unit = unit
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {C_CARD_BG};
-                border: 1px solid {C_BORDER};
-                border-radius: 8px;
-                padding: 2px;
-            }}
-        """)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(2)
+        self._val = self.value
+        if wide:
+            self._val.setStyleSheet("font-size:17px;")
+        self._val.setWordWrap(True)
 
-        lbl = QLabel(label.upper())
-        lbl.setFont(QFont("Segoe UI", 9, QFont.Normal))
-        lbl.setStyleSheet(f"color:{C_MUTED}; background:transparent; border:none;")
-
-        self._val = QLabel("--")
-        fs = 16 if not wide else 13
-        self._val.setFont(QFont("Consolas", fs, QFont.Bold))
-        self._val.setStyleSheet(f"color:{C_TEXT}; background:transparent; border:none;")
-
-        layout.addWidget(lbl)
-        layout.addWidget(self._val)
-
-    def set_value(self, v):
-        try:
-            self._val.setText(f"{v}{self._unit}")
-        except Exception:
-            self._val.setText("--")
+    def set_value(self, value):
+        self._val.setText("—" if value is None or value == "--" else f"{value}{self._unit}")
 
     def set_color(self, color: str):
-        self._val.setStyleSheet(f"color:{color}; background:transparent; border:none;")
+        self._val.setStyleSheet(f"color:{color};")
 
 
-# ---------------------------------------------------------------------------
-# ControlPanel
-# ---------------------------------------------------------------------------
-class ControlPanel(QWidget):
+class ControlPanel(QFrame):
     toggle_changed = pyqtSignal(str, bool)
 
     def __init__(self):
         super().__init__()
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(360)
-        self.setStyleSheet(f"background:{C_PANEL};")
-
+        self.setObjectName("SidePanel")
+        self.setMinimumWidth(290)
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
+        root.setContentsMargins(11, 11, 11, 11)
         root.setSpacing(10)
-
-        # Baslik
-        title = QLabel("NAVIGASYON")
-        title.setFont(QFont("Segoe UI", 13, QFont.Bold))
-        title.setStyleSheet(f"color:{C_ACCENT}; letter-spacing:2px;")
+        title = QLabel("NAVİGASYON")
+        title.setObjectName("SectionTitle")
         root.addWidget(title)
-        root.addWidget(self._separator())
 
-        # Start / Stop butonlari
-        btn_row = QHBoxLayout()
-        self.btn_start = QPushButton("Baslat")
-        self.btn_stop  = QPushButton("Durdur")
-        for btn, col in [(self.btn_start, C_SUCCESS), (self.btn_stop, C_WARN)]:
-            btn.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            btn.setFixedHeight(36)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background:{col}; color:#fff;
-                    border-radius:6px; border:none;
-                }}
-                QPushButton:hover {{ background:{col}dd; }}
-                QPushButton:disabled {{ background:{C_BORDER}; color:{C_MUTED}; }}
-            """)
-            btn_row.addWidget(btn)
+        self.controls = QFrame()
+        self.controls.setObjectName("ControlGroup")
+        controls_layout = QVBoxLayout(self.controls)
+        controls_layout.setContentsMargins(9, 8, 9, 8)
+        action_row = QHBoxLayout()
+        self.btn_start = QPushButton("Eşleştirmeyi başlat")
+        self.btn_start.setObjectName("btnStart")
+        self.btn_start.setAccessibleName("Eşleştirmeyi başlat")
+        self.btn_stop = QPushButton("Durdur")
+        self.btn_stop.setObjectName("btnStop")
         self.btn_stop.setEnabled(False)
-        root.addLayout(btn_row)
-        root.addWidget(self._separator())
+        action_row.addWidget(self.btn_start)
+        action_row.addWidget(self.btn_stop)
+        self._toggles = {}
+        view_row = QHBoxLayout()
+        view_label = QLabel("GÖRÜNÜM")
+        view_label.setObjectName("ControlGroupLabel")
+        view_row.addWidget(view_label)
+        for key, text, default in (
+            ("kalman", "Kalman filtresi", bool(_tm.USE_KALMAN)),
+            ("trajectory", "Rota", bool(DRAW_TRAJECTORY)),
+            ("roi_frame", "Arama alanı", bool(RUN_CFG.get("SHOW_ROI_FRAME", True))),
+            ("tm_boxes", "Eşleşme kutuları", bool(RUN_CFG.get("SHOW_TM_BOXES", True))),
+            ("inner_frame", "İç çerçeve", bool(RUN_CFG.get("SHOW_INNER_FRAME", False))),
+        ):
+            button = QPushButton(text)
+            button.setCheckable(True)
+            button.setChecked(default)
+            button.setProperty("controlRole", "method" if key == "kalman" else "visual")
+            button.setAccessibleName(text)
+            button.setToolTip("Konum kestirim filtresini açar veya kapatır." if key == "kalman" else "Yalnızca haritadaki çizimlerin görünürlüğünü değiştirir.")
+            button.toggled.connect(lambda checked, k=key: self.toggle_changed.emit(k, checked))
+            self._toggles[key] = button
+            (action_row if key == "kalman" else view_row).addWidget(button)
+        action_row.addStretch(1)
+        view_row.addStretch(1)
+        controls_layout.addLayout(action_row)
+        controls_layout.addLayout(view_row)
 
-        # Metrik kartlari (2 sutun)
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        self.c_hdg  = MetricCard("HDG",   "°")
-        self.c_alt  = MetricCard("ALT",   " m")
-        self.c_err  = MetricCard("ERR",   " m")
-        self.c_spd  = MetricCard("LOC SPD", " km/h")
+        self.c_hdg = MetricCard("Başlık", "°")
+        self.c_alt = MetricCard("İrtifa", " m")
+        self.c_err = MetricCard("Konum hatası", " m")
+        self.c_tm = MetricCard("TM skoru")
+        self.c_spd = MetricCard("LOC SPD", " km/h")
         self.c_of_spd = MetricCard("OF SPD", " km/h")
-        self.c_lat  = MetricCard("LAT",   "",  wide=True)
-        self.c_lon  = MetricCard("LON",   "",  wide=True)
-        self.c_acc  = MetricCard("ACC",   "%")
-        self.c_tm   = MetricCard("TM",    "")
-        for idx, card in enumerate([self.c_hdg, self.c_alt, self.c_err, self.c_tm,
-                                    self.c_spd, self.c_of_spd, self.c_acc]):
-            grid.addWidget(card, idx // 2, idx % 2)
+        self.c_acc = MetricCard("Başarı oranı", "%")
+        self.c_lat = MetricCard("Enlem", wide=True)
+        self.c_lon = MetricCard("Boylam", wide=True)
+        self.c_spd.setToolTip("Ardışık eşleştirme/Kalman konumlarından hesaplanan hız.")
+        self.c_of_spd.setToolTip("Görüntüler arasındaki optik akıştan hesaplanan bağımsız hız.")
+        grid = QGridLayout()
+        for index, card in enumerate((self.c_hdg, self.c_alt, self.c_err, self.c_tm)):
+            grid.addWidget(card, index // 2, index % 2)
         root.addLayout(grid)
-
-        # LAT / LON tam genislik
-        for card in (self.c_lat, self.c_lon):
-            root.addWidget(card)
-
-        root.addWidget(self._separator())
-
-        # Ilerleme
-        prog_lbl = QLabel("ILERLEME")
-        prog_lbl.setFont(QFont("Segoe UI", 9))
-        prog_lbl.setStyleSheet(f"color:{C_MUTED};")
-        root.addWidget(prog_lbl)
-
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.progress.setTextVisible(True)
-        self.progress.setFixedHeight(22)
-        self.progress.setStyleSheet(f"""
-            QProgressBar {{
-                background:{C_BG}; border:1px solid {C_BORDER};
-                border-radius:4px; color:{C_TEXT}; font-size:11px;
-            }}
-            QProgressBar::chunk {{
-                background:{C_ACCENT}; border-radius:3px;
-            }}
-        """)
+        self.progress.setFormat("Kare bekleniyor")
+        self.progress.setAccessibleName("İşlenen kare ilerlemesi")
         root.addWidget(self.progress)
-        root.addWidget(self._separator())
 
-        # Toggle'lar
-        toggle_lbl = QLabel("GORUNUM / FILTRE")
-        toggle_lbl.setFont(QFont("Segoe UI", 9))
-        toggle_lbl.setStyleSheet(f"color:{C_MUTED};")
-        root.addWidget(toggle_lbl)
-
-        self._toggles: dict[str, QCheckBox] = {}
-        toggle_defs = [
-            ("kalman",      "Kalman Filtresi", bool(_tm.USE_KALMAN)),
-            ("trajectory",  "Trajektori",  bool(_tm.DRAW_TRAJECTORY)),
-            ("roi_frame",   "ROI Cerceve", bool(_tm.RUN_CFG.get("SHOW_ROI_FRAME", True))),
-            ("tm_boxes",    "TM Kutulari", bool(_tm.RUN_CFG.get("SHOW_TM_BOXES", True))),
-            ("inner_frame", "Ic Cerceve",  bool(_tm.RUN_CFG.get("SHOW_INNER_FRAME", False))),
-        ]
-        for key, label, default in toggle_defs:
-            cb = QCheckBox(label)
-            cb.setChecked(default)
-            cb.setFont(QFont("Segoe UI", 10))
-            cb.setStyleSheet(f"""
-                QCheckBox {{ color:{C_TEXT}; spacing:8px; }}
-                QCheckBox::indicator {{
-                    width:18px; height:18px; border-radius:4px;
-                    border:1px solid {C_BORDER}; background:{C_BG};
-                }}
-                QCheckBox::indicator:checked {{
-                    background:{C_ACCENT}; border:1px solid {C_ACCENT};
-                }}
-            """)
-            cb.stateChanged.connect(lambda state, k=key: self.toggle_changed.emit(k, bool(state)))
-            root.addWidget(cb)
-            self._toggles[key] = cb
-
-        root.addWidget(self._separator())
-
-        # Log alani
-        log_lbl = QLabel("LOG")
-        log_lbl.setFont(QFont("Segoe UI", 9))
-        log_lbl.setStyleSheet(f"color:{C_MUTED};")
-        root.addWidget(log_lbl)
-
+        self.tabs = QTabWidget()
+        details = QWidget()
+        details_layout = QVBoxLayout(details)
+        for card in (self.c_spd, self.c_of_spd, self.c_acc, self.c_lat, self.c_lon):
+            details_layout.addWidget(card)
+        self.flow_reason = QLabel("Optik akış ölçümü bekleniyor")
+        self.flow_reason.setObjectName("Muted")
+        self.flow_reason.setWordWrap(True)
+        details_layout.addWidget(self.flow_reason)
+        details_layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(details)
+        self.tabs.addTab(scroll, "TELEMETRİ")
         self.log_box = QPlainTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setMaximumBlockCount(500)
-        self.log_box.setFont(QFont("Consolas", 9))
-        self.log_box.setStyleSheet(f"""
-            QPlainTextEdit {{
-                background:{C_BG}; color:{C_MUTED};
-                border:1px solid {C_BORDER}; border-radius:4px;
-            }}
-        """)
-        self.log_box.setFixedHeight(150)
-        root.addWidget(self.log_box)
-        root.addStretch()
-
-    def _separator(self):
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet(f"color:{C_BORDER};")
-        return line
+        self.log_box.setPlaceholderText("İşlem başladığında olaylar burada görüntülenecek.")
+        self.log_box.setAccessibleName("Eşleştirme olay günlüğü")
+        self.tabs.addTab(self.log_box, "OLAY GÜNLÜĞÜ")
+        root.addWidget(self.tabs, 1)
 
     def current_toggle_states(self) -> dict:
-        """Tum toggle'larin guncel (checkbox) durumlari -> worker'a baslangicta uygulanir."""
-        return {k: bool(cb.isChecked()) for k, cb in self._toggles.items()}
+        return {key: button.isChecked() for key, button in self._toggles.items()}
 
-    def append_log(self, msg: str):
-        self.log_box.appendPlainText(msg)
-        sb = self.log_box.verticalScrollBar()
-        sb.setValue(sb.maximum())
+    def append_log(self, message: str):
+        self.log_box.appendPlainText(message)
+        self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
 
-    def update_metrics(self, m: dict):
-        total = max(1, m.get("total", 1))
-        cur   = m.get("frame", 0)
-        acc   = m.get("acc", 0.0)
-
-        self.c_hdg.set_value(f"{m.get('hdg', 0):.1f}")
-        self.c_alt.set_value(f"{m.get('alt', 0)}")
-        self.c_err.set_value(f"{m.get('err_m', 0)}")
-        self.c_spd.set_value(f"{m.get('spd_kmh', 0):.1f}")
-        if m.get("of_spd_valid", False):
-            self.c_of_spd.set_value(f"{m.get('of_spd_kmh', 0):.1f}")
-            self.c_of_spd.set_color(C_SUCCESS)
+    def update_metrics(self, metadata: dict):
+        fields = (
+            (self.c_hdg, "hdg", 1), (self.c_alt, "alt", 1),
+            (self.c_err, "err_m", 1), (self.c_tm, "max_val2", 3),
+            (self.c_spd, "spd_kmh", 1), (self.c_acc, "acc", 1),
+            (self.c_lat, "lat", 6), (self.c_lon, "lon", 6),
+        )
+        for card, key, digits in fields:
+            value = metadata.get(key)
+            card.set_value(f"{value:.{digits}f}" if isinstance(value, Real) and np.isfinite(value) else None)
+        valid_flow = metadata.get("of_spd_valid", False)
+        flow_speed = metadata.get("of_spd_kmh")
+        if valid_flow and isinstance(flow_speed, Real) and np.isfinite(flow_speed):
+            self.c_of_spd.set_value(f"{flow_speed:.1f}")
+            self.c_of_spd.set_color(COLORS["success"])
         else:
-            self.c_of_spd.set_value("--")
-            self.c_of_spd.set_color(C_MUTED)
-        self.c_lat.set_value(f"{m.get('lat', 0):.6f}")
-        self.c_lon.set_value(f"{m.get('lon', 0):.6f}")
-        self.c_acc.set_value(f"{acc:.1f}")
-        self.c_tm.set_value(f"{m.get('max_val2', 0):.3f}")
+            self.c_of_spd.set_value(None)
+            self.c_of_spd.set_color(COLORS["muted"])
+        reasons = {
+            "ok": "ölçüm geçerli", "warmup": "ikinci kare bekleniyor",
+            "shape_changed": "görüntü boyutu değişti", "timestamp_missing": "zaman bilgisi yok",
+            "invalid_dt": "kareler arası süre geçersiz", "invalid_gsd": "yer örnekleme aralığı geçersiz",
+            "few_features": "yeterli özellik noktası yok", "flow_failed": "nokta takibi başarısız",
+            "few_tracks": "takip edilen nokta sayısı yetersiz", "model_failed": "hareket kestirilemedi",
+            "low_inlier_ratio": "hareket tutarlılığı düşük", "non_finite_speed": "hız hesaplanamadı",
+        }
+        self.flow_reason.setText("Optik akış: " + reasons.get(metadata.get("of_reason"), "ölçüm bekleniyor"))
+        for card, key in ((self.c_err, "err_m"), (self.c_acc, "acc")):
+            value = metadata.get(key)
+            tone = "muted"
+            if isinstance(value, Real) and np.isfinite(value):
+                if key == "err_m":
+                    tone = "success" if value < 70 else "warning" if value < 150 else "danger"
+                else:
+                    tone = "success" if value >= 80 else "warning" if value >= 50 else "danger"
+            card.set_color(COLORS[tone])
+        total = max(1, metadata.get("total", 1))
+        current = metadata.get("frame", 0)
+        self.progress.setValue(max(0, min(100, int(current / total * 100))))
+        self.progress.setFormat(f"{current} / {total} kare  ·  %p%")
 
-        err_m = m.get("err_m", 0)
-        self.c_err.set_color(C_SUCCESS if err_m < 70 else C_WARN if err_m < 150 else "#f44336")
-        self.c_acc.set_color(C_SUCCESS if acc >= 80 else C_WARN if acc >= 50 else "#f44336")
 
-        pct = int(cur / total * 100)
-        self.progress.setValue(pct)
-        self.progress.setFormat(f"{cur} / {total}  ({pct}%)")
-
-
-# ---------------------------------------------------------------------------
-# MainWindow
-# ---------------------------------------------------------------------------
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Gorusel Navigasyon — PyQt5")
-        self.resize(1400, 900)
-        self._apply_dark_theme()
-
-        self._worker: ProcessingWorker | None = None
-
-        # Widget'lar
-        self._map         = MapDisplay()
-        self._crop_panel  = SmallImagePanel("CROP  (anlık)")
-        self._model_panel = SmallImagePanel("MODEL  (sinir ağı)")
-        self._panel       = ControlPanel()
-
-        # Sol sütun: Crop üstte, Model altta
-        left_col = QSplitter(Qt.Vertical)
-        left_col.addWidget(self._crop_panel)
-        left_col.addWidget(self._model_panel)
-        left_col.setSizes([450, 450])
-        left_col.setStyleSheet(f"QSplitter::handle {{ background:{C_BORDER}; height:2px; }}")
-
-        # Ana yatay bölücü: sol sütun | harita | kontrol paneli
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left_col)
-        splitter.addWidget(self._map)
-        splitter.addWidget(self._panel)
-        splitter.setSizes([280, 820, 300])
-        splitter.setStyleSheet(f"QSplitter::handle {{ background:{C_BORDER}; width:2px; }}")
-        self.setCentralWidget(splitter)
-
-        # Durum cubugu
-        self._status = QStatusBar()
-        self._status.setStyleSheet(f"background:{C_PANEL}; color:{C_MUTED}; font-size:11px;")
-        self.setStatusBar(self._status)
-        self._status.showMessage("Hazir.")
-
-        # Buton baglantilari
+        self.setWindowTitle("Mission Control | Template Matching")
+        self.resize(1480, 920)
+        self.setMinimumSize(1180, 760)
+        self.setStyleSheet(APP_STYLE)
+        self._worker = None
+        self._close_requested = False
+        root = QWidget()
+        root.setObjectName("Root")
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(14, 14, 14, 12)
+        layout.setSpacing(10)
+        self.setCentralWidget(root)
+        header, header_layout, self.status_pill = create_header(
+            "TEMPLATE MATCHING", "Görüntü eşleştirme ile konumlama  /  Görsel navigasyon"
+        )
+        self._panel = ControlPanel()
+        header_layout.addWidget(self._panel.controls)
+        layout.addWidget(header)
+        evidence = QFrame()
+        evidence.setObjectName("SidePanel")
+        evidence_layout = QVBoxLayout(evidence)
+        evidence_layout.setContentsMargins(11, 11, 11, 11)
+        title = QLabel("GÖRSEL KANIT")
+        title.setObjectName("SectionTitle")
+        evidence_layout.addWidget(title)
+        self._crop_panel = SmallImagePanel("GÖZLEM", "Canlı görüntü bekleniyor")
+        self._model_panel = SmallImagePanel("MODEL", "Sinir ağı çıktısı bekleniyor")
+        self.evidence_splitter = QSplitter(Qt.Vertical)
+        self.evidence_splitter.setChildrenCollapsible(False)
+        self.evidence_splitter.addWidget(self._crop_panel)
+        self.evidence_splitter.addWidget(self._model_panel)
+        evidence_layout.addWidget(self.evidence_splitter, 1)
+        map_panel = QFrame()
+        map_panel.setObjectName("MapPanel")
+        map_layout = QVBoxLayout(map_panel)
+        map_layout.setContentsMargins(10, 10, 10, 10)
+        title = QLabel("OPERASYON HARİTASI")
+        title.setObjectName("SectionTitle")
+        map_layout.addWidget(title)
+        self._map = MapDisplay()
+        self._map.setAccessibleName("Operasyon haritası")
+        map_layout.addWidget(self._map, 1)
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.setAccessibleName("Ana panel genişlik ayırıcısı")
+        for widget in (evidence, map_panel, self._panel):
+            self.main_splitter.addWidget(widget)
+        self.main_splitter.setSizes([280, 820, 320])
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
+        self.main_splitter.setStretchFactor(2, 0)
+        layout.addWidget(self.main_splitter, 1)
+        footer, self.performance_label = create_footer(
+            "Görünüm kontrolleri üstte    ·    Ayrıntılar ve günlük sağda    |    Panel sınırlarını sürükleyin"
+        )
+        layout.addWidget(footer)
         self._panel.btn_start.clicked.connect(self._on_start)
         self._panel.btn_stop.clicked.connect(self._on_stop)
         self._panel.toggle_changed.connect(self._on_toggle)
-
-    def _apply_dark_theme(self):
-        pal = QPalette()
-        pal.setColor(QPalette.Window,          QColor(C_BG))
-        pal.setColor(QPalette.WindowText,      QColor(C_TEXT))
-        pal.setColor(QPalette.Base,            QColor(C_PANEL))
-        pal.setColor(QPalette.AlternateBase,   QColor(C_BG))
-        pal.setColor(QPalette.Text,            QColor(C_TEXT))
-        pal.setColor(QPalette.Button,          QColor(C_PANEL))
-        pal.setColor(QPalette.ButtonText,      QColor(C_TEXT))
-        pal.setColor(QPalette.Highlight,       QColor(C_ACCENT))
-        pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
-        QApplication.setPalette(pal)
 
     def _on_start(self):
         if self._worker and self._worker.isRunning():
             return
         self._worker = ProcessingWorker()
-        # Baslamadan once yapilan toggle secimlerini (Kalman dahil) worker'a uygula.
-        for _k, _v in self._panel.current_toggle_states().items():
-            self._worker.set_ui_state(_k, _v)
+        for key, value in self._panel.current_toggle_states().items():
+            self._worker.set_ui_state(key, value)
         self._worker.frame_ready.connect(self._map.update_frame)
         self._worker.crop_ready.connect(self._on_crop_ready)
-        self._worker.metrics_update.connect(self._panel.update_metrics)
         self._worker.log_signal.connect(self._panel.append_log)
         self._worker.finished_signal.connect(self._on_finished)
-        self._worker.start()
+        self._worker.finished.connect(self._on_worker_stopped)
         self._panel.btn_start.setEnabled(False)
         self._panel.btn_stop.setEnabled(True)
-        self._status.showMessage("Isleniyor...")
+        self._panel.update_metrics({})
+        self._panel.progress.setRange(0, 0)
+        self._worker.metrics_update.connect(self._on_progress)
+        set_status(self.status_pill, "İŞLENİYOR", "accent")
+        self._worker.start()
+
+    def _on_progress(self, metadata):
+        self._panel.progress.setRange(0, 100)
+        self._panel.update_metrics(metadata)
+        elapsed = metadata.get("calisma_s")
+        if isinstance(elapsed, Real) and np.isfinite(elapsed):
+            self.performance_label.setText(f"{metadata.get('frame', 0)} kare  ·  {elapsed:.1f} s")
 
     def _on_stop(self):
-        if self._worker:
+        if self._worker and self._worker.isRunning():
             self._worker.stop()
-        self._panel.btn_start.setEnabled(True)
-        self._panel.btn_stop.setEnabled(False)
-        self._status.showMessage("Durduruldu.")
+            self._panel.btn_stop.setEnabled(False)
+            set_status(self.status_pill, "DURDURULUYOR", "warning")
 
     def _on_toggle(self, key: str, value: bool):
         if self._worker:
@@ -561,25 +444,38 @@ class MainWindow(QMainWindow):
         self._model_panel.update_frame(model_arr)
 
     def _on_finished(self, result: dict):
+        self._panel.progress.setRange(0, 100)
+        if result.get("error"):
+            set_status(self.status_pill, "HATA", "danger")
+            self._panel.tabs.setCurrentIndex(1)
+        elif result.get("stopped"):
+            set_status(self.status_pill, "DURDURULDU")
+            self._panel.append_log("İşlem kullanıcı tarafından durduruldu.")
+        else:
+            set_status(self.status_pill, "TAMAMLANDI", "success")
+            self._panel.append_log("İşlem tamamlandı.")
+
+    def _on_worker_stopped(self):
         self._panel.btn_start.setEnabled(True)
         self._panel.btn_stop.setEnabled(False)
-        self._status.showMessage("Tamamlandi.")
-        self._panel.append_log("=== Islem tamamlandi ===")
+        if self._close_requested:
+            self.close()
 
     def closeEvent(self, event):
-        if self._worker:
-            self._worker.stop()
-            self._worker.wait(3000)
+        if self._worker and self._worker.isRunning():
+            self._close_requested = True
+            self._on_stop()
+            event.ignore()
+            return
         event.accept()
 
 
-# ---------------------------------------------------------------------------
 def main():
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
-    win = MainWindow()
-    win.show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec_())
 
 
