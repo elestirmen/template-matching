@@ -83,6 +83,68 @@ class TestMissionUI(unittest.TestCase):
         self.assertEqual(self.window._panel.progress.value(), 50)
         self.assertEqual(self.window.status_pill.text(), "TAMAMLANDI")
 
+    def test_preprocessing_choice_reaches_pipeline_and_changes_live(self):
+        seen = []
+
+        def pipeline(callbacks):
+            # Hat, secilen on isleme modunu her karede yeniden okur.
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and len(seen) < 2:
+                mode = callbacks["ui_state_update"]()["model_norm"]
+                if not seen or seen[-1] != mode:
+                    seen.append(mode)
+                time.sleep(0.01)
+
+        self.window._panel.combo_norm.setCurrentText("CLAHE")
+        with patch.object(ui._tm, "run_pipeline", pipeline):
+            self.window._on_start()
+            self.wait_until(lambda: seen == ["CLAHE"])
+            self.window._panel.combo_norm.setCurrentText("EDGE")
+            self.wait_until(lambda: self.window._panel.btn_start.isEnabled())
+        self.assertEqual(seen, ["CLAHE", "EDGE"])
+
+    def test_multi_candidate_toggle_and_k_reach_pipeline_and_change_live(self):
+        seen = []
+
+        def pipeline(callbacks):
+            # Hat her karede UI durumunu yeniden okur; degisiklikler canli yansir.
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and len(seen) < 2:
+                state = callbacks["ui_state_update"]()
+                current = (state["multi_candidate"], state["pyramid_top_k"])
+                if not seen or seen[-1] != current:
+                    seen.append(current)
+                time.sleep(0.01)
+
+        self.window._panel._toggles["multi_candidate"].setChecked(True)
+        self.window._panel.combo_top_k.setCurrentText("3")
+        with patch.object(ui._tm, "run_pipeline", pipeline):
+            self.window._on_start()
+            self.wait_until(lambda: seen == [(True, "3")])
+            self.window._panel._toggles["multi_candidate"].setChecked(False)
+            self.wait_until(lambda: self.window._panel.btn_start.isEnabled())
+        self.assertEqual(seen, [(True, "3"), (False, "3")])
+
+    def test_multi_candidate_toggle_defaults_to_run_cfg_and_is_a_method_control(self):
+        button = self.window._panel._toggles["multi_candidate"]
+        self.assertEqual(
+            button.isChecked(), bool(ui.RUN_CFG.get("PYRAMID_MULTI_CANDIDATE", False))
+        )
+        # Arama davranisini degistirir; salt gorunum toggle'i degildir.
+        self.assertEqual(button.property("controlRole"), "method")
+        combo = self.window._panel.combo_top_k
+        self.assertEqual(
+            [combo.itemText(index) for index in range(combo.count())],
+            list(ui._tm.PYRAMID_TOP_K_CHOICES),
+        )
+        self.assertEqual(combo.currentText(), str(int(ui.RUN_CFG.get("PYRAMID_TOP_K", 5))))
+
+    def test_preprocessing_combo_offers_every_supported_mode(self):
+        combo = self.window._panel.combo_norm
+        modes = [combo.itemText(index) for index in range(combo.count())]
+        self.assertEqual(sorted(modes), sorted(ui.MODEL_INPUT_NORM_MODES))
+        self.assertEqual(combo.currentText(), ui.MODEL_INPUT_NORM)
+
     def test_pipeline_failure_is_not_reported_as_completion(self):
         with patch.object(ui._tm, "run_pipeline", side_effect=RuntimeError("test failure")):
             self.window._on_start()

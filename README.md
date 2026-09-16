@@ -6,7 +6,7 @@
 ![TensorFlow](https://img.shields.io/badge/tensorflow-2.16-FF6F00)
 ![OpenCV](https://img.shields.io/badge/opencv-4.10-5C3EE8)
 ![Status](https://img.shields.io/badge/status-research%20prototype-yellow)
-![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
+![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green)
 
 This project is an experimental computer vision system that investigates the automated positioning of UAV (Unmanned Aerial Vehicle) images on a **reference orthophoto map**. It combines deep learning-based image transformation with multi-scale template matching, supporting controlled GPS-centric benchmark and sequential visual tracking scenarios as separate operating modes.
 
@@ -221,7 +221,10 @@ For each drone image:
 
 #### 3.4 Deep Learning Model Inference
 - 3 patches are fed to the model as a single batch.
-- Histogram equalization and [-1, 1] normalization are applied.
+- The preprocessing selected by `MODEL_INPUT_NORM` and [-1, 1] normalization are applied.
+  Modes: `HAM` (raw), `HISTEQ` (global histogram equalization, default), `CLAHE`
+  (contrast-limited local equalization), `EDGE` (Laplacian edge map). The mode can be
+  switched while running with the `N` key or the desktop viewer's **ÖN İŞLEME** drop-down.
 - The model output is converted to the 0-255 range and border pixels (`PRED_BORDER`) are cropped.
 
 #### 3.5 Template Matching
@@ -330,9 +333,17 @@ All runtime parameters are managed from a single `RUN_CFG` dictionary near the t
 | `DEBUG` | `False` | If `True`, intermediate images (patch, model output) are displayed on the screen |
 | `PATCH_SIZE` | `544` | Model input size (pixels) |
 | `PRED_BORDER` | `16` | Border to crop from the model output (pixels) |
+| `MODEL_INPUT_NORM` | `"HISTEQ"` | Preprocessing applied to the live image before inference: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
+| `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | If `True`, normalization runs before the resize (preserves the native pixel histogram) |
+| `MODEL_INPUT_INTERP` | `"NEAREST"` | Resize interpolation for the model input: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
+| `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (higher = more contrast and noise) |
+| `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (higher = more local equalization) |
 | `USE_PYRAMID` | `True` | Enable pyramid (coarse-to-fine) search |
 | `COARSE_SCALE` | `0.5` | Coarse scale factor for pyramid search |
 | `ROI_PAD_FACTOR` | `0.4` | Expansion coefficient for the fine search region in pyramid search |
+| `PYRAMID_MULTI_CANDIDATE` | `False` | If `True`, the coarse stage keeps the top-K NMS peaks instead of a single peak and refines each one (see [Pyramid Search](#pyramid-search)) |
+| `PYRAMID_TOP_K` | `5` | Number of coarse candidates to refine. `1` falls back to the single-candidate path |
+| `PYRAMID_NMS_RADIUS_PX` | `0` | Suppression radius between coarse candidates, in full-resolution pixels. `0` = auto (half the template edge) |
 | `CERCEVE_BOYUTU_NORMAL` | `2048` | Search frame size in normal mode (pixels) |
 | `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Search frame size in benchmark mode (pixels) |
 | `CERCEVE_BOYUTU_MAX` | `15000` | Maximum search-frame size allowed during adaptive growth (pixels) |
@@ -606,12 +617,27 @@ Both modes set `WRITE_RUN_ARTIFACTS=True` and pass the resolved config through t
 > **Current status:** the main pipeline only reacts to the subset of injected keys it already understands (`BENCHMARK`, `MAX_FRAMES`, …). `STRICT_GPS_DENIED_INFERENCE`, `ALTITUDE_SOURCE`, and `WRITE_RUN_ARTIFACTS` are consumed by this CLI and by `localization_policy.py`'s policy functions, but the 4098-line main script does not yet branch on them. Treat `run_localization.py` as a specified, unit-tested contract for the stricter protocol, not as something that changes the reported numbers today — see [Experiment Protocol and Reproducibility](#experiment-protocol-and-reproducibility).
 
 ### Runtime Controls
-In the `konum` (position) window, visibility settings can be changed with keyboard shortcuts:
+In the `konum` (position) window, settings can be changed by clicking the on-screen panel buttons or with keyboard shortcuts:
 - `T`: Toggle Trajectory
 - `I`: Toggle Inner Frame
 - `O`: Toggle ROI Frame
 - `R`: Toggle TM Boxes
 - `H`: Collapse/Expand UI panel
+- `N`: Cycle the live-image preprocessing mode (`HAM` -> `HISTEQ` -> `CLAHE` -> `EDGE`); the
+  panel's **On Isleme** row shows the active mode and cycles when clicked
+- `P`: Toggle the multi-candidate coarse search (`PYRAMID_MULTI_CANDIDATE`)
+- `K`: Cycle the candidate count (`1` -> `3` -> `5`); the **Aday K** row shows the active value
+  and lights up whenever `K > 1`
+
+Unlike the other keys, `P` and `K` change *search behaviour*, not just what is drawn. Both take
+effect from the next frame: the pipeline mirrors them into `RUN_CFG` each frame
+(`apply_pyramid_ui_state`), and `match_three` reads the settings at call time.
+
+In the desktop viewer (`konum_ui_qt.py`) the same modes are available from the **ÖN İŞLEME**
+drop-down in the control group; the change takes effect from the next frame. Headless runs
+take `--model-norm HAM|HISTEQ|CLAHE|EDGE`. The viewer's **ARAMA** row carries the
+**Çok adaylı arama** toggle and the **Aday sayısı (K)** drop-down, which map to the same two
+settings.
 
 ### Logging
 The script has an optional `logging` infrastructure (`tm` logger). Default level is `WARNING`. Configure via `RUN_CFG`: `LOG_LEVEL` and `LOG_TO_FILE`.
@@ -650,7 +676,9 @@ To account for uneven terrain, patches are generated at three different scales c
 4. **Patch Extraction**: Extracts 544x544 pixel patches.
 
 ### Keras Model Inference
-Converts the patches to grayscale, equalizes histograms, normalizes to [-1, 1], and passes them through the Keras model in a single batch to extract feature maps.
+Converts the patches to grayscale, applies the selected preprocessing (`MODEL_INPUT_NORM`:
+raw / histogram equalization / CLAHE / Laplacian edges), normalizes to [-1, 1], and passes them
+through the Keras model in a single batch to extract feature maps.
 
 ### Template Matching
 Uses `cv2.TM_CCOEFF_NORMED` to find the highest correlation point on the reference map. 
@@ -659,7 +687,18 @@ Uses `cv2.TM_CCOEFF_NORMED` to find the highest correlation point on the referen
 Calculates the intersection of the matching rectangles from the 3 templates. The center of this intersection area is accepted as the final position estimate.
 
 ### Pyramid Search
-When `USE_PYRAMID = True`, a two-stage search (coarse-to-fine) is used to speed up the process on large maps.
+When `USE_PYRAMID = True`, a two-stage search (coarse-to-fine) is used to speed up the process on large maps. The coarse stage matches at `COARSE_SCALE`, and the full-resolution stage only searches a `ROI_PAD_FACTOR`-sized window around the coarse seed.
+
+**Multi-candidate coarse stage (`PYRAMID_MULTI_CANDIDATE`, default off).** By default the coarse stage keeps a single peak, so a wrong coarse seed can never be recovered — the true match stays buried under the `-1e9` fill outside the refinement window. This is a plausible silent failure mode over self-similar terrain (valley and fairy-chimney texture repeats across Cappadocia). With the flag on, the coarse response is reduced by greedy square-NMS to the `PYRAMID_TOP_K` strongest, mutually separated peaks (`PYRAMID_NMS_RADIUS_PX`), each is refined at full resolution, and the results are merged into one response map — so `minMaxLoc` picks the winner *across* candidates. The returned map keeps the exact shape and fill convention of the single-candidate path, so nothing downstream changes. The NMS core mirrors `coarse_to_fine_search` in the sibling `benchmark/` project; the implementation lives in `pyramid_search.py` with unit tests in `tests/test_pyramid_search.py`.
+
+Measured cost on synthetic frames (CPU, `TM_CCOEFF_NORMED`, 512 px template):
+
+| Search frame | Exhaustive | Pyramid K=1 | Pyramid K=3 | Pyramid K=5 |
+|---|---|---|---|---|
+| 2048 px | 59 ms | 28 ms | 45 ms | 59 ms |
+| 6000 px | 730 ms | 168 ms | — | 247 ms |
+
+At the default 2048 px frame, `K=5` costs about as much as an exhaustive search, so `K=3` is the better trade there; the multi-candidate path pays off most on adaptively grown frames (`CERCEVE_BOYUTU_MAX = 15000`). Note the flag only affects the CPU path — the CUDA branch performs a full search and ignores `USE_PYRAMID` entirely.
 
 ### CUDA GPU Acceleration
 The system automatically checks for CUDA GPU presence and transparently uses it for Template Matching, Image Resizing, and Image Rotation if available.

@@ -6,7 +6,7 @@
 ![TensorFlow](https://img.shields.io/badge/tensorflow-2.16-FF6F00)
 ![OpenCV](https://img.shields.io/badge/opencv-4.10-5C3EE8)
 ![Status](https://img.shields.io/badge/status-research%20prototype-yellow)
-![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
+![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green)
 
 Bu proje, İHA (İnsansız Hava Aracı) görüntülerini **referans ortofoto harita** üzerinde otomatik olarak konumlandırmayı araştıran deneysel bir bilgisayarlı görü sistemidir. Derin öğrenme tabanlı görüntü dönüşümünü çok ölçekli template matching ile birleştirir; kontrollü GPS-merkezli benchmark ve ardışık görsel takip senaryolarını ayrı çalışma modları olarak destekler.
 
@@ -221,7 +221,10 @@ Her drone görüntüsü için:
 
 #### 3.4 Derin Öğrenme Model Çıkarımı
 - 3 patch, tek bir batch olarak modele verilir.
-- Histogram eşitleme ve [-1, 1] normalizasyonu uygulanır.
+- `MODEL_INPUT_NORM` ile seçilen ön işleme ve [-1, 1] normalizasyonu uygulanır.
+  Modlar: `HAM` (ham), `HISTEQ` (global histogram eşitleme, varsayılan), `CLAHE`
+  (yerel kontrast sınırlamalı eşitleme), `EDGE` (Laplacian kenar haritası). Mod, çalışma
+  sırasında `N` tuşu veya masaüstü arayüzündeki **ÖN İŞLEME** açılır listesiyle değiştirilebilir.
 - Model çıktısı 0-255 aralığına dönüştürülür ve kenarlık pikselleri (`PRED_BORDER`) kırpılır.
 
 #### 3.5 Template Matching
@@ -330,9 +333,17 @@ Tüm çalışma parametreleri, ana betiğin başındaki tek bir `RUN_CFG` sözl�
 | `DEBUG` | `False` | `True` ise ara görüntüler (patch, model çıktısı) ekranda gösterilir |
 | `PATCH_SIZE` | `544` | Model giriş boyutu (piksel) |
 | `PRED_BORDER` | `16` | Model çıktısından kırpılacak kenarlık (piksel) |
+| `MODEL_INPUT_NORM` | `"HISTEQ"` | Anlık görüntüye model öncesi uygulanan ön işleme: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
+| `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | `True` ise normalizasyon resize öncesi uygulanır (doğal piksel histogramı korunur) |
+| `MODEL_INPUT_INTERP` | `"NEAREST"` | Model girdisi resize interpolasyonu: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
+| `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (artarsa kontrast ve gürültü artar) |
+| `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (artarsa daha yerel eşitleme) |
 | `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinleştir |
 | `COARSE_SCALE` | `0.5` | Piramit arama kaba ölçek faktörü |
 | `ROI_PAD_FACTOR` | `0.4` | Piramit arama ince arama bölgesi genişleme katsayısı |
+| `PYRAMID_MULTI_CANDIDATE` | `False` | `True` ise kaba aşama tek tepe yerine NMS ile top-K tepeyi tutar ve her birini ayrı ayrı inceler (bkz. [Piramit Arama](#piramit-arama-pyramid-search)) |
+| `PYRAMID_TOP_K` | `5` | İncelenecek kaba aday sayısı. `1` verilirse tek adaylı yola düşülür |
+| `PYRAMID_NMS_RADIUS_PX` | `0` | Kaba adaylar arası bastırma yarıçapı (tam çözünürlük piksel). `0` = otomatik (template kenarının yarısı) |
 | `CERCEVE_BOYUTU_NORMAL` | `2048` | Normal modda arama çerçevesi boyutu (piksel) |
 | `CERCEVE_BOYUTU_BENCHMARK` | `5000` | Benchmark modunda arama çerçevesi boyutu (piksel) |
 | `CERCEVE_BOYUTU_MAX` | `15000` | Adaptif büyümede izin verilen azami arama çerçevesi boyutu (piksel) |
@@ -622,6 +633,21 @@ Her iki mod da `WRITE_RUN_ARTIFACTS=True` ayarlar ve çözümlenmiş yapılandı
 - `O`: ROI çerçevesi aç/kapa
 - `R`: TM kutuları aç/kapa
 - `H`: UI panelini daralt/genişlet
+- `N`: Anlık görüntü ön işleme modunu sırayla değiştir (`HAM` -> `HISTEQ` -> `CLAHE` -> `EDGE`);
+  paneldeki **On Isleme** satırı aktif modu gösterir ve tıklandığında sıradaki moda geçer
+- `P`: Çok adaylı kaba aramayı aç/kapa (`PYRAMID_MULTI_CANDIDATE`)
+- `K`: Aday sayısını sırayla değiştir (`1` -> `3` -> `5`); **Aday K** satırı aktif değeri gösterir
+  ve `K > 1` olduğunda yanar
+
+Diğer tuşlardan farklı olarak `P` ve `K` yalnızca çizimi değil, *arama davranışını* değiştirir.
+İkisi de sonraki kareden itibaren geçerlidir: pipeline her karede bu değerleri `RUN_CFG`'ye
+yansıtır (`apply_pyramid_ui_state`), `match_three` de ayarları çağrı anında okur.
+
+Masaüstü arayüzünde (`konum_ui_qt.py`) aynı modlar kontrol grubundaki **ÖN İŞLEME** açılır
+listesinden seçilir; değişiklik sonraki kareden itibaren geçerlidir. Ekransız çalıştırmada
+`--model-norm HAM|HISTEQ|CLAHE|EDGE` kullanılır. Arayüzdeki **ARAMA** satırında ise
+**Çok adaylı arama** düğmesi ile **Aday sayısı (K)** açılır listesi bulunur; ikisi de yukarıdaki
+aynı iki ayara bağlıdır.
 
 ### Loglama
 
@@ -679,7 +705,9 @@ Arazinin düz olmadığı durumlarda tek bir GSD değeri tüm görüntüyü doğ
 
 ### Keras Model Çıkarımı
 
-Patch'leri gri tona çevirir, histogramı eşitler, [-1, 1] aralığına normalize eder ve öznitelik haritalarını çıkarmak için tek bir batch olarak Keras modelinden geçirir.
+Patch'leri gri tona çevirir, seçilen ön işlemeyi uygular (`MODEL_INPUT_NORM`: ham / histogram
+eşitleme / CLAHE / Laplacian kenar), [-1, 1] aralığına normalize eder ve öznitelik haritalarını
+çıkarmak için tek bir batch olarak Keras modelinden geçirir.
 
 ### Template Matching
 
@@ -691,7 +719,18 @@ Referans haritada en yüksek korelasyon noktasını bulmak için `cv2.TM_CCOEFF_
 
 ### Piramit Arama (Pyramid Search)
 
-`USE_PYRAMID = True` olduğunda, büyük haritalarda süreci hızlandırmak için iki aşamalı bir arama (coarse-to-fine) kullanılır.
+`USE_PYRAMID = True` olduğunda, büyük haritalarda süreci hızlandırmak için iki aşamalı bir arama (coarse-to-fine) kullanılır. Kaba aşama `COARSE_SCALE` ölçeğinde eşleştirir; tam çözünürlük aşaması yalnızca kaba tohumun etrafındaki `ROI_PAD_FACTOR` boyutlu pencereyi tarar.
+
+**Çok adaylı kaba aşama (`PYRAMID_MULTI_CANDIDATE`, varsayılan kapalı).** Varsayılan hâlde kaba aşama tek tepe tutar; kaba tohum yanlışsa bu asla toparlanamaz — doğru eşleşme, inceleme penceresi dışındaki `-1e9` dolgusunun altında kalır. Kendine benzer arazide (Kapadokya'da tekrar eden vadi ve peribacası dokusu) bu, sessiz bir hata modudur. Bayrak açıkken kaba response, greedy kare-NMS ile birbirinden ayrık en güçlü `PYRAMID_TOP_K` tepeye indirgenir (`PYRAMID_NMS_RADIUS_PX`), her biri tam çözünürlükte incelenir ve sonuçlar tek bir response haritasında birleştirilir — böylece `minMaxLoc` kazananı adaylar *arasından* seçer. Dönen haritanın şekli ve dolgu kuralı tek adaylı yolla birebir aynıdır; aşağı akıştaki hiçbir şey değişmez. NMS çekirdeği, kardeş `benchmark/` projesindeki `coarse_to_fine_search` ile aynı mantıktadır; uygulama `pyramid_search.py`, birim testleri `tests/test_pyramid_search.py` içindedir.
+
+Sentetik karelerde ölçülen maliyet (CPU, `TM_CCOEFF_NORMED`, 512 px template):
+
+| Arama çerçevesi | Tam arama | Piramit K=1 | Piramit K=3 | Piramit K=5 |
+|---|---|---|---|---|
+| 2048 px | 59 ms | 28 ms | 45 ms | 59 ms |
+| 6000 px | 730 ms | 168 ms | — | 247 ms |
+
+Varsayılan 2048 px çerçevede `K=5`, tam aramayla yaklaşık aynı maliyettedir; orada `K=3` daha iyi bir takastır. Çok adaylı yol asıl kazancını adaptif büyüyen çerçevelerde (`CERCEVE_BOYUTU_MAX = 15000`) verir. Not: bayrak yalnızca CPU yolunu etkiler — CUDA dalı tam arama yapar ve `USE_PYRAMID`'i tamamen yok sayar.
 
 ### CUDA GPU Hızlandırma
 

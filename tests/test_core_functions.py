@@ -230,5 +230,189 @@ class TestGeometryHelpers(unittest.TestCase):
         self.assertGreater(lon2, 34.9)
 
 
+@unittest.skipIf(tm is None, f"Ana modul yuklenemedi: {_IMPORT_ERROR}")
+class TestModelInputPreprocessing(unittest.TestCase):
+    """Anlik goruntu on isleme: normalizasyon modlari ve model girdisi hazirligi."""
+
+    def setUp(self):
+        rng = np.random.default_rng(0)
+        # Dusuk kontrastli, parlaklik gradyanli gri yama (esitlemenin etkisi olculebilsin).
+        base = np.linspace(60, 120, 64, dtype=np.float32)
+        self.patch = np.clip(
+            base[None, :] + rng.normal(0.0, 3.0, (64, 64)), 0, 255
+        ).astype(np.uint8)
+
+    def test_ham_returns_same_pixels(self):
+        out = tm.apply_model_input_norm(self.patch, "HAM")
+        self.assertTrue(np.array_equal(out, self.patch))
+
+    def test_histeq_widens_dynamic_range(self):
+        out = tm.apply_model_input_norm(self.patch, "HISTEQ")
+        self.assertEqual(out.dtype, np.uint8)
+        self.assertGreater(int(out.max()) - int(out.min()),
+                           int(self.patch.max()) - int(self.patch.min()))
+
+    def test_clahe_and_edge_return_uint8_same_shape(self):
+        for mode in ("CLAHE", "EDGE"):
+            out = tm.apply_model_input_norm(self.patch, mode)
+            self.assertEqual(out.shape, self.patch.shape, mode)
+            self.assertEqual(out.dtype, np.uint8, mode)
+
+    def test_edge_of_flat_patch_is_zero(self):
+        flat = np.full((32, 32), 100, dtype=np.uint8)
+        self.assertEqual(int(tm.apply_model_input_norm(flat, "EDGE").max()), 0)
+
+    def test_color_input_is_converted_to_gray(self):
+        color = np.dstack([self.patch] * 3)
+        out = tm.apply_model_input_norm(color, "HAM")
+        self.assertEqual(out.ndim, 2)
+
+    def test_unknown_mode_falls_back_to_configured_default(self):
+        self.assertEqual(tm.resolve_model_input_norm("YOK"), tm.MODEL_INPUT_NORM)
+        self.assertEqual(tm.resolve_model_input_norm(None), tm.MODEL_INPUT_NORM)
+        self.assertEqual(tm.resolve_model_input_norm("clahe"), "CLAHE")
+
+    def test_next_mode_cycles_through_all_modes(self):
+        mode = tm.MODEL_INPUT_NORM_MODES[0]
+        seen = []
+        for _ in range(len(tm.MODEL_INPUT_NORM_MODES)):
+            mode = tm.next_model_input_norm(mode)
+            seen.append(mode)
+        self.assertEqual(sorted(seen), sorted(tm.MODEL_INPUT_NORM_MODES))
+
+    def test_prepare_model_input_shape_and_range(self):
+        out = tm.prepare_model_input(self.patch, mode="HISTEQ", patch_size=32)
+        self.assertEqual(out.shape, (32, 32))
+        self.assertEqual(out.dtype, np.float32)
+        self.assertGreaterEqual(float(out.min()), -1.0)
+        self.assertLessEqual(float(out.max()), 1.0)
+
+    def test_prepare_model_input_matches_previous_pipeline_defaults(self):
+        # Onceki davranis: resize(NEAREST) -> equalizeHist -> (x-127.5)/127.5
+        import cv2
+        expected = cv2.resize(self.patch, (32, 32), interpolation=cv2.INTER_NEAREST)
+        expected = (cv2.equalizeHist(expected).astype(np.float32) - 127.5) / 127.5
+        out = tm.prepare_model_input(
+            self.patch, mode="HISTEQ", before_resize=False, interp="NEAREST", patch_size=32
+        )
+        self.assertTrue(np.allclose(out, expected))
+
+    def test_norm_before_resize_differs_from_after_resize(self):
+        before = tm.prepare_model_input(self.patch, mode="HISTEQ", before_resize=True, patch_size=16)
+        after = tm.prepare_model_input(self.patch, mode="HISTEQ", before_resize=False, patch_size=16)
+        self.assertFalse(np.allclose(before, after))
+
+    def test_ham_mode_skips_equalization(self):
+        raw = tm.prepare_model_input(self.patch, mode="HAM", patch_size=32)
+        eq = tm.prepare_model_input(self.patch, mode="HISTEQ", patch_size=32)
+        self.assertFalse(np.allclose(raw, eq))
+
+
+@unittest.skipIf(tm is None, f"Ana modul yuklenemedi: {_IMPORT_ERROR}")
+class TestRuntimeNormButton(unittest.TestCase):
+    """Runtime panelindeki "On Isleme" butonu: ac/kapa degil, sirayla mod degistirir."""
+
+    def setUp(self):
+        import cv2
+        self.cv2 = cv2
+        self.buttons = tm._build_runtime_buttons()
+        self.state = {
+            "trajectory": True, "inner_frame": False, "roi_frame": True,
+            "tm_boxes": True, "model_norm": tm.MODEL_INPUT_NORM,
+            "_panel_collapsed": False, "_hover_key": None,
+        }
+        self.button = next(b for b in self.buttons if b["key"] == "model_norm")
+
+    def _click_center(self):
+        bx, by, bw, bh = self.button["rect"]
+        tm._runtime_buttons_mouse_cb(
+            self.cv2.EVENT_LBUTTONDOWN, bx + bw // 2, by + bh // 2, 0,
+            {"state": self.state, "buttons": self.buttons},
+        )
+
+    def test_click_cycles_modes_instead_of_toggling_bool(self):
+        img = np.zeros((960, 1280, 3), dtype=np.uint8)
+        tm._draw_runtime_buttons(img, self.state, self.buttons, display_size=(1280, 960))
+        seen = []
+        for _ in range(len(tm.MODEL_INPUT_NORM_MODES)):
+            self._click_center()
+            seen.append(self.state["model_norm"])
+        self.assertEqual(sorted(seen), sorted(tm.MODEL_INPUT_NORM_MODES))
+        self.assertEqual(self.state["model_norm"], tm.MODEL_INPUT_NORM)
+
+    def test_panel_draws_with_every_mode(self):
+        for mode in tm.MODEL_INPUT_NORM_MODES:
+            img = np.zeros((960, 1280, 3), dtype=np.uint8)
+            self.state["model_norm"] = mode
+            tm._draw_runtime_buttons(img, self.state, self.buttons, display_size=(1280, 960))
+            self.assertTrue(img.any(), mode)
+
+
+@unittest.skipIf(tm is None, f"Ana modul yuklenemedi: {_IMPORT_ERROR}")
+class TestPyramidUiBridge(unittest.TestCase):
+    """UI toggle/secimlerinin RUN_CFG'ye yansimasi ve K dongusu."""
+
+    def setUp(self):
+        self._saved = {
+            key: tm.RUN_CFG[key]
+            for key in ("PYRAMID_MULTI_CANDIDATE", "PYRAMID_TOP_K", "PYRAMID_NMS_RADIUS_PX")
+        }
+
+    def tearDown(self):
+        tm.RUN_CFG.update(self._saved)
+
+    def test_toggle_and_k_reach_run_cfg(self):
+        tm.apply_pyramid_ui_state({"multi_candidate": True, "pyramid_top_k": "3"})
+        self.assertTrue(tm.RUN_CFG["PYRAMID_MULTI_CANDIDATE"])
+        self.assertEqual(tm.RUN_CFG["PYRAMID_TOP_K"], 3)
+        self.assertEqual(tm._pyramid_topk_settings()[:2], (True, 3))
+
+    def test_missing_keys_leave_run_cfg_untouched(self):
+        # headless/TM_RUN_CFG_JSON ile verilen degerler UI yokken ezilmemeli.
+        tm.RUN_CFG["PYRAMID_MULTI_CANDIDATE"] = True
+        tm.RUN_CFG["PYRAMID_TOP_K"] = 5
+        tm.apply_pyramid_ui_state({"kalman": False})
+        self.assertTrue(tm.RUN_CFG["PYRAMID_MULTI_CANDIDATE"])
+        self.assertEqual(tm.RUN_CFG["PYRAMID_TOP_K"], 5)
+
+    def test_invalid_k_is_ignored(self):
+        tm.RUN_CFG["PYRAMID_TOP_K"] = 5
+        for bad in ("", "abc", None, "0", "-2"):
+            tm.apply_pyramid_ui_state({"pyramid_top_k": bad})
+            self.assertEqual(tm.RUN_CFG["PYRAMID_TOP_K"], 5, bad)
+
+    def test_k_one_disables_multi_candidate_path(self):
+        tm.apply_pyramid_ui_state({"multi_candidate": True, "pyramid_top_k": "1"})
+        self.assertFalse(tm._pyramid_topk_settings()[0])
+
+    def test_next_pyramid_top_k_cycles(self):
+        self.assertEqual(tm.next_pyramid_top_k("1"), "3")
+        self.assertEqual(tm.next_pyramid_top_k("3"), "5")
+        self.assertEqual(tm.next_pyramid_top_k("5"), "1")
+        self.assertEqual(tm.next_pyramid_top_k(None), "1")  # bilinmeyen -> bastan
+
+    def test_runtime_panel_exposes_both_controls(self):
+        keys = {b["key"] for b in tm._build_runtime_buttons()}
+        self.assertIn("multi_candidate", keys)
+        self.assertIn("pyramid_top_k", keys)
+
+    def test_cycle_click_dispatches_per_key(self):
+        import cv2
+        buttons = tm._build_runtime_buttons()
+        state = {"model_norm": tm.MODEL_INPUT_NORM, "pyramid_top_k": "1",
+                 "multi_candidate": False, "_panel_collapsed": False, "_hover_key": None}
+        img = np.zeros((960, 1280, 3), dtype=np.uint8)
+        tm._draw_runtime_buttons(img, state, buttons, display_size=(1280, 960))
+        button = next(b for b in buttons if b["key"] == "pyramid_top_k")
+        bx, by, bw, bh = button["rect"]
+        tm._runtime_buttons_mouse_cb(
+            cv2.EVENT_LBUTTONDOWN, bx + bw // 2, by + bh // 2, 0,
+            {"state": state, "buttons": buttons},
+        )
+        # K butonu K'yi dondurmeli, on isleme modunu DEGISTIRMEMELI.
+        self.assertEqual(state["pyramid_top_k"], "3")
+        self.assertEqual(state["model_norm"], tm.MODEL_INPUT_NORM)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

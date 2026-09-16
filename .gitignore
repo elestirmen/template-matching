@@ -10,6 +10,7 @@
 !baslat_ui.cmd
 !gps_denied_autonomy.py
 !optical_flow_speed.py
+!pyramid_search.py
 !requirements.txt
 !*.md
 !*.MD

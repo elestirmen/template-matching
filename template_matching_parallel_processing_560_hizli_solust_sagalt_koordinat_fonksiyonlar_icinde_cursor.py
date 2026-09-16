@@ -36,10 +36,57 @@ RUN_CFG = {
     "PATCH_SIZE": 544,  # Artarsa daha genis baglam gorur (VRAM/RAM ve sure artar).
     "PRED_BORDER": 16,  # Artarsa model cikti kenarlari daha cok kirpilir (artefakt azalir).
 
+    # Anlik goruntu (model girdisi) on isleme:
+    # - MODEL_INPUT_NORM: modele verilmeden once yamaya uygulanan normalizasyon.
+    #   "HISTEQ_PIL" = PIL/tfa uyumlu esitleme (VARSAYILAN). 2022 modelleri
+    #                  tfa.image.equalize ile egitildi; cv2.equalizeHist ondan
+    #                  farklidir (ayni karoda ort. ~6, uc durumda 150+ seviye).
+    #   "HISTEQ" = OpenCV equalizeHist (global histogram esitleme),
+    #   "HAM"    = normalizasyon yok (ham gri seviye),
+    #   "CLAHE"  = yerel kontrast sinirlamali histogram esitleme,
+    #   "EDGE"   = Laplacian kenar haritasi.
+    #   Calisma sirasinda N tusu / UI acilir listesi ile degistirilebilir.
+    # - MODEL_INPUT_NORM_BEFORE_RESIZE: True ise normalizasyon resize ONCESI uygulanir
+    #   (dogal piksel histogrami korunur, simulasyondaki sira). False = onceki davranis.
+    # - MODEL_INPUT_INTERP: "NEAREST" (varsayilan/onceki davranis) | "AREA" | "LINEAR" |
+    #   "CUBIC" | "AUTO" (kucultmede AREA, buyutmede LINEAR).
+    "MODEL_INPUT_NORM": "HISTEQ_PIL",
+    "MODEL_INPUT_NORM_BEFORE_RESIZE": False,
+    "MODEL_INPUT_INTERP": "NEAREST",
+    "MODEL_INPUT_CLAHE_CLIP": 2.0,   # CLAHE clipLimit: artarsa kontrast/gurultu artar.
+    "MODEL_INPUT_CLAHE_TILE": 8,     # CLAHE tileGridSize: artarsa daha yerel esitleme.
+    # - MODEL_INPUT_SCALE: iyilestirmeden SONRA uygulanan sayisal olcekleme.
+    #   Harita ureticideki goruntu_islemleri.apply_normalization() ile birebir ayni:
+    #     "minus1_1" = (x - 127.5) / 127.5  -> [-1, 1]  (VARSAYILAN; onceki davranis)
+    #     "zero_1"   = x / 255.0            -> [ 0, 1]
+    #     "raw"      = olcekleme yok        -> [ 0, 255]
+    #     "zscore"   = yama bazli (x - mean) / (std + 1e-7)
+    #   Egitimdeki INPUT_NORMALIZATION ile ayni olmalidir. Bu depodaki 2022
+    #   modelleri (sigmoid ciktili) [-1, 1] girisle egitildigi icin varsayilan
+    #   minus1_1'dir; ciktinin sigmoid oldugu, girisin olceginden bagimsizdir.
+    "MODEL_INPUT_SCALE": "minus1_1",
+    # - MODEL_INPUT_USE_SIDECAR: True ise model yanindaki "<model>.pre.json"
+    #   on isleme sozlesmesi MODEL_INPUT_NORM/MODEL_INPUT_SCALE'i ezer (egitimin
+    #   yazdigi kesin bilgidir). Sozlesme yoksa yukaridaki degerler kullanilir.
+    #   Elle deney yaparken False yapin (headless --model-norm/--model-scale
+    #   verildiginde otomatik olarak kapanir).
+    "MODEL_INPUT_USE_SIDECAR": True,
+
     # Template matching hizlandirma
     "USE_PYRAMID": True,   # True: coarse-to-fine arama (genelde daha hizli).
     "COARSE_SCALE": 0.5,   # Kuculdukce kaba arama hizlanir, ama konum ilk tahmini kabalasir.
     "ROI_PAD_FACTOR": 0.4, # Buyudukce ince arama ROI alani genisler (guven artar, sure artar).
+
+    # Cok adayli kaba arama (benchmark/geospatial_model_benchmark.py tarzi).
+    # KAPALIYKEN (varsayilan) davranis birebir eskisi gibidir: kaba asamada tek
+    # tepe alinir. ACIKKEN kaba asamada NMS ile TOP-K aday secilir ve her aday
+    # tam cozunurlukte ayri ayri incelenir; en iyisi adaylar ARASINDAN secilir.
+    # Kendine benzer arazide (vadi/peribacasi dokusu) yanlis kaba tohuma
+    # kilitlenmeyi engeller. Maliyet ~ K kat ince arama (ROI'ler kucuk oldugundan
+    # toplam sure artisi sinirlidir).
+    "PYRAMID_MULTI_CANDIDATE": False,  # True: TOP-K aday + NMS ile kaba arama.
+    "PYRAMID_TOP_K": 5,                # Aday sayisi. 1 => tek adayli eski yol.
+    "PYRAMID_NMS_RADIUS_PX": 0,        # 0 => otomatik (template kenarinin yarisi).
 
     # Arama cercevesi boyutu
     "CERCEVE_BOYUTU_NORMAL": 2048,    # Buyudukce kayma toleransi artar, hesap suresi artar.
@@ -49,8 +96,10 @@ RUN_CFG = {
     # Veri yollari
     "HARITA_DIR": "haritalar",   # Referans harita klasoru.
     "MODEL_DIR": "model",        # Keras model klasoru.
-    "ANLIK_DIR": "guzergahlar/1_tezde_ucus_5",     # Islenecek anlik goruntu klasoru.
-    "DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
+    #"ANLIK_DIR": "guzergahlar/1_tezde_ucus_5",     # Islenecek anlik goruntu klasoru.
+    "ANLIK_DIR": "guzergahlar/guzergah_6_to_tagar",     # Islenecek anlik goruntu klasoru.
+    #"DEM_PATH": "ana_harita_urgup_30_cm_utm_elevation.tif",  # Rakim/irtifa duzeltmesi icin DEM.
+    "DEM_PATH": "karlik_30_cm_bingmap_utm_elevation.tif",
 
     # Dosya secimi:
     # - Liste bos ise ilgili klasordeki tum uygun uzantilar kullanilir.
@@ -377,6 +426,9 @@ from gps_denied_autonomy import (
     covariance_window_size_px,
 )
 from optical_flow_speed import OpticalFlowSpeed, OpticalFlowSpeedEstimator
+# Cok adayli coarse-to-fine arama (yalnizca RUN_CFG["PYRAMID_MULTI_CANDIDATE"]
+# acikken kullanilir; kapaliyken bu modulun hicbir fonksiyonu cagrilmaz).
+import pyramid_search
 
 
 # -----------------------------------------------------------------------------
@@ -1390,7 +1442,22 @@ def _build_runtime_buttons():
         {"key": "inner_frame",  "label": "Ic Cerceve",   "hotkey": "I", "rect": (20, 84, 260, 54)},
         {"key": "roi_frame",    "label": "ROI Cerceve",  "hotkey": "O", "rect": (20, 148, 260, 54)},
         {"key": "tm_boxes",     "label": "TM RGB Kutu",  "hotkey": "R", "rect": (20, 212, 260, 54)},
+        # Ac/kapa degil, sirayla deger degistiren butonlar (on isleme modu, aday sayisi).
+        {"key": "model_norm",   "label": "On Isleme",    "hotkey": "N", "rect": (20, 276, 260, 54),
+         "is_cycle": True, "cycle_default": MODEL_INPUT_NORM},
+        # Cok adayli kaba arama: gorunum degil, ARAMA davranisini degistirir.
+        {"key": "multi_candidate", "label": "Cok Aday",  "hotkey": "P", "rect": (20, 340, 260, 54)},
+        # K rozeti: "1" varsayilan sayildigindan buton yalnizca K>1 iken yanar.
+        {"key": "pyramid_top_k",   "label": "Aday K",    "hotkey": "K", "rect": (20, 404, 260, 54),
+         "is_cycle": True, "cycle_default": "1"},
     ]
+
+
+def _next_cycle_value(key, current):
+    """Cycle butonlari icin bir sonraki degeri dondurur (anahtara gore)."""
+    if key == "pyramid_top_k":
+        return next_pyramid_top_k(current)
+    return next_model_input_norm(current)
 
 
 def _draw_runtime_buttons(
@@ -1555,7 +1622,12 @@ def _draw_runtime_buttons(
 
     for b in content_buttons:
         key = b["key"]
-        is_on = bool(ui_state.get(key, False))
+        is_cycle = bool(b.get("is_cycle", False))
+        # Cycle butonunda "acik" gorunumu varsayilan disi bir deger secildigini anlatir.
+        # Varsayilan buton tanimindan gelir; belirtilmemisse on isleme modu kullanilir.
+        cycle_value = str(ui_state.get(key, "")) if is_cycle else ""
+        cycle_default = str(b.get("cycle_default", MODEL_INPUT_NORM))
+        is_on = (cycle_value not in ("", cycle_default)) if is_cycle else bool(ui_state.get(key, False))
         is_hovered = (hover_key == key)
         label = str(b.get("label", key))
         hotkey = str(b.get("hotkey", "")).strip()
@@ -1583,11 +1655,22 @@ def _draw_runtime_buttons(
                                cv2.FONT_HERSHEY_SIMPLEX, txt_scale,
                                UI_COLORS["text_primary"], txt_thick)
 
-        # Sag: toggle switch
-        tw_x = x0 + bw - toggle_w - toggle_margin
-        tw_y = y + (bh - toggle_h) // 2
-        _draw_toggle_switch(img, tw_x, tw_y, toggle_w, toggle_h,
-                            is_on, view_scale)
+        if is_cycle:
+            # Sag: secili modun metni (toggle yerine deger rozeti)
+            value_scale = max(0.55, float(font_scale) * 0.70 * view_scale)
+            (value_w, _), _ = cv2.getTextSize(cycle_value, cv2.FONT_HERSHEY_SIMPLEX,
+                                              value_scale, txt_thick)
+            vx = x0 + bw - value_w - toggle_margin
+            vy = y + int(round(bh * 0.62))
+            _draw_text_with_shadow(img, cycle_value, (vx, vy),
+                                   cv2.FONT_HERSHEY_SIMPLEX, value_scale,
+                                   UI_COLORS["text_primary"], txt_thick)
+        else:
+            # Sag: toggle switch
+            tw_x = x0 + bw - toggle_w - toggle_margin
+            tw_y = y + (bh - toggle_h) // 2
+            _draw_toggle_switch(img, tw_x, tw_y, toggle_w, toggle_h,
+                                is_on, view_scale)
 
         y += (bh + gap)
 
@@ -1631,7 +1714,10 @@ def _runtime_buttons_mouse_cb(event, x, y, flags, userdata):
             continue
         if bx <= mx <= (bx + bw) and by <= my <= (by + bh):
             k = b["key"]
-            ui_state[k] = not bool(ui_state.get(k, False))
+            if b.get("is_cycle"):
+                ui_state[k] = _next_cycle_value(k, ui_state.get(k))
+            else:
+                ui_state[k] = not bool(ui_state.get(k, False))
             break
 
 
@@ -1989,6 +2075,292 @@ CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
 FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
 CAMERA_SENSOR_BY_MODEL = dict(RUN_CFG.get("CAMERA_SENSOR_BY_MODEL", {"L1D-20c": 13.2, "FC2204": 6.17}))
 
+# Anlik goruntu (model girdisi) on isleme sabitleri.
+# Varsayilanlar onceki davranisi birebir korur: resize (NEAREST) -> equalizeHist -> [-1,1].
+MODEL_INPUT_NORM_MODES = ("HAM", "HISTEQ", "HISTEQ_PIL", "CLAHE", "EDGE")
+MODEL_INPUT_NORM = str(RUN_CFG.get("MODEL_INPUT_NORM", "HISTEQ")).strip().upper()
+if MODEL_INPUT_NORM not in MODEL_INPUT_NORM_MODES:
+    raise RuntimeError(
+        "Gecersiz MODEL_INPUT_NORM: "
+        + repr(RUN_CFG.get("MODEL_INPUT_NORM"))
+        + " (gecerli: " + ", ".join(MODEL_INPUT_NORM_MODES) + ")"
+    )
+MODEL_INPUT_NORM_BEFORE_RESIZE = bool(RUN_CFG.get("MODEL_INPUT_NORM_BEFORE_RESIZE", False))
+MODEL_INPUT_INTERP = str(RUN_CFG.get("MODEL_INPUT_INTERP", "NEAREST")).strip().upper()
+MODEL_INPUT_INTERP_BY_NAME = {
+    "NEAREST": cv2.INTER_NEAREST,
+    "AREA": cv2.INTER_AREA,
+    "LINEAR": cv2.INTER_LINEAR,
+    "CUBIC": cv2.INTER_CUBIC,
+}
+if MODEL_INPUT_INTERP != "AUTO" and MODEL_INPUT_INTERP not in MODEL_INPUT_INTERP_BY_NAME:
+    raise RuntimeError(
+        "Gecersiz MODEL_INPUT_INTERP: "
+        + repr(RUN_CFG.get("MODEL_INPUT_INTERP"))
+        + " (gecerli: AUTO, " + ", ".join(MODEL_INPUT_INTERP_BY_NAME) + ")"
+    )
+MODEL_INPUT_CLAHE_CLIP = float(RUN_CFG.get("MODEL_INPUT_CLAHE_CLIP", 2.0))
+MODEL_INPUT_CLAHE_TILE = int(RUN_CFG.get("MODEL_INPUT_CLAHE_TILE", 8))
+
+# Sayisal olcekleme modlari; harita ureticideki NORMALIZATION_MODES ile ayni isimler.
+MODEL_INPUT_SCALE_MODES = ("minus1_1", "zero_1", "raw", "zscore")
+MODEL_INPUT_USE_SIDECAR = bool(RUN_CFG.get("MODEL_INPUT_USE_SIDECAR", True))
+MODEL_INPUT_SCALE = str(RUN_CFG.get("MODEL_INPUT_SCALE", "minus1_1")).strip().lower()
+if MODEL_INPUT_SCALE not in MODEL_INPUT_SCALE_MODES:
+    raise RuntimeError(
+        "Gecersiz MODEL_INPUT_SCALE: "
+        + repr(RUN_CFG.get("MODEL_INPUT_SCALE"))
+        + " (gecerli: " + ", ".join(MODEL_INPUT_SCALE_MODES) + ")"
+    )
+
+
+# Harita ureticideki (goruntu_islemleri.ENHANCEMENT_MODES) isimler burada
+# takma ad olarak kabul edilir; boylece ayni "<model>.pre.json" sozlesmesi iki
+# boru hattinda da dogrudan kullanilabilir.
+# UI'nin "sozlesmeden al" demek icin gonderdigi sentinel. Bu deger gelirse
+# cekirdek kendi cozdugu degeri KORUR (bkz. merge_ui_state).
+UI_AUTO_SENTINEL = "OTOMATIK"
+
+MODEL_INPUT_NORM_ALIASES = {
+    "NONE": "HAM",
+    "HIST_EQ": "HISTEQ",
+    "HISTEQUALIZE": "HISTEQ",
+    "EQUALIZE": "HISTEQ",
+    "HIST_EQ_PIL": "HISTEQ_PIL",
+}
+
+
+def resolve_model_input_norm(mode=None):
+    """Verilen normalizasyon adini dogrular; gecersizse RUN_CFG varsayilanina doner.
+
+    "none" / "hist_eq" / "clahe" / "edge" (harita ureticinin yazimi) da kabul edilir.
+    """
+    if mode is None:
+        return MODEL_INPUT_NORM
+    candidate = str(mode).strip().upper()
+    candidate = MODEL_INPUT_NORM_ALIASES.get(candidate, candidate)
+    return candidate if candidate in MODEL_INPUT_NORM_MODES else MODEL_INPUT_NORM
+
+
+def next_model_input_norm(mode=None):
+    """Sirayla bir sonraki normalizasyon modunu dondurur (N tusu / UI dongusu)."""
+    current = resolve_model_input_norm(mode)
+    index = MODEL_INPUT_NORM_MODES.index(current)
+    return MODEL_INPUT_NORM_MODES[(index + 1) % len(MODEL_INPUT_NORM_MODES)]
+
+
+def equalize_pil(gray):
+    """PIL ImageOps.equalize / tfa.image.equalize ile BIREBIR ayni histogram esitlemesi.
+
+    Neden ayri bir mod: cv2.equalizeHist standart CDF esleme kullanir,
+    PIL/TFA ise farkli bir LUT kurar (adim = (toplam - son_dolu_kova) // 255,
+    yarim adim kaydirma, bir saga oteleme). Ayni karoda ortalama ~6, uc
+    durumda 150+ gri seviye ayrisirlar. 2022 modelleri TFA ile egitildigi
+    icin egitimle birebir ayni girdi ancak bu fonksiyonla uretilir.
+
+    Args:
+        gray: 2B uint8 gri goruntu.
+
+    Returns:
+        Esitlenmis 2B uint8 goruntu.
+    """
+    histogram = np.bincount(gray.reshape(-1), minlength=256).astype(np.int64)
+    nonzero = histogram[histogram != 0]
+    if nonzero.size <= 1:
+        return gray.copy()
+
+    step = (int(nonzero.sum()) - int(nonzero[-1])) // 255
+    if step == 0:
+        return gray.copy()
+
+    # lut[i] = (step//2 + h[0..i-1] toplami) // step   (PIL'in kurdugu tablo)
+    exclusive_cumsum = np.concatenate(([0], np.cumsum(histogram)[:-1]))
+    lut = np.clip((exclusive_cumsum + step // 2) // step, 0, 255).astype(np.uint8)
+    return lut[gray]
+
+
+def apply_model_input_norm(image, mode=None, clip_limit=None, tile_grid=None):
+    """Anlik goruntu yamasina secilen normalizasyonu uygular; gri (uint8) dondurur.
+
+    HAM        : dokunmaz (yalnizca gri seviyeye cevirir)
+    HISTEQ     : global histogram esitleme (OpenCV)
+    HISTEQ_PIL : PIL/tfa uyumlu esitleme (2022 egitimiyle birebir ayni)
+    CLAHE  : yerel kontrast sinirlamali esitleme (golge/parlaklik gradyanina dayanikli)
+    EDGE   : Laplacian kenar buyuklugu (doku yerine yapi/kenar bilgisi)
+    """
+    if image is None:
+        return None
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if gray.dtype != np.uint8:
+        gray = np.clip(gray, 0, 255).astype(np.uint8)
+    selected = resolve_model_input_norm(mode)
+    if selected == "HISTEQ":
+        return cv2.equalizeHist(gray)
+    if selected == "HISTEQ_PIL":
+        return equalize_pil(gray)
+    if selected == "CLAHE":
+        clip = MODEL_INPUT_CLAHE_CLIP if clip_limit is None else float(clip_limit)
+        tile = MODEL_INPUT_CLAHE_TILE if tile_grid is None else int(tile_grid)
+        tile = max(1, tile)
+        clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(tile, tile))
+        return clahe.apply(gray)
+    if selected == "EDGE":
+        edges = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
+        peak = float(edges.max())
+        if peak <= 0.0:
+            return np.zeros_like(gray)
+        return (edges / peak * 255.0).astype(np.uint8)
+    return gray
+
+
+def resolve_model_input_scale(scale=None):
+    """Verilen olcekleme adini dogrular; gecersizse RUN_CFG varsayilanina doner."""
+    if scale is None:
+        return MODEL_INPUT_SCALE
+    candidate = str(scale).strip().lower()
+    return candidate if candidate in MODEL_INPUT_SCALE_MODES else MODEL_INPUT_SCALE
+
+
+def apply_model_input_scale(pixels, scale=None):
+    """uint8/float yamayi modelin bekledigi sayisal araliga olcekler (float32).
+
+    Harita ureticideki goruntu_islemleri.apply_normalization() ile birebir ayni
+    davranir; iki taraf ayni kalmalidir, aksi halde ayni model iki boru hattinda
+    farkli girdi gorur.
+
+        minus1_1 : (x - 127.5) / 127.5   -> [-1, 1]   (tanh girisli egitim)
+        zero_1   : x / 255.0             -> [ 0, 1]   (sigmoid girisli egitim)
+        raw      : dokunmaz              -> [ 0, 255]
+        zscore   : (x - mean) / (std+eps)-> yama bazli standardizasyon
+    """
+    arr = pixels.astype(np.float32, copy=False)
+    selected = resolve_model_input_scale(scale)
+    if selected == "zero_1":
+        return arr / 255.0
+    if selected == "raw":
+        return arr
+    if selected == "zscore":
+        mean = float(np.mean(arr))
+        std = float(np.std(arr))
+        return (arr - mean) / (std + 1e-7)
+    return (arr - 127.5) / 127.5
+
+
+# ---------------------------------------------------------------------------
+# Model on isleme sozlesmesi ("<model>.pre.json")
+# ---------------------------------------------------------------------------
+# Egitim (autoencoder_sat_to_map/egitim/autoencoder_unified.py) her model
+# dosyasinin yanina hangi girdi on islemesiyle egitildigini yazar. Harita
+# uretici (src/goruntu_islemleri.py) ve bu dosya ayni sozlesmeyi okur; boylece
+# ayni model iki boru hattinda ayni girdiyi gorur.
+#
+# Sozlesme yoksa hicbir tahmin yapilmaz: RUN_CFG'deki degerler kullanilir.
+# Model dosyasinin cikis aktivasyonu (sigmoid/tanh) girisin nasil olceklendigini
+# SOYLEMEZ; 2022 modelleri sigmoid ciktili olmasina ragmen [-1,1] + HISTEQ
+# girisle egitilmistir.
+MODEL_PREPROCESSING_SUFFIX = ".pre.json"
+
+
+def preprocessing_sidecar_path(model_path):
+    """Model dosyasina ait on isleme sozlesmesinin yolunu dondurur."""
+    return os.path.splitext(str(model_path))[0] + MODEL_PREPROCESSING_SUFFIX
+
+
+def load_preprocessing_sidecar(model_path):
+    """Model yanindaki sozlesmeyi okur; yoksa/bozuksa None dondurur."""
+    path = preprocessing_sidecar_path(model_path)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"[UYARI] On isleme sozlesmesi okunamadi ({path}): {e}")
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def model_preprocessing_settings(model_path, map_path=None):
+    """(norm_mode, scale, kaynak_aciklamasi) uretir.
+
+    ONCELIK SIRASI ve nedeni:
+      1. HARITA sozlesmesi ("<harita>.pre.json")  <-- en onemlisi
+         Template matching, anlik goruntunun model ciktisini HARITANIN icinde
+         arar. Harita da bir model ciktisidir. Dolayisiyla anlik goruntu,
+         haritayi ureten ayarlarla islenmelidir; aksi halde ayni model iki
+         tarafta farkli seyler uretir ve eslesme coker.
+      2. MODEL sozlesmesi ("<model>.pre.json")
+         Harita sozlesmesi yoksa modelin egitim ayarlarina duseriz.
+      3. RUN_CFG degerleri.
+
+    Donen norm_mode bu dosyanin yazimindadir (HAM/HISTEQ/CLAHE/EDGE),
+    scale ise minus1_1/zero_1/raw/zscore.
+    """
+    cfg_norm = resolve_model_input_norm(RUN_CFG.get("MODEL_INPUT_NORM", MODEL_INPUT_NORM))
+    cfg_scale = resolve_model_input_scale(RUN_CFG.get("MODEL_INPUT_SCALE", MODEL_INPUT_SCALE))
+
+    if not bool(RUN_CFG.get("MODEL_INPUT_USE_SIDECAR", MODEL_INPUT_USE_SIDECAR)):
+        return cfg_norm, cfg_scale, "sozlesme kapali -> RUN_CFG degerleri"
+
+    contract = None
+    kaynak = None
+    if map_path:
+        contract = load_preprocessing_sidecar(map_path)
+        if contract:
+            kaynak = "HARITA sozlesmesi: " + os.path.basename(preprocessing_sidecar_path(map_path))
+    if not contract:
+        contract = load_preprocessing_sidecar(model_path)
+        if contract:
+            kaynak = "model sozlesmesi: " + os.path.basename(preprocessing_sidecar_path(model_path))
+            if map_path:
+                print("[On isleme] Harita sozlesmesi yok ("
+                      + os.path.basename(preprocessing_sidecar_path(map_path))
+                      + "); modelin egitim ayarlari kullanilacak. Harita bu ayarlarla "
+                        "uretilmediyse eslesme dusuk kalir.")
+    if not contract:
+        return cfg_norm, cfg_scale, "sozlesme yok -> RUN_CFG degerleri"
+
+    norm_mode = resolve_model_input_norm(contract.get("enhancement"))
+    scale = resolve_model_input_scale(contract.get("input_normalization"))
+    if norm_mode != cfg_norm or scale != cfg_scale:
+        print(f"[On isleme] RUN_CFG ({cfg_norm}, {cfg_scale}) sozlesmeyle uyusmuyor; "
+              f"sozlesme ({norm_mode}, {scale}) kullanilacak. "
+              f"RUN_CFG'yi zorlamak icin MODEL_INPUT_USE_SIDECAR=False yapin.")
+    return norm_mode, scale, kaynak
+
+
+def _model_input_interpolation(src_size, target_size, interp=None):
+    """Resize interpolasyonunu secer; "AUTO" kucultmede AREA, buyutmede LINEAR kullanir."""
+    name = MODEL_INPUT_INTERP if interp is None else str(interp).strip().upper()
+    if name == "AUTO":
+        return cv2.INTER_AREA if int(src_size) > int(target_size) else cv2.INTER_LINEAR
+    return MODEL_INPUT_INTERP_BY_NAME.get(name, cv2.INTER_NEAREST)
+
+
+def prepare_model_input(patch, mode=None, before_resize=None, interp=None, patch_size=None,
+                       scale=None):
+    """Yamayi modele verilecek (patch_size, patch_size) float32 girdiye cevirir.
+
+    Adim sirasi harita ureticideki process_images_with_model() ile aynidir:
+        gri -> resize -> kontrast/histogram iyilestirmesi (uint8) -> sayisal olcekleme
+    MODEL_INPUT_NORM_BEFORE_RESIZE=True ile iyilestirme resize ONCESINE alinir
+    (yamanin dogal piksel histogrami korunur, simulasyondaki sira).
+
+    Cikis araligini `scale` belirler (bkz. apply_model_input_scale); varsayilan
+    MODEL_INPUT_SCALE = "minus1_1", yani onceki [-1, 1] davranisi.
+    """
+    target = PATCH_SIZE if patch_size is None else int(patch_size)
+    norm_first = MODEL_INPUT_NORM_BEFORE_RESIZE if before_resize is None else bool(before_resize)
+    source = patch if patch.ndim == 2 else cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    if norm_first:
+        source = apply_model_input_norm(source, mode)
+    interpolation = _model_input_interpolation(max(source.shape[0], source.shape[1]), target, interp)
+    resized = cv2.resize(source, (target, target), interpolation=interpolation)
+    if not norm_first:
+        resized = apply_model_input_norm(resized, mode)
+    return apply_model_input_scale(resized, scale)
+
+
 # Harita/kenar sabitleri (eskiden kod icinde gomulu sayilardi)
 MAP_RES_CM_PER_PX = float(RUN_CFG.get("MAP_RES_CM_PER_PX", 29.85))
 KENAR_SINIR_PX = int(RUN_CFG.get("KENAR_SINIR_PX", 272))
@@ -2089,6 +2461,55 @@ def _init_cuda_tm_state():
             _CUDA_TM_AVAILABLE = False
         _CUDA_TM_INITIALIZED = True
 
+def _pyramid_topk_settings():
+    """Cok adayli kaba arama ayarlarini RUN_CFG'den CAGRI ANINDA okur.
+
+    Modul sabiti yerine sozlukten okunur; boylece headless/UI/TM_RUN_CFG_JSON
+    tarafindan calisma aninda acilip kapatilabilir.
+
+    Donus: (enabled, top_k, nms_radius_px)
+    """
+    enabled = bool(RUN_CFG.get("PYRAMID_MULTI_CANDIDATE", False))
+    top_k = int(RUN_CFG.get("PYRAMID_TOP_K", 5))
+    nms_radius_px = int(RUN_CFG.get("PYRAMID_NMS_RADIUS_PX", 0))
+    return enabled and top_k > 1, top_k, nms_radius_px
+
+
+PYRAMID_TOP_K_CHOICES = ("1", "3", "5")
+
+
+def next_pyramid_top_k(current):
+    """Aday sayisini sirayla degistirir (pencere ici buton/kisayol icin)."""
+    try:
+        index = PYRAMID_TOP_K_CHOICES.index(str(current))
+    except ValueError:
+        index = -1
+    return PYRAMID_TOP_K_CHOICES[(index + 1) % len(PYRAMID_TOP_K_CHOICES)]
+
+
+def apply_pyramid_ui_state(ui_state):
+    """UI toggle/secim degerlerini RUN_CFG'ye yansitir (calisma-aninda gecerli).
+
+    `_match_pyramid`, `match_three` icinde ic ice tanimli oldugundan pipeline'in
+    `runtime_ui_state` sozlugunu goremez; kopru burasidir. Her karede cagrilir ve
+    ayarlar bir SONRAKI eslestirmeden itibaren gecerli olur.
+
+    UI'da ilgili anahtar yoksa RUN_CFG degeri OLDUGU GIBI birakilir; boylece
+    headless/TM_RUN_CFG_JSON ile verilen degerler UI tarafindan ezilmez.
+    """
+    if not isinstance(ui_state, dict):
+        return
+    if "multi_candidate" in ui_state:
+        RUN_CFG["PYRAMID_MULTI_CANDIDATE"] = bool(ui_state.get("multi_candidate"))
+    if "pyramid_top_k" in ui_state:
+        try:
+            top_k = int(str(ui_state.get("pyramid_top_k")).strip())
+        except (TypeError, ValueError):
+            top_k = None
+        if top_k is not None and top_k >= 1:
+            RUN_CFG["PYRAMID_TOP_K"] = top_k
+
+
 def match_three(img, templates):
     """Uc template icin template matching yapar.
 
@@ -2116,6 +2537,28 @@ def match_three(img, templates):
         def _match_direct(a, b):
             return cv2.matchTemplate(a, b, method, None)
 
+        # --- Kaba (piramit) harita onbellegi -----------------------------
+        # Uc sablon ayni harita penceresine bakar; kaba seviye bir kez uretilir.
+        # Thread'ler baslamadan doldurulur, dolayisiyla kilide gerek yoktur.
+        _kaba_harita = {}
+        if USE_PYRAMID and COARSE_SCALE > 0:
+            _H, _W = img_c.shape[:2]
+            _sW = max(1, int(_W * COARSE_SCALE))
+            _sH = max(1, int(_H * COARSE_SCALE))
+            try:
+                _kaba_harita[(_sW, _sH)] = cv2.resize(
+                    img_c, (_sW, _sH), interpolation=cv2.INTER_AREA)
+            except Exception:
+                _kaba_harita.clear()
+
+        def _kaba_pencere(a, small_W, small_H):
+            """Kucultulmus harita penceresi; onbellekte varsa yeniden uretmez."""
+            if a is img_c:
+                onbellek = _kaba_harita.get((small_W, small_H))
+                if onbellek is not None:
+                    return onbellek
+            return cv2.resize(a, (small_W, small_H), interpolation=cv2.INTER_AREA)
+
         def _match_pyramid(a, b):
             # Sonuc haritasinin tam boyutu.
             H, W = a.shape[:2]
@@ -2123,6 +2566,32 @@ def match_three(img, templates):
             resH, resW = (H - h + 1, W - w + 1)
             if resH <= 0 or resW <= 0:
                 return np.empty((0, 0), dtype=np.float32)
+
+            # --- Cok adayli kaba arama (opsiyonel) ---------------------------
+            # Acikken kaba asamada TOP-K aday secilir; her aday tam cozunurlukte
+            # incelenip tek response haritasinda birlestirilir. Donen haritanin
+            # sekli/dolgu degeri asagidaki tek adayli yol ile AYNIDIR, bu yuzden
+            # cagiran taraftaki minMaxLoc/ofset mantigi degismez.
+            _topk_on, _topk, _topk_nms = _pyramid_topk_settings()
+            if _topk_on:
+                try:
+                    res_topk = pyramid_search.coarse_to_fine_topk(
+                        a,
+                        b,
+                        coarse_scale=COARSE_SCALE,
+                        roi_pad_px=max(8, int(max(w, h) * ROI_PAD_FACTOR)),
+                        top_k=_topk,
+                        nms_radius_px=_topk_nms,
+                        method=method,
+                        image_small=_kaba_harita.get(
+                            (max(1, int(W * COARSE_SCALE)), max(1, int(H * COARSE_SCALE)))),
+                    )
+                    if res_topk.size:
+                        return res_topk
+                except Exception as exc:
+                    # Beklenmedik bir durumda sessizce tek adayli yola dus:
+                    # calisan bir kosuyu bu opsiyonel yol yuzunden kaybetme.
+                    log.warning("Cok adayli kaba arama basarisiz, tek adaya dusuldu: %s", exc)
 
             # Kaba asama: kucuk olcekte arama tohumu (ilk tahmin).
             s = COARSE_SCALE
@@ -2136,7 +2605,7 @@ def match_three(img, templates):
                 cx = resW // 2
                 cy = resH // 2
             else:
-                a_small = cv2.resize(a, (small_W, small_H), interpolation=cv2.INTER_AREA)
+                a_small = _kaba_pencere(a, small_W, small_H)
                 b_small = cv2.resize(b, (small_w, small_h), interpolation=cv2.INTER_AREA)
                 res_small = cv2.matchTemplate(a_small, b_small, method, None)
                 if res_small.size == 0:
@@ -2441,6 +2910,12 @@ def run_pipeline(callbacks=None):
       'on_log'         : fn(str) -- per-frame ozet log satirlari
       'stop_check'     : fn() -> bool -- True donerse isleme durur
       'ui_state_update': fn() -> dict -- runtime_ui_state'e merge edilecek dict
+      'ui_state_apply':  fn(dict) -> None -- CEKIRDEKTEN UI'YA. Model/harita
+          sozlesmesinden cozulen on isleme ayarlari burada UI'ya bildirilir.
+          UI kendi durumunu bununla guncellemezse, her karede ui_state_update
+          ile eski degerini geri yazar ve sozlesme sessizce ezilir.
+                         (gorunum anahtarlari bool; 'model_norm' anlik goruntu
+                          on isleme modudur: HAM/HISTEQ/CLAHE/EDGE)
     """
     # Opsiyonel logger'i hazirla (varsayilan WARNING -> normalde sessiz).
     try:
@@ -2620,6 +3095,14 @@ def run_pipeline(callbacks=None):
         "roi_frame": bool(SHOW_ROI_FRAME),
         "tm_boxes": bool(SHOW_TM_BOXES),
         "kalman": bool(USE_KALMAN),  # Kalman filtresi calisma-aninda acilip kapanabilir
+        # Cok adayli kaba arama (P tusu / Qt butonu). Deger her karede RUN_CFG'ye
+        # yansitilir; `_match_pyramid` ayari oradan CAGRI ANINDA okur.
+        "multi_candidate": bool(RUN_CFG.get("PYRAMID_MULTI_CANDIDATE", False)),
+        # Aday sayisi (Qt acilir listesi). Metin olarak tutulur: "1" / "3" / "5".
+        "pyramid_top_k": str(int(RUN_CFG.get("PYRAMID_TOP_K", 5))),
+        # Anlik goruntu on isleme modu (N tusu / Qt acilir listesi ile degisir).
+        # RUN_CFG calisma aninda ezilmis olabilir (orn. headless --model-norm).
+        "model_norm": resolve_model_input_norm(RUN_CFG.get("MODEL_INPUT_NORM", MODEL_INPUT_NORM)),
         "_panel_collapsed": False,
         "_hover_key": None,
     }
@@ -2677,7 +3160,50 @@ def run_pipeline(callbacks=None):
         diag_summary_rows = []
 
         model_yolu = model_path_list[k]
-        model = load_model_compat(model_yolu)        
+        model = load_model_compat(model_yolu)
+
+        # Girdi on islemesi: once bu kosuda kullanilacak HARITANIN uretim ayarlari
+        # (harita da bir model ciktisidir; anlik goruntu ayni ayarlarla islenmezse
+        # iki taraf karsilastirilabilir olmaz), yoksa modelin egitim ayarlari.
+        harita_yolu_k = harita_path_list[k] if k < len(harita_path_list) else None
+        model_norm_mode, model_input_scale, model_prep_source = model_preprocessing_settings(
+            model_yolu, map_path=harita_yolu_k
+        )
+        # UI'dan gelen somut secim varsa (OTOMATIK degilse) ona dokunulmaz.
+        _ui_secim = {}
+        _ui_upd_ilk = callbacks.get('ui_state_update') if callbacks else None
+        if _ui_upd_ilk:
+            _ui_secim = _ui_upd_ilk() or {}
+
+        def _ui_somut(anahtar):
+            deger = _ui_secim.get(anahtar)
+            return (isinstance(deger, str)
+                    and deger.strip()
+                    and deger.strip().upper() != UI_AUTO_SENTINEL)
+
+        if _ui_somut("model_norm"):
+            model_norm_mode = resolve_model_input_norm(_ui_secim["model_norm"])
+            model_prep_source = "UI secimi (elle)"
+        if _ui_somut("model_scale"):
+            model_input_scale = resolve_model_input_scale(_ui_secim["model_scale"])
+            model_prep_source = "UI secimi (elle)"
+
+        runtime_ui_state["model_norm"] = model_norm_mode
+        runtime_ui_state["model_scale"] = model_input_scale
+        # UI'ya bildir. Bu cagri olmazsa UI her karede kendi (eski) degerini
+        # ui_state_update ile geri yazar ve sozlesme sessizce ezilir.
+        _ui_apply = callbacks.get('ui_state_apply') if callbacks else None
+        if _ui_apply:
+            try:
+                _ui_apply({"model_norm": model_norm_mode, "model_scale": model_input_scale})
+            except Exception as e:
+                print(f"[On isleme] UI durumu guncellenemedi: {e}")
+        prep_msg = (f"[On isleme] {os.path.basename(model_yolu)}: "
+                    f"iyilestirme={model_norm_mode}, olcek={model_input_scale} ({model_prep_source})")
+        print(prep_msg)
+        if callbacks and callbacks.get('on_log'):
+            callbacks['on_log'](prep_msg)
+        
         
         
           
@@ -2711,7 +3237,18 @@ def run_pipeline(callbacks=None):
             # Harici callerdan UI durum guncelleme (Qt toggle'lar vs.)
             _ui_upd = callbacks.get('ui_state_update') if callbacks else None
             if _ui_upd:
-                runtime_ui_state.update(_ui_upd())
+                # "OTOMATIK" gonderilen alanlar atlanir: UI orada bir secim
+                # yapmamistir, sozlesmeden cozulen deger gecerli kalmalidir.
+                # Somut bir deger gonderilirse kullanicinin secimi kazanir ve
+                # yeniden baslatmalarda da korunur.
+                runtime_ui_state.update({
+                    key: value for key, value in _ui_upd().items()
+                    if not (isinstance(value, str)
+                            and value.strip().upper() == UI_AUTO_SENTINEL)
+                })
+
+            # Piramit arama ayarlarini UI'dan RUN_CFG'ye yansit (bkz. apply_pyramid_ui_state).
+            apply_pyramid_ui_state(runtime_ui_state)
 
             # Kalman calisma-aninda acilip kapanabilir (UI toggle). Bu karede gecerli durum:
             kf_on = bool(runtime_ui_state.get("kalman", USE_KALMAN))
@@ -2832,6 +3369,12 @@ def run_pipeline(callbacks=None):
 
             else:
                 cerceve_boyutu=cerceve_boyutu_deger
+                # BENCHMARK modunda arama penceresi EXIF/GPS pikseline (knm)
+                # oturtulur. merkez_satir/merkez_sutun burada da atanmalidir:
+                # "kesisim yok" yedek yolu (NO_INTERSECTION_USE_SEARCH_CENTER)
+                # bu degiskenleri okur ve atanmamis olursa kosu
+                # UnboundLocalError ile coker.
+                merkez_satir, merkez_sutun = knm[0], knm[1]
                 sol=-int(cerceve_boyutu/2)+knm[0]
                 sag=+int(cerceve_boyutu/2)+knm[0]
                 ust=-int(cerceve_boyutu/2)+knm[1]
@@ -3083,13 +3626,19 @@ def run_pipeline(callbacks=None):
             # model = load_model(model_yolu)
             
             # 3 template'i toplu (batch) hazirla ve tek seferde modelden gecir.
-            # 7.3) Model giriş ön işlemleri (resize/equalize/normalize)
+            # 7.3) Model giriş ön işlemleri (resize/normalizasyon/[-1,1] olceklemesi)
+            # Normalizasyon modu calisma sirasinda degisebilir (N tusu / Qt acilir listesi).
+            frame_norm_mode = resolve_model_input_norm(
+                runtime_ui_state.get("model_norm", MODEL_INPUT_NORM)
+            )
+            frame_scale = resolve_model_input_scale(
+                runtime_ui_state.get("model_scale", MODEL_INPUT_SCALE)
+            )
             pre_list = []
             for j in range(3):
-                t_resized = cv2.resize(template[j], (PATCH_SIZE, PATCH_SIZE), interpolation=cv2.INTER_NEAREST)
-                t_resized = cv2.equalizeHist(t_resized)
-                t_resized = ((t_resized.astype(np.float32) - 127.5) / 127.5)
-                pre_list.append(t_resized)
+                pre_list.append(
+                    prepare_model_input(template[j], mode=frame_norm_mode, scale=frame_scale)
+                )
 
             batch = np.stack(pre_list, axis=0)[..., None]
             pred = model.predict(batch, verbose=0)
@@ -3907,6 +4456,7 @@ def run_pipeline(callbacks=None):
                     "acc": (dogru_tahmin / _cbs_i * 100.0),
                     "correct": dogru_tahmin, "wrong": yanlis_tahmin,
                     "max_val2": float(max_val2),
+                    "model_norm": frame_norm_mode,
                     "calisma_s": time.time() - baslangic_zamani,
                     "vis_crop":  rotated_part2_color.copy() if rotated_part2_color is not None else None,
                     "vis_model": template[1].copy()         if template[1]          is not None else None,
@@ -3952,7 +4502,9 @@ def run_pipeline(callbacks=None):
                 key = cv2.waitKey(1) & 0xFF
                 if UI_BUTTONS_ENABLED:
                     # Klavye kisayollari:
-                    # T=trajektori, I=ic cerceve, O=ROI cercevesi, R=TM kutulari, H=panel.
+                    # T=trajektori, I=ic cerceve, O=ROI cercevesi, R=TM kutulari, H=panel,
+                    # N=anlik goruntu on isleme modu (HAM/HISTEQ/CLAHE/EDGE),
+                    # P=cok adayli kaba arama, K=aday sayisi (1/3/5).
                     if key in (ord('t'), ord('T')):
                         runtime_ui_state["trajectory"] = not bool(runtime_ui_state.get("trajectory", False))
                     elif key in (ord('i'), ord('I')):
@@ -3963,6 +4515,24 @@ def run_pipeline(callbacks=None):
                         runtime_ui_state["tm_boxes"] = not bool(runtime_ui_state.get("tm_boxes", True))
                     elif key in (ord('h'), ord('H')):
                         runtime_ui_state["_panel_collapsed"] = not bool(runtime_ui_state.get("_panel_collapsed", False))
+                    elif key in (ord('n'), ord('N')):
+                        # N: anlik goruntu on isleme modunu sirayla degistirir.
+                        runtime_ui_state["model_norm"] = next_model_input_norm(
+                            runtime_ui_state.get("model_norm", MODEL_INPUT_NORM)
+                        )
+                        print("Model girdisi on isleme:", runtime_ui_state["model_norm"])
+                    elif key in (ord('p'), ord('P')):
+                        # P: cok adayli kaba aramayi acar/kapatir (sonraki kareden itibaren).
+                        runtime_ui_state["multi_candidate"] = not bool(
+                            runtime_ui_state.get("multi_candidate", False)
+                        )
+                        print("Cok adayli kaba arama:", runtime_ui_state["multi_candidate"])
+                    elif key in (ord('k'), ord('K')):
+                        # K: aday sayisini sirayla degistirir (1/3/5).
+                        runtime_ui_state["pyramid_top_k"] = next_pyramid_top_k(
+                            runtime_ui_state.get("pyramid_top_k")
+                        )
+                        print("Piramit aday sayisi (K):", runtime_ui_state["pyramid_top_k"])
 
                     # cv2.rectangle(img, top_left, bottom_right,(255,0,0),35)
                     # plt.figure()

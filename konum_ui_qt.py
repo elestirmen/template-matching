@@ -10,7 +10,7 @@ import numpy as np
 from PyQt5.QtCore import QMutex, QMutexLocker, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QImage, QPixmap
 from PyQt5.QtWidgets import (
-    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow,
+    QApplication, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow,
     QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
     QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -54,6 +54,13 @@ standart_sapma           = _tm.standart_sapma
 dosyaya_yaz              = _tm.dosyaya_yaz
 
 PATCH_SIZE             = _tm.PATCH_SIZE
+MODEL_INPUT_NORM       = _tm.MODEL_INPUT_NORM
+MODEL_INPUT_NORM_MODES = _tm.MODEL_INPUT_NORM_MODES
+MODEL_INPUT_SCALE       = _tm.MODEL_INPUT_SCALE
+MODEL_INPUT_SCALE_MODES = _tm.MODEL_INPUT_SCALE_MODES
+# "OTOMATIK": acilir listede secim yapilmadigini, degerin harita/model
+# sozlesmesinden alinmasi gerektigini bildirir (bkz. _tm.UI_AUTO_SENTINEL).
+UI_AUTO = _tm.UI_AUTO_SENTINEL
 PATCH_HALF             = _tm.PATCH_HALF
 PRED_BORDER            = _tm.PRED_BORDER
 USE_PYRAMID            = _tm.USE_PYRAMID
@@ -79,6 +86,9 @@ class ProcessingWorker(QThread):
     metrics_update = pyqtSignal(dict)
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(dict)
+    # Cekirdek, model/harita sozlesmesinden cozdugu on isleme ayarlarini
+    # bu sinyalle bildirir; arayuz kendini ona gore gunceller.
+    options_applied = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -90,13 +100,22 @@ class ProcessingWorker(QThread):
             "roi_frame": bool(RUN_CFG.get("SHOW_ROI_FRAME", True)),
             "tm_boxes": bool(RUN_CFG.get("SHOW_TM_BOXES", True)),
             "kalman": bool(_tm.USE_KALMAN),
+            # Cok adayli kaba arama (piramit): calisma-aninda acilip kapanabilir.
+            "multi_candidate": bool(RUN_CFG.get("PYRAMID_MULTI_CANDIDATE", False)),
+            # On isleme: varsayilan "OTOMATIK" -> sozlesmeden cozulur.
+            # Kullanici acilir listeden somut bir mod secerse o kazanir ve
+            # yeniden baslatmada da korunur.
+            "model_norm": UI_AUTO,
+            "model_scale": UI_AUTO,
+            # Piramit aday sayisi (bool degil, metin: "1"/"3"/"5")
+            "pyramid_top_k": str(int(RUN_CFG.get("PYRAMID_TOP_K", 5))),
         }
 
-    def set_ui_state(self, key: str, value: bool):
+    def set_ui_state(self, key: str, value):
         with QMutexLocker(self._mutex):
             self._ui_state[key] = value
 
-    def get_ui_state(self, key: str, default=False) -> bool:
+    def get_ui_state(self, key: str, default=False):
         with QMutexLocker(self._mutex):
             return self._ui_state.get(key, default)
 
@@ -115,6 +134,18 @@ class ProcessingWorker(QThread):
             with QMutexLocker(self._mutex):
                 return dict(self._ui_state)
 
+        def ui_state_apply(values):
+            """Cekirdegin cozdugu etkin ayarlari arayuze BILDIRIR (worker thread'i).
+
+            DIKKAT: _ui_state'e YAZILMAZ. Yazsaydik kullanicinin "OTOMATIK"
+            secimi somut bir degere donusur ve bir dahaki baslatmada sozlesme
+            devreye giremezdi; kullanici somut bir mod sectiyse de secimi
+            ezilirdi. Burada yalnizca gosterim guncellenir.
+            """
+            if not isinstance(values, dict):
+                return
+            self.options_applied.emit(dict(values))
+
         result = {}
         try:
             _tm.run_pipeline({
@@ -122,6 +153,7 @@ class ProcessingWorker(QThread):
                 "on_log": lambda msg: self.log_signal.emit(str(msg)),
                 "stop_check": lambda: not self._running,
                 "ui_state_update": ui_state_update,
+                "ui_state_apply": ui_state_apply,
             })
             result = {"tamamlandi": self._running, "stopped": not self._running}
         except Exception as exc:
@@ -196,6 +228,7 @@ class MetricCard(SharedMetricCard):
 
 class ControlPanel(QFrame):
     toggle_changed = pyqtSignal(str, bool)
+    option_changed = pyqtSignal(str, str)
 
     def __init__(self):
         super().__init__()
@@ -226,8 +259,18 @@ class ControlPanel(QFrame):
         view_label = QLabel("GÖRÜNÜM")
         view_label.setObjectName("ControlGroupLabel")
         view_row.addWidget(view_label)
+        # Arama davranisini degistiren kontroller ayri bir satirda toplanir; boylece
+        # dar panelde Baslat/Durdur satiri kalabaliklasmaz.
+        search_row = QHBoxLayout()
+        search_label = QLabel("ARAMA")
+        search_label.setObjectName("ControlGroupLabel")
+        search_row.addWidget(search_label)
+        method_keys = {"kalman", "multi_candidate"}
+        target_rows = {"kalman": action_row, "multi_candidate": search_row}
         for key, text, default in (
             ("kalman", "Kalman filtresi", bool(_tm.USE_KALMAN)),
+            ("multi_candidate", "Çok adaylı arama",
+             bool(RUN_CFG.get("PYRAMID_MULTI_CANDIDATE", False))),
             ("trajectory", "Rota", bool(DRAW_TRAJECTORY)),
             ("roi_frame", "Arama alanı", bool(RUN_CFG.get("SHOW_ROI_FRAME", True))),
             ("tm_boxes", "Eşleşme kutuları", bool(RUN_CFG.get("SHOW_TM_BOXES", True))),
@@ -236,16 +279,114 @@ class ControlPanel(QFrame):
             button = QPushButton(text)
             button.setCheckable(True)
             button.setChecked(default)
-            button.setProperty("controlRole", "method" if key == "kalman" else "visual")
+            button.setProperty("controlRole", "method" if key in method_keys else "visual")
             button.setAccessibleName(text)
-            button.setToolTip("Konum kestirim filtresini açar veya kapatır." if key == "kalman" else "Yalnızca haritadaki çizimlerin görünürlüğünü değiştirir.")
+            button.setToolTip({
+                "kalman": "Konum kestirim filtresini açar veya kapatır.",
+                "multi_candidate": (
+                    "Kaba arama aşamasında tek tepe yerine en güçlü K adayı inceler; "
+                    "kendine benzer arazide yanlış tohuma kilitlenmeyi azaltır, "
+                    "kare süresini artırır."
+                ),
+            }.get(key, "Yalnızca haritadaki çizimlerin görünürlüğünü değiştirir."))
             button.toggled.connect(lambda checked, k=key: self.toggle_changed.emit(k, checked))
             self._toggles[key] = button
-            (action_row if key == "kalman" else view_row).addWidget(button)
+            target_rows.get(key, view_row).addWidget(button)
         action_row.addStretch(1)
         view_row.addStretch(1)
+
+        # Anlik goruntu modele verilmeden once uygulanacak on isleme/normalizasyon.
+        prep_row = QHBoxLayout()
+        prep_label = QLabel("ÖN İŞLEME")
+        prep_label.setObjectName("ControlGroupLabel")
+        prep_row.addWidget(prep_label)
+        self.combo_norm = QComboBox()
+        self.combo_norm.setAccessibleName("Anlık görüntü ön işleme yöntemi")
+        self.combo_norm.addItem(UI_AUTO)
+        self.combo_norm.setItemData(
+            0, "Haritanın/modelin ön işleme sözleşmesinden al (önerilen).", Qt.ToolTipRole)
+        for mode, description in (
+            ("HAM", "Normalizasyon yok; ham gri seviye."),
+            ("HISTEQ", "Global histogram eşitleme (OpenCV; varsayılan)."),
+            ("HISTEQ_PIL", "PIL/tfa uyumlu eşitleme; 2022 modellerinin eğitimiyle birebir aynı."),
+            ("CLAHE", "Yerel kontrast sınırlamalı eşitleme; parlaklık gradyanına dayanıklı."),
+            ("EDGE", "Laplacian kenar haritası; doku yerine yapı bilgisi."),
+        ):
+            if mode in MODEL_INPUT_NORM_MODES:
+                self.combo_norm.addItem(mode)
+                self.combo_norm.setItemData(self.combo_norm.count() - 1, description, Qt.ToolTipRole)
+        self.combo_norm.setCurrentIndex(0)  # OTOMATIK
+        self.combo_norm.setToolTip(
+            "Anlık görüntü modele verilmeden önce uygulanan iyileştirmeyi değiştirir; "
+            "sonraki kareden itibaren geçerlidir. OTOMATIK = haritanın sözleşmesinden "
+            "al. Somut bir mod seçersen seçimin yeniden başlatmada da korunur."
+        )
+        self.combo_norm.currentTextChanged.connect(
+            lambda text: self.option_changed.emit("model_norm", text)
+        )
+        prep_row.addWidget(self.combo_norm)
+
+        # Model girdi olcegi. Haritanin uretildigi olcekle AYNI olmalidir;
+        # aksi halde ayni model iki tarafta farkli sey uretir ve eslesme coker.
+        self.combo_scale = QComboBox()
+        self.combo_scale.setAccessibleName("Model girdi olcegi")
+        self.combo_scale.addItem(UI_AUTO)
+        self.combo_scale.setItemData(
+            0, "Haritanın/modelin ön işleme sözleşmesinden al (önerilen).", Qt.ToolTipRole)
+        for mode, description in (
+            ("minus1_1", "(x-127.5)/127.5 -> [-1, 1]. 2022 modellerinin egitim olcegi."),
+            ("zero_1", "x/255 -> [0, 1]."),
+            ("raw", "Olcekleme yok -> [0, 255]."),
+            ("zscore", "Yama bazli (x-ort)/std standardizasyonu."),
+        ):
+            if mode in MODEL_INPUT_SCALE_MODES:
+                self.combo_scale.addItem(mode)
+                self.combo_scale.setItemData(self.combo_scale.count() - 1, description, Qt.ToolTipRole)
+        self.combo_scale.setCurrentIndex(0)  # OTOMATIK
+        self.combo_scale.setToolTip(
+            "Anlık görüntünün sayısal ölçeği. Haritanın üretildiği ölçekle aynı "
+            "olmalıdır. OTOMATIK = harita sözleşmesinden al. Somut bir değer "
+            "seçersen seçimin yeniden başlatmada da korunur."
+        )
+        self.combo_scale.currentTextChanged.connect(
+            lambda text: self.option_changed.emit("model_scale", text)
+        )
+        prep_row.addWidget(self.combo_scale)
+        # Cekirdegin gercekte hangi ayarla calistigini gosterir; OTOMATIK
+        # secildiginde "hangi degere cozuldu" sorusunu yanitlar.
+        self.lbl_prep_effective = QLabel("etkin: —")
+        self.lbl_prep_effective.setObjectName("ControlGroupLabel")
+        self.lbl_prep_effective.setToolTip("Çekirdeğin bu koşuda kullandığı ön işleme.")
+        prep_row.addWidget(self.lbl_prep_effective)
+        prep_row.addStretch(1)
+
+        # Cok adayli kaba aramada incelenecek aday sayisi (yalnizca toggle acikken etkili).
+        self.combo_top_k = QComboBox()
+        self.combo_top_k.setAccessibleName("Piramit arama aday sayısı")
+        for value, description in (
+            ("1", "Tek aday: klasik coarse-to-fine (en hızlı)."),
+            ("3", "Üç aday: 2048 px çerçevede hız/sağlamlık dengesi."),
+            ("5", "Beş aday: en sağlam; büyük arama çerçevelerinde tercih edilir."),
+        ):
+            self.combo_top_k.addItem(value)
+            self.combo_top_k.setItemData(self.combo_top_k.count() - 1, description, Qt.ToolTipRole)
+        index = self.combo_top_k.findText(str(int(RUN_CFG.get("PYRAMID_TOP_K", 5))))
+        self.combo_top_k.setCurrentIndex(index if index >= 0 else 0)
+        self.combo_top_k.setToolTip(
+            "Kaba aşamada incelenecek aday sayısı (K); yalnızca \"Çok adaylı arama\" "
+            "açıkken etkilidir. Sonraki kareden itibaren geçerlidir."
+        )
+        self.combo_top_k.currentTextChanged.connect(
+            lambda text: self.option_changed.emit("pyramid_top_k", text)
+        )
+        search_row.addWidget(QLabel("Aday sayısı (K)"))
+        search_row.addWidget(self.combo_top_k)
+        search_row.addStretch(1)
+
         controls_layout.addLayout(action_row)
         controls_layout.addLayout(view_row)
+        controls_layout.addLayout(prep_row)
+        controls_layout.addLayout(search_row)
 
         self.c_hdg = MetricCard("Başlık", "°")
         self.c_alt = MetricCard("İrtifa", " m")
@@ -293,6 +434,25 @@ class ControlPanel(QFrame):
 
     def current_toggle_states(self) -> dict:
         return {key: button.isChecked() for key, button in self._toggles.items()}
+
+    def current_option_states(self) -> dict:
+        return {
+            "model_norm": self.combo_norm.currentText(),
+            "model_scale": self.combo_scale.currentText(),
+            "pyramid_top_k": self.combo_top_k.currentText(),
+        }
+
+    def apply_option_states(self, values: dict):
+        """Cekirdegin kullandigi etkin ayari ETIKETTE gosterir (GUI thread'i).
+
+        Acilir listelere DOKUNULMAZ: kullanicinin "OTOMATIK" veya elle yaptigi
+        secim oldugu gibi kalsin, yeniden baslatmalarda sifirlanmasin.
+        """
+        norm = values.get("model_norm")
+        scale = values.get("model_scale")
+        if norm is None and scale is None:
+            return
+        self.lbl_prep_effective.setText(f"etkin: {norm or '—'} + {scale or '—'}")
 
     def append_log(self, message: str):
         self.log_box.appendPlainText(message)
@@ -402,6 +562,7 @@ class MainWindow(QMainWindow):
         self._panel.btn_start.clicked.connect(self._on_start)
         self._panel.btn_stop.clicked.connect(self._on_stop)
         self._panel.toggle_changed.connect(self._on_toggle)
+        self._panel.option_changed.connect(self._on_option)
 
     def _on_start(self):
         if self._worker and self._worker.isRunning():
@@ -409,11 +570,15 @@ class MainWindow(QMainWindow):
         self._worker = ProcessingWorker()
         for key, value in self._panel.current_toggle_states().items():
             self._worker.set_ui_state(key, value)
+        for key, value in self._panel.current_option_states().items():
+            self._worker.set_ui_state(key, value)
         self._worker.frame_ready.connect(self._map.update_frame)
         self._worker.crop_ready.connect(self._on_crop_ready)
         self._worker.log_signal.connect(self._panel.append_log)
         self._worker.finished_signal.connect(self._on_finished)
         self._worker.finished.connect(self._on_worker_stopped)
+        # Cekirdek harita/model sozlesmesini cozunce acilir listeleri guncelle.
+        self._worker.options_applied.connect(self._panel.apply_option_states)
         self._panel.btn_start.setEnabled(False)
         self._panel.btn_stop.setEnabled(True)
         self._panel.update_metrics({})
@@ -436,6 +601,10 @@ class MainWindow(QMainWindow):
             set_status(self.status_pill, "DURDURULUYOR", "warning")
 
     def _on_toggle(self, key: str, value: bool):
+        if self._worker:
+            self._worker.set_ui_state(key, value)
+
+    def _on_option(self, key: str, value: str):
         if self._worker:
             self._worker.set_ui_state(key, value)
 
