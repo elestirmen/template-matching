@@ -20,3 +20,4 @@ jobs:
           tests.test_localization_policy
           tests.test_run_localization
           tests.test_gsd_interp
+          tests.test_yaw_source

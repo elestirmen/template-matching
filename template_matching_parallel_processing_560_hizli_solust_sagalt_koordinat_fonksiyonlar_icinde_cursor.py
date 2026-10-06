@@ -57,8 +57,9 @@ RUN_CFG = {
     "MODEL_INPUT_CLAHE_TILE": 8,     # CLAHE tileGridSize: artarsa daha yerel esitleme.
     # - GSD_RESIZE_INTERP: IHA karesini harita cozunurlugune (MAP_RES_CM_PER_PX) indiren
     #   olcekleme adiminin interpolasyonu (merkez + sol-ust + sag-alt olcekleri).
-    #   Kare tipik olarak ~10 kat kuculur (Mavic 2 Pro, 100 m: ~2.4 -> 29.85 cm/px);
-    #   "NEAREST" bu oranda ortusme (aliasing) uretir, referans harita ise alan
+    #   Bu rotalarda (kalkisa gore ~300-500 m) kare ~2-4 kat kuculur (Mavic 2 Pro,
+    #   500 m: ~11.8 -> 29.85 cm/px); daha alcak ucusta oran buyur (100 m: ~12 kat).
+    #   "NEAREST" piksel atlayarak ortusme (aliasing) uretir, referans harita ise alan
     #   ortalamali bir ortomozaiktir.
     #   "NEAREST" = onceki davranis (VARSAYILAN; sonuclar birebir ayni kalir) |
     #   "AREA" (kucultmede onerilen) | "LINEAR" | "CUBIC" |
@@ -123,6 +124,14 @@ RUN_CFG = {
     "DEFAULT_FOCAL_LENGTH_MM": 8.8,  # EXIF focal length yoksa kullanilir.
     "DEFAULT_SENSOR_WIDTH_MM": 13.2, # Kamera modeli bilinmiyorsa sensor fallback.
     "YAW_OFFSET_DEG": 0.0,            # EXIF yaw'a eklenecek kalibrasyon ofseti (derece).
+    # Kareyi kuzeye dondurmekte kullanilan yaw kaynagi (DJI MakerNote):
+    #   "FLIGHT" = FlightDegree, govde (ucus) yawi -> onceki davranis (VARSAYILAN).
+    #   "GIMBAL" = GimbalDegree, kameranin yonu; nadir cekimde kareyi belirleyen budur.
+    # 2026-10-06 EXIF tanisi: 16 rotada gimbal - ucus farki -1.5 .. -13 derece, cogunda > 5
+    # (benchmark/deneyler/2026-10-06_tm_iyilestirme/sonuclar/exif_tani.md). 4. rotanin elle
+    # bulunan -8.5 derece profil ofseti olculen farkla (-8.3) ortusuyor. "GIMBAL" iken rota
+    # profillerindeki YAW_OFFSET_DEG (ucus yawini duzeltmek icindi) UYGULANMAZ.
+    "YAW_SOURCE": "FLIGHT",
     "USE_ROUTE_PROFILES": True,       # True: bilinen guzergahlar icin dogrulanmis profil farklarini uygula.
     "USE_GPS_ALT_REF_SIGN": False,   # True ise altitude ref isareti uygulanir.
 
@@ -351,7 +360,10 @@ def _apply_route_profile_overrides(explicit_keys):
     if not bool(RUN_CFG.get("USE_ROUTE_PROFILES", True)):
         return
     route_overrides = ROUTE_PROFILE_OVERRIDES.get(_route_name_from_cfg(), {})
+    gimbal_yaw = str(RUN_CFG.get("YAW_SOURCE", "FLIGHT")).strip().upper() == "GIMBAL"
     for key, value in route_overrides.items():
+        if gimbal_yaw and key == "YAW_OFFSET_DEG":
+            continue  # ucus yawini gimbale yaklastirmak icin elle bulunmustu; gimbal yawinda cift duzeltme olur
         if key not in explicit_keys:
             RUN_CFG[key] = value
 
@@ -387,6 +399,9 @@ SHOW_ROI_FRAME = bool(RUN_CFG.get("SHOW_ROI_FRAME", True))
 SHOW_TM_BOXES = bool(RUN_CFG.get("SHOW_TM_BOXES", True))
 RAKIM_DUZELTME = int(RUN_CFG.get("RAKIM_DUZELTME", 26))
 YAW_OFFSET_DEG = float(RUN_CFG.get("YAW_OFFSET_DEG", 0.0))
+YAW_SOURCE = str(RUN_CFG.get("YAW_SOURCE", "FLIGHT")).strip().upper()
+if YAW_SOURCE not in ("FLIGHT", "GIMBAL"):
+    raise RuntimeError("Gecersiz YAW_SOURCE: " + repr(RUN_CFG.get("YAW_SOURCE")) + " (gecerli: FLIGHT, GIMBAL)")
 BASARI_ESIGI_KM = float(RUN_CFG.get("BASARI_ESIGI_KM", 0.07))
 CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
 FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
@@ -1010,6 +1025,7 @@ def parse_exif(image_path):
         return None
 
     yaw = 0.0
+    gimbal_yaw = None
     mk = get_field(exif, 'MakerNote')
     if mk is not None:
         s = str(mk)
@@ -1019,6 +1035,13 @@ def parse_exif(image_path):
                 yaw = float(m.group(1)) / 10.0
             except Exception:
                 yaw = 0.0
+        # GimbalDegree(Y,P,R): kameranin yawi (YAW_SOURCE="GIMBAL" icin).
+        g = re.search(r'GimbalDegree[^0-9+-]*([+-]?\d+(?:\.\d+)?)', s)
+        if g:
+            try:
+                gimbal_yaw = float(g.group(1)) / 10.0
+            except Exception:
+                gimbal_yaw = None
 
     gps = get_field(exif, 'GPSInfo') or {}
     lat_ref = gps.get(1, 'N')
@@ -1091,6 +1114,7 @@ def parse_exif(image_path):
 
     return {
         'yaw': yaw,
+        'gimbal_yaw': gimbal_yaw,
         'latitude': latitude,
         'longitude': longitude,
         'altitude': altitude,
@@ -2086,6 +2110,9 @@ MAX_FRAMES = int(RUN_CFG.get("MAX_FRAMES", 0))
 USE_EXIF_MOTION_SEARCH_PRIOR = bool(RUN_CFG.get("USE_EXIF_MOTION_SEARCH_PRIOR", False))
 RAKIM_DUZELTME = int(RUN_CFG.get("RAKIM_DUZELTME", 26))
 YAW_OFFSET_DEG = float(RUN_CFG.get("YAW_OFFSET_DEG", 0.0))
+YAW_SOURCE = str(RUN_CFG.get("YAW_SOURCE", "FLIGHT")).strip().upper()
+if YAW_SOURCE not in ("FLIGHT", "GIMBAL"):
+    raise RuntimeError("Gecersiz YAW_SOURCE: " + repr(RUN_CFG.get("YAW_SOURCE")) + " (gecerli: FLIGHT, GIMBAL)")
 BASARI_ESIGI_KM = float(RUN_CFG.get("BASARI_ESIGI_KM", 0.07))
 CERCEVE_BOYUTU_MAX = int(RUN_CFG.get("CERCEVE_BOYUTU_MAX", 8000))
 FARK_MAX = int(RUN_CFG.get("FARK_MAX", 200))
@@ -3316,7 +3343,13 @@ def run_pipeline(callbacks=None):
                 print("EXIF okunamadi, atlaniyor:", anlik_goruntu)
                 continue
 
-            yaw = float(exif_data.get('yaw') or 0.0) + YAW_OFFSET_DEG
+            yaw_kaynak = exif_data.get('yaw')
+            if YAW_SOURCE == "GIMBAL":
+                if exif_data.get('gimbal_yaw') is not None:
+                    yaw_kaynak = exif_data.get('gimbal_yaw')
+                else:
+                    print("Uyari: GimbalDegree yok, ucus yawi kullaniliyor:", anlik_goruntu)
+            yaw = float(yaw_kaynak or 0.0) + YAW_OFFSET_DEG
             gps_latitude = exif_data.get('latitude')
             gps_longitude = exif_data.get('longitude')
             altitude = exif_data.get('altitude')

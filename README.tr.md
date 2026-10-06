@@ -336,7 +336,7 @@ Tüm çalışma parametreleri, ana betiğin başındaki tek bir `RUN_CFG` sözl�
 | `MODEL_INPUT_NORM` | `"HISTEQ"` | Anlık görüntüye model öncesi uygulanan ön işleme: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
 | `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | `True` ise normalizasyon resize öncesi uygulanır (doğal piksel histogramı korunur) |
 | `MODEL_INPUT_INTERP` | `"NEAREST"` | Model girdisi resize interpolasyonu: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
-| `GSD_RESIZE_INTERP` | `"NEAREST"` | İHA karesi harita çözünürlüğüne indirilirken kullanılan interpolasyon (üç ölçek hipotezinin hepsi). Kare ~10 kat küçüldüğü için `NEAREST` örtüşme (aliasing) üretir; `AREA` örtüşmesiz adaydır. `benchmark/deneyler/2026-10-06_tm_iyilestirme/` A/B testi karar verene kadar varsayılan önceki davranışı korur |
+| `GSD_RESIZE_INTERP` | `"NEAREST"` | İHA karesi harita çözünürlüğüne indirilirken kullanılan interpolasyon (üç ölçek hipotezinin hepsi). Bu rotalarda (kalkışa göre ~300-500 m) kare ~2-4 kat küçülür (alçak uçuşta daha fazla); `NEAREST` piksel atlayarak örtüşme (aliasing) üretir; `AREA` örtüşmesiz adaydır. `benchmark/deneyler/2026-10-06_tm_iyilestirme/` A/B testi karar verene kadar varsayılan önceki davranışı korur |
 | `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (artarsa kontrast ve gürültü artar) |
 | `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (artarsa daha yerel eşitleme) |
 | `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinleştir |
@@ -367,6 +367,7 @@ Tüm çalışma parametreleri, ana betiğin başındaki tek bir `RUN_CFG` sözl�
 | `DEFAULT_SENSOR_WIDTH_MM` | `13.2` | Bilinmeyen kamera için varsayılan sensör genişliği (mm) |
 | `CAMERA_SENSOR_BY_MODEL` | `{"L1D-20c": 13.2, "FC2204": 6.17}` | EXIF kamera modeline göre sensör genişliği geçersiz kılmaları (Mavic 2 Pro / Mavic 2 Zoom); bilinmeyen modeller `DEFAULT_SENSOR_WIDTH_MM`'e döner |
 | `YAW_OFFSET_DEG` | `0.0` | EXIF yaw değerine uygulanan kalibrasyon ofseti (derece) |
+| `YAW_SOURCE` | `"FLIGHT"` | Kareyi kuzeye döndürmekte kullanılan yaw: `FLIGHT` = DJI MakerNote `FlightDegree` (gövde yawı, önceki davranış) ya da `GIMBAL` = `GimbalDegree` (kamera yönü; nadir karede yönü asıl belirleyen). 16 rotada ölçülen gimbal eksi uçuş yawı -1.5 ile -13 derece arasında (`benchmark/deneyler/2026-10-06_tm_iyilestirme/sonuclar/exif_tani.md`). `GIMBAL` iken rota profillerindeki `YAW_OFFSET_DEG` uygulanmaz |
 | `USE_ROUTE_PROFILES` | `True` | Bilinen rotalara ait doğrulanmış profil farklarını uygula — bkz. [Güzergaha Özel Profil Ayarları](#güzergaha-özel-profil-ayarları) |
 | `USE_GPS_ALT_REF_SIGN` | `False` | GPS altitude referans işaretini uygula |
 | `RAKIM_DUZELTME` | `26` | Uçuş yüksekliği hesaplanırken eklenen DEM datum ofseti (metre) — GSD formülündeki `+ Düzeltme` terimi |

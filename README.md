@@ -336,7 +336,7 @@ All runtime parameters are managed from a single `RUN_CFG` dictionary near the t
 | `MODEL_INPUT_NORM` | `"HISTEQ"` | Preprocessing applied to the live image before inference: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
 | `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | If `True`, normalization runs before the resize (preserves the native pixel histogram) |
 | `MODEL_INPUT_INTERP` | `"NEAREST"` | Resize interpolation for the model input: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
-| `GSD_RESIZE_INTERP` | `"NEAREST"` | Interpolation used when the UAV frame is scaled down to the map GSD (all three scale hypotheses). Frames shrink ~10x, so `NEAREST` aliases; `AREA` is the anti-aliased candidate. Default keeps the previous behaviour until the A/B test in `benchmark/deneyler/2026-10-06_tm_iyilestirme/` decides |
+| `GSD_RESIZE_INTERP` | `"NEAREST"` | Interpolation used when the UAV frame is scaled down to the map GSD (all three scale hypotheses). On these routes (~300-500 m above take-off) frames shrink ~2-4x (more on lower flights), and `NEAREST` aliases by skipping pixels; `AREA` is the anti-aliased candidate. Default keeps the previous behaviour until the A/B test in `benchmark/deneyler/2026-10-06_tm_iyilestirme/` decides |
 | `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (higher = more contrast and noise) |
 | `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (higher = more local equalization) |
 | `USE_PYRAMID` | `True` | Enable pyramid (coarse-to-fine) search |
@@ -367,6 +367,7 @@ All runtime parameters are managed from a single `RUN_CFG` dictionary near the t
 | `DEFAULT_SENSOR_WIDTH_MM` | `13.2` | Default sensor width for unknown cameras (mm) |
 | `CAMERA_SENSOR_BY_MODEL` | `{"L1D-20c": 13.2, "FC2204": 6.17}` | Per-EXIF-camera-model sensor width overrides (Mavic 2 Pro / Mavic 2 Zoom); unknown models fall back to `DEFAULT_SENSOR_WIDTH_MM` |
 | `YAW_OFFSET_DEG` | `0.0` | Calibration offset applied to EXIF yaw value (degrees) |
+| `YAW_SOURCE` | `"FLIGHT"` | Yaw used to rotate the frame north: `FLIGHT` = DJI MakerNote `FlightDegree` (aircraft body, previous behaviour) or `GIMBAL` = `GimbalDegree` (camera heading, what actually orients a nadir frame). Measured gimbal minus flight yaw is -1.5 to -13 degrees on the 16 routes (`benchmark/deneyler/2026-10-06_tm_iyilestirme/sonuclar/exif_tani.md`). With `GIMBAL`, route-profile `YAW_OFFSET_DEG` values are not applied |
 | `USE_ROUTE_PROFILES` | `True` | Apply verified profile differences for known routes — see [Per-Route Profile Overrides](#per-route-profile-overrides) |
 | `USE_GPS_ALT_REF_SIGN` | `False` | Apply GPS altitude reference sign |
 | `RAKIM_DUZELTME` | `26` | DEM datum offset (meters) added when resolving flight altitude — the `+ Correction` term in the GSD formula |
