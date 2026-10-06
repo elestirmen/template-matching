@@ -36,6 +36,7 @@ try:
     tm = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(tm)
 except Exception as exc:  # pragma: no cover - ortam bagimliligi
+    tm = None  # yarim yuklenen modul testleri hataya dusurmesin; skipIf ile atlansin
     _IMPORT_ERROR = exc
 
 

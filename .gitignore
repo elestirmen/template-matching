@@ -11,6 +11,15 @@
 !gps_denied_autonomy.py
 !optical_flow_speed.py
 !pyramid_search.py
+# Testleri depoda olan saf-Python moduller ve yardimci giris noktalari
+!localization_policy.py
+!tracking_filter.py
+!experiment_tracking.py
+!run_localization.py
+!headless/*.py
+!headless/requirements-linux.txt
+!tools/*.py
+!.github/workflows/*.yml
 !requirements.txt
 !*.md
 !*.MD
