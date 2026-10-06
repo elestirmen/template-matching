@@ -55,6 +55,16 @@ RUN_CFG = {
     "MODEL_INPUT_INTERP": "NEAREST",
     "MODEL_INPUT_CLAHE_CLIP": 2.0,   # CLAHE clipLimit: artarsa kontrast/gurultu artar.
     "MODEL_INPUT_CLAHE_TILE": 8,     # CLAHE tileGridSize: artarsa daha yerel esitleme.
+    # - GSD_RESIZE_INTERP: IHA karesini harita cozunurlugune (MAP_RES_CM_PER_PX) indiren
+    #   olcekleme adiminin interpolasyonu (merkez + sol-ust + sag-alt olcekleri).
+    #   Kare tipik olarak ~10 kat kuculur (Mavic 2 Pro, 100 m: ~2.4 -> 29.85 cm/px);
+    #   "NEAREST" bu oranda ortusme (aliasing) uretir, referans harita ise alan
+    #   ortalamali bir ortomozaiktir.
+    #   "NEAREST" = onceki davranis (VARSAYILAN; sonuclar birebir ayni kalir) |
+    #   "AREA" (kucultmede onerilen) | "LINEAR" | "CUBIC" |
+    #   "AUTO" (kucultmede AREA, buyutmede LINEAR).
+    #   Varsayilani degistirmeden once A/B: benchmark/deneyler/2026-10-06_tm_iyilestirme/BENIOKU.md
+    "GSD_RESIZE_INTERP": "NEAREST",
     # - MODEL_INPUT_SCALE: iyilestirmeden SONRA uygulanan sayisal olcekleme.
     #   Harita ureticideki goruntu_islemleri.apply_normalization() ile birebir ayni:
     #     "minus1_1" = (x - 127.5) / 127.5  -> [-1, 1]  (VARSAYILAN; onceki davranis)
@@ -260,6 +270,12 @@ RUN_CFG = {
     "QUALITY_SPREAD_THRESHOLD_PX": 120.0,  # Uc kutu merkez yayilimi esigi (px); ustunde geometrik tutarsiz -> guvenilmez.
     "NO_INTERSECTION_USE_SEARCH_CENTER": True,  # Kesisim yoksa tekil/zayif template kutusu yerine arama merkezi.
     "LOW_SCORE_USE_SEARCH_CENTER": 0.0, # >0 ise max_val2 bu esigin altindayken kesisim yerine arama merkezi kullanilir.
+    # BENCHMARK=True iken arama merkezi EXIF GPS'in kendisidir; yukaridaki iki yedek bu
+    # merkezi tahmin yaparsa bulunamayan kare 0 m hata alir (GPS sizintisi; 2026-09-25
+    # Karlik testinde RAW'da 191 karenin 32'si). Bu yuzden BENCHMARK modunda iki yedek
+    # otomatik KAPATILIR. True = eski (sizintili) davranis; yalniz eski raporlari birebir
+    # yeniden uretmek icin. BENCHMARK=False (ardisik takip) etkilenmez.
+    "BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK": False,
 
     # Sensor fuzyonu (olcum-onceki konum harmanlama + sicrama reddi). YALNIZCA
     # Kalman KAPALIYKEN ciktiyi etkiler (Kalman acikken cift-yumusatma olmasin).
@@ -2099,6 +2115,22 @@ if MODEL_INPUT_INTERP != "AUTO" and MODEL_INPUT_INTERP not in MODEL_INPUT_INTERP
         + repr(RUN_CFG.get("MODEL_INPUT_INTERP"))
         + " (gecerli: AUTO, " + ", ".join(MODEL_INPUT_INTERP_BY_NAME) + ")"
     )
+GSD_RESIZE_INTERP = str(RUN_CFG.get("GSD_RESIZE_INTERP", "NEAREST")).strip().upper()
+if GSD_RESIZE_INTERP != "AUTO" and GSD_RESIZE_INTERP not in MODEL_INPUT_INTERP_BY_NAME:
+    raise RuntimeError(
+        "Gecersiz GSD_RESIZE_INTERP: "
+        + repr(RUN_CFG.get("GSD_RESIZE_INTERP"))
+        + " (gecerli: AUTO, " + ", ".join(MODEL_INPUT_INTERP_BY_NAME) + ")"
+    )
+
+
+def _gsd_resize_interpolation(scale):
+    """GSD olceklemesinin interpolasyonu; "AUTO" kucultmede AREA, buyutmede LINEAR."""
+    if GSD_RESIZE_INTERP == "AUTO":
+        return cv2.INTER_AREA if float(scale) < 1.0 else cv2.INTER_LINEAR
+    return MODEL_INPUT_INTERP_BY_NAME[GSD_RESIZE_INTERP]
+
+
 MODEL_INPUT_CLAHE_CLIP = float(RUN_CFG.get("MODEL_INPUT_CLAHE_CLIP", 2.0))
 MODEL_INPUT_CLAHE_TILE = int(RUN_CFG.get("MODEL_INPUT_CLAHE_TILE", 8))
 
@@ -2399,6 +2431,14 @@ QUALITY_CONFIDENCE_THRESHOLD = float(RUN_CFG.get("QUALITY_CONFIDENCE_THRESHOLD",
 QUALITY_SPREAD_THRESHOLD_PX = float(RUN_CFG.get("QUALITY_SPREAD_THRESHOLD_PX", 120.0))
 NO_INTERSECTION_USE_SEARCH_CENTER = bool(RUN_CFG.get("NO_INTERSECTION_USE_SEARCH_CENTER", True))
 LOW_SCORE_USE_SEARCH_CENTER = float(RUN_CFG.get("LOW_SCORE_USE_SEARCH_CENTER", 0.0))
+BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK = bool(RUN_CFG.get("BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK", False))
+if benchmark and not BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK:
+    if NO_INTERSECTION_USE_SEARCH_CENTER or LOW_SCORE_USE_SEARCH_CENTER > 0.0:
+        print("[Uyari] BENCHMARK modunda arama merkezi = EXIF GPS; 'kesisim yok' ve "
+              "'dusuk skor' yedekleri GPS sizdiracagi icin kapatildi "
+              "(eski davranis: BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK=True).")
+    NO_INTERSECTION_USE_SEARCH_CENTER = False
+    LOW_SCORE_USE_SEARCH_CENTER = 0.0
 USE_FUSION = bool(RUN_CFG.get("USE_FUSION", False))
 FUSION_BLEND_GAIN = float(RUN_CFG.get("FUSION_BLEND_GAIN", 0.75))
 FUSION_MAX_JUMP_PX = float(RUN_CFG.get("FUSION_MAX_JUMP_PX", 600.0))
@@ -3548,8 +3588,9 @@ def run_pipeline(callbacks=None):
 
             base_w = max(1, int(width * olcek_scale_test))
             base_h = max(1, int(height * olcek_scale_test))
-            rotated_image = cuda_resize_if_available(cr_image, (base_w, base_h), interpolation=cv2.INTER_NEAREST)
-            rotated_image_color = cuda_resize_if_available(cr_image_color, (base_w, base_h), interpolation=cv2.INTER_NEAREST)
+            gsd_interp = _gsd_resize_interpolation(olcek_scale_test)  # varsayilan NEAREST = onceki davranis
+            rotated_image = cuda_resize_if_available(cr_image, (base_w, base_h), interpolation=gsd_interp)
+            rotated_image_color = cuda_resize_if_available(cr_image_color, (base_w, base_h), interpolation=gsd_interp)
 
             olcek_scale_sol_ust = olcek_scale_test * (rakim_sol_ust / rakim)
             olcek_scale_sag_alt = olcek_scale_test * (rakim_sag_alt / rakim)
@@ -3561,8 +3602,8 @@ def run_pipeline(callbacks=None):
             su_h = max(1, int(height * olcek_scale_sol_ust))
             sa_w = max(1, int(width * olcek_scale_sag_alt))
             sa_h = max(1, int(height * olcek_scale_sag_alt))
-            rotated_image_sol_ust = cuda_resize_if_available(cr_image, (su_w, su_h), interpolation=cv2.INTER_NEAREST)
-            rotated_image_sag_alt = cuda_resize_if_available(cr_image, (sa_w, sa_h), interpolation=cv2.INTER_NEAREST)
+            rotated_image_sol_ust = cuda_resize_if_available(cr_image, (su_w, su_h), interpolation=gsd_interp)
+            rotated_image_sag_alt = cuda_resize_if_available(cr_image, (sa_w, sa_h), interpolation=gsd_interp)
             
             
             #çözünürlüğü 30 cm'ye ayarlanmış görüntünün orta noktası bulnur

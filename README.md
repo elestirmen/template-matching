@@ -75,7 +75,7 @@ Independently of this position channel, an **optical-flow speed estimator** trac
 
 ## Quickstart
 
-The repository ships with one sample route (`guzergahlar/1_tezde_ucus_5`), one map (`haritalar/`), and one model (`model/`), so the default `RUN_CFG` runs out of the box once dependencies are installed:
+Data are **not** tracked in Git: routes, maps, DEMs and model weights are large and partly subject to provider licences (only `.gitkeep` placeholders are committed). Before the first run, put one route under `guzergahlar/<route>/`, a model map under `haritalar/`, a model under `model/`, and point `RUN_CFG["ANLIK_DIR"]` and `RUN_CFG["DEM_PATH"]` at them (the committed `RUN_CFG` currently points to `guzergahlar/guzergah_6_to_tagar` and `karlik_30_cm_bingmap_utm_elevation.tif`). Then:
 
 ```bash
 conda create -n visual_navigation -c conda-forge python=3.11 \
@@ -180,7 +180,7 @@ In a fair GPS-denied experiment, the true position of future frames must not be 
     +------------------+ +-------------+ +-------------------+
 ```
 
-> The box above still says `parcalar/` for historical reasons; the folder the pipeline actually reads is whatever `RUN_CFG["ANLIK_DIR"]` points to (default: `guzergahlar/1_tezde_ucus_5/`). `parcalar/` is now an empty, legacy placeholder — see [Repository Layout](#repository-layout).
+> The box above still says `parcalar/` for historical reasons; the folder the pipeline actually reads is whatever `RUN_CFG["ANLIK_DIR"]` points to (in the committed `RUN_CFG`: `guzergahlar/guzergah_6_to_tagar/`). `parcalar/` is a legacy folder the pipeline no longer reads; only its `.gitkeep` is tracked (local copies may still hold old frames) — see [Repository Layout](#repository-layout).
 
 ---
 
@@ -275,12 +275,12 @@ template-matching/
 │   ├── run_headless.py
 │   └── requirements-linux.txt
 ├── tools/                                    # Kalman parameter-sweep + analysis scripts
-├── tests/                                    # unittest suite (8 files — see Tests)
+├── tests/                                    # unittest suite (see Tests)
 │
 ├── haritalar/                                # Reference orthophoto map(s) (.tif) — HARITA_DIR
 ├── model/                                    # Keras model(s) (.h5) — MODEL_DIR
 ├── guzergahlar/                              # Drone image routes
-│   └── 1_tezde_ucus_5/                       # Sample route shipped with the repo — default ANLIK_DIR
+│   └── <route>/                              # Local data, not tracked in Git: ANLIK_DIR
 ├── ana_harita_urgup_30_cm_utm_elevation.tif  # Default DEM — DEM_PATH
 │                                              # (additional large DEM/orthophoto GeoTIFFs live at the
 │                                              #  project root for the author's own reruns; only DEM_PATH
@@ -336,6 +336,7 @@ All runtime parameters are managed from a single `RUN_CFG` dictionary near the t
 | `MODEL_INPUT_NORM` | `"HISTEQ"` | Preprocessing applied to the live image before inference: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
 | `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | If `True`, normalization runs before the resize (preserves the native pixel histogram) |
 | `MODEL_INPUT_INTERP` | `"NEAREST"` | Resize interpolation for the model input: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
+| `GSD_RESIZE_INTERP` | `"NEAREST"` | Interpolation used when the UAV frame is scaled down to the map GSD (all three scale hypotheses). Frames shrink ~10x, so `NEAREST` aliases; `AREA` is the anti-aliased candidate. Default keeps the previous behaviour until the A/B test in `benchmark/deneyler/2026-10-06_tm_iyilestirme/` decides |
 | `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (higher = more contrast and noise) |
 | `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (higher = more local equalization) |
 | `USE_PYRAMID` | `True` | Enable pyramid (coarse-to-fine) search |
@@ -464,6 +465,7 @@ Composite localization quality (`USE_QUALITY`) -- produces a continuous confiden
 | `QUALITY_SPREAD_THRESHOLD_PX` | `120.0` | Threshold for three box center spread (px) |
 | `NO_INTERSECTION_USE_SEARCH_CENTER` | `True` | If no intersection exists, fall back to the search-window center instead of a single/weak template box |
 | `LOW_SCORE_USE_SEARCH_CENTER` | `0.0` | `>0`: if the TM score falls below this threshold, use the search center instead of the intersection |
+| `BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK` | `False` | With `BENCHMARK=True` the search center *is* the EXIF GPS position, so the two fallbacks above would give unresolved frames a 0 m error. They are therefore switched off automatically in benchmark mode; `True` restores the old (leaking) behaviour for exact reproduction of old reports only. Sequential mode is unaffected |
 
 Sensor fusion (`USE_FUSION`) -- blends raw measurement with previous **output** position based on confidence. Only active when Kalman is OFF.
 
@@ -648,7 +650,7 @@ The script has an optional `logging` infrastructure (`tm` logger). Default level
 python -m unittest discover -s tests -v
 ```
 
-Eight suites, split by dependency weight:
+Main suites, split by dependency weight:
 
 | Needs only the standard library | Needs `numpy` / `opencv` / the main module |
 |---|---|
@@ -656,8 +658,9 @@ Eight suites, split by dependency weight:
 | `test_experiment_tracking.py` | `test_kalman.py` (loads the main script) |
 | `test_localization_policy.py` | `test_optical_flow_speed.py` (`cv2`, `numpy`) |
 | `test_run_localization.py` | `test_tracking_filter.py` (`numpy`) |
+| `test_gsd_interp.py` (reads the main script as AST: new flags keep old defaults) | `test_pyramid_search.py`, `test_ui.py` |
 
-`.github/workflows/unit-tests.yml` runs only the left column, on a bare `actions/setup-python` runner with no install step — none of those four import a third-party package. The right column needs the full `visual_navigation` environment from [Installation](#installation): those tests load the main script dynamically via `importlib.util` and are wrapped in `unittest.skipIf`, so a missing dependency (cv2/osgeo/tensorflow) skips them cleanly instead of failing.
+`.github/workflows/unit-tests.yml` runs only the left column, on a bare `actions/setup-python` runner with no install step — none of those five import a third-party package. The right column needs the full `visual_navigation` environment from [Installation](#installation): those tests load the main script dynamically via `importlib.util` and are wrapped in `unittest.skipIf`, so a missing dependency (cv2/osgeo/tensorflow) skips them cleanly instead of failing.
 
 ---
 

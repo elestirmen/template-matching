@@ -1,0 +1,22 @@
+name: unit-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pure-python-policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run dependency-free policy and tracking tests
+        run: >-
+          python -m unittest -v
+          tests.test_quality
+          tests.test_experiment_tracking
+          tests.test_localization_policy
+          tests.test_run_localization
+          tests.test_gsd_interp

@@ -75,7 +75,7 @@ Bu konum kanalından bağımsız olarak, bir **optik akış hız kestiricisi** a
 
 ## Hızlı Başlangıç
 
-Depoda hazır bir örnek rota (`guzergahlar/1_tezde_ucus_5`), bir harita (`haritalar/`) ve bir model (`model/`) geldiği için, bağımlılıklar kurulduktan sonra varsayılan `RUN_CFG` doğrudan çalışır:
+Veriler Git'te **izlenmez**: rotalar, haritalar, DEM'ler ve model ağırlıkları büyüktür ve kısmen sağlayıcı lisanslarına tabidir (depoda yalnız `.gitkeep` yer tutucuları var). İlk çalıştırmadan önce bir rotayı `guzergahlar/<rota>/`, bir model haritasını `haritalar/`, bir modeli `model/` altına koyun ve `RUN_CFG["ANLIK_DIR"]` ile `RUN_CFG["DEM_PATH"]`'i bunlara yönlendirin (depodaki `RUN_CFG` şu an `guzergahlar/guzergah_6_to_tagar` ve `karlik_30_cm_bingmap_utm_elevation.tif`'i gösteriyor). Sonra:
 
 ```bash
 conda create -n visual_navigation -c conda-forge python=3.11 \
@@ -180,7 +180,7 @@ Adil bir GPS-denied deneyde gelecek karelerin gerçek konumu arama merkezi, hare
     +------------------+ +-------------+ +-------------------+
 ```
 
-> Kutuda tarihsel nedenlerle hâlâ `parcalar/` yazıyor; pipeline'ın gerçekte okuduğu klasör `RUN_CFG["ANLIK_DIR"]`'ın gösterdiği yerdir (varsayılan: `guzergahlar/1_tezde_ucus_5/`). `parcalar/` artık boş, eski (legacy) bir yer tutucudur — bkz. [Depo Yapısı](#depo-yapısı).
+> Kutuda tarihsel nedenlerle hâlâ `parcalar/` yazıyor; pipeline'ın gerçekte okuduğu klasör `RUN_CFG["ANLIK_DIR"]`'ın gösterdiği yerdir (depodaki `RUN_CFG`'de: `guzergahlar/guzergah_6_to_tagar/`). `parcalar/` pipeline'ın artık okumadığı eski bir klasördür; Git'te yalnız `.gitkeep`'i izlenir (yerel kopyalarda eski kareler bulunabilir) — bkz. [Depo Yapısı](#depo-yapısı).
 
 ---
 
@@ -275,12 +275,12 @@ template-matching/
 │   ├── run_headless.py
 │   └── requirements-linux.txt
 ├── tools/                                    # Kalman parametre-sweep + analiz betikleri
-├── tests/                                    # unittest paketi (8 dosya — bkz. Testler)
+├── tests/                                    # unittest paketi (bkz. Testler)
 │
 ├── haritalar/                                # Referans ortofoto harita(lar) (.tif) — HARITA_DIR
 ├── model/                                    # Keras model(ler) (.h5) — MODEL_DIR
 ├── guzergahlar/                              # Drone görüntü rotaları
-│   └── 1_tezde_ucus_5/                       # Depoyla gelen örnek rota — varsayılan ANLIK_DIR
+│   └── <rota>/                               # Yerel veri, Git'te izlenmez: ANLIK_DIR
 ├── ana_harita_urgup_30_cm_utm_elevation.tif  # Varsayılan DEM — DEM_PATH
 │                                              # (proje kökünde, yazarın kendi tekrar-çalıştırmaları için
 │                                              #  ek büyük DEM/ortofoto GeoTIFF'leri de bulunur; sıfırdan bir
@@ -336,6 +336,7 @@ Tüm çalışma parametreleri, ana betiğin başındaki tek bir `RUN_CFG` sözl�
 | `MODEL_INPUT_NORM` | `"HISTEQ"` | Anlık görüntüye model öncesi uygulanan ön işleme: `HAM` / `HISTEQ` / `CLAHE` / `EDGE` |
 | `MODEL_INPUT_NORM_BEFORE_RESIZE` | `False` | `True` ise normalizasyon resize öncesi uygulanır (doğal piksel histogramı korunur) |
 | `MODEL_INPUT_INTERP` | `"NEAREST"` | Model girdisi resize interpolasyonu: `NEAREST` / `AREA` / `LINEAR` / `CUBIC` / `AUTO` |
+| `GSD_RESIZE_INTERP` | `"NEAREST"` | İHA karesi harita çözünürlüğüne indirilirken kullanılan interpolasyon (üç ölçek hipotezinin hepsi). Kare ~10 kat küçüldüğü için `NEAREST` örtüşme (aliasing) üretir; `AREA` örtüşmesiz adaydır. `benchmark/deneyler/2026-10-06_tm_iyilestirme/` A/B testi karar verene kadar varsayılan önceki davranışı korur |
 | `MODEL_INPUT_CLAHE_CLIP` | `2.0` | CLAHE `clipLimit` (artarsa kontrast ve gürültü artar) |
 | `MODEL_INPUT_CLAHE_TILE` | `8` | CLAHE `tileGridSize` (artarsa daha yerel eşitleme) |
 | `USE_PYRAMID` | `True` | Piramit (coarse-to-fine) arama etkinleştir |
@@ -466,6 +467,7 @@ Kompozit lokalizasyon kalitesi (`USE_QUALITY`) — üç şablonun normalize skor
 | `QUALITY_SPREAD_THRESHOLD_PX` | `120.0` | Üç kutu merkez yayılımı eşiği (px); üstünde geometrik tutarsız |
 | `NO_INTERSECTION_USE_SEARCH_CENTER` | `True` | Kesişim yoksa tekil/zayıf template kutusu yerine arama merkezi kullanılır |
 | `LOW_SCORE_USE_SEARCH_CENTER` | `0.0` | `>0` ise TM skoru bu eşiğin altındayken kesişim yerine arama merkezi kullanılır |
+| `BENCHMARK_ALLOW_SEARCH_CENTER_FALLBACK` | `False` | `BENCHMARK=True` iken arama merkezi EXIF GPS'in kendisidir; yukarıdaki iki yedek bulunamayan kareye 0 m hata verdirir. Bu yüzden benchmark modunda ikisi kendiliğinden kapanır; `True` eski (sızıntılı) davranışı yalnız eski raporları birebir üretmek için geri getirir. Ardışık mod etkilenmez |
 
 Sensör füzyonu (`USE_FUSION`) — ham ölçümü önceki **çıktı** konumuyla güvene göre harmanlar; yalnızca Kalman kapalıyken çıktıyı etkiler (çift-yumuşatma olmasın).
 
@@ -666,7 +668,7 @@ Kod içinden kullanım: `log.info(...)`, `log.debug(...)`, `log.warning(...)`, `
 python -m unittest discover -s tests -v
 ```
 
-Sekiz paket, bağımlılık ağırlığına göre ayrılmış:
+Ana paketler, bağımlılık ağırlığına göre ayrılmış:
 
 | Yalnızca standart kütüphane gerekir | `numpy` / `opencv` / ana modül gerekir |
 |---|---|
@@ -674,8 +676,9 @@ Sekiz paket, bağımlılık ağırlığına göre ayrılmış:
 | `test_experiment_tracking.py` | `test_kalman.py` (ana betiği yükler) |
 | `test_localization_policy.py` | `test_optical_flow_speed.py` (`cv2`, `numpy`) |
 | `test_run_localization.py` | `test_tracking_filter.py` (`numpy`) |
+| `test_gsd_interp.py` (ana betiği AST olarak okur: yeni bayraklar eski varsayılanları korur) | `test_pyramid_search.py`, `test_ui.py` |
 
-`.github/workflows/unit-tests.yml` yalnızca sol sütunu, kurulum adımı olmayan çıplak bir `actions/setup-python` çalıştırıcısında koşturur — bu dördünden hiçbiri üçüncü taraf bir paket import etmez. Sağ sütun [Kurulum](#kurulum)'daki tam `visual_navigation` ortamını gerektirir. Sağ sütundaki testler `importlib.util` ile ana betiği dinamik olarak yükler; gerekli bir bağımlılık (cv2/osgeo/tensorflow) yoksa `unittest.skipIf` ile hata vermeden atlanır (skip), başarısız olmaz.
+`.github/workflows/unit-tests.yml` yalnızca sol sütunu, kurulum adımı olmayan çıplak bir `actions/setup-python` çalıştırıcısında koşturur — bu beşinden hiçbiri üçüncü taraf bir paket import etmez. Sağ sütun [Kurulum](#kurulum)'daki tam `visual_navigation` ortamını gerektirir. Sağ sütundaki testler `importlib.util` ile ana betiği dinamik olarak yükler; gerekli bir bağımlılık (cv2/osgeo/tensorflow) yoksa `unittest.skipIf` ile hata vermeden atlanır (skip), başarısız olmaz.
 
 ---
 
