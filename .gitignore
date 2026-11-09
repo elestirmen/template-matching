@@ -35,3 +35,19 @@
 # Gecici/onbellek klasorleri yine de ignore
 __pycache__/
 .ruff_cache/
+
+# Ucus replay (makale: kod, kare bazli kayitlar, manifest) ve makale uretim betikleri (manuscript_v15)
+!flight_replay/*.py
+!flight_replay/*.bat
+!flight_replay/SKIP_EQ1_MODELS.txt
+!flight_replay/frame_manifest_exif.csv
+!flight_replay/runs_ne/*.csv
+!flight_replay/runs/*.csv
+!flight_replay/texture_probe_ne/*.csv
+!manuscript_v15/*.py
+!manuscript_v15/inputs/recon.json
+!manuscript_v15/ijeg/*.py
+!manuscript_v15/ijeg/refs_apa_v16.txt
+!manuscript_v15/ijeg/figs/*.png
+!manuscript_v15/out/numbers.json
+!manuscript_v15/out/tables/*.csv

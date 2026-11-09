@@ -1,0 +1,13 @@
+direction,stratum,representation,n,success_pct
+bing_to_google,low,cae,116,87.1
+bing_to_google,low,gray,116,66.4
+bing_to_google,low,sobel,116,91.4
+bing_to_google,regular,cae,300,86.7
+bing_to_google,regular,gray,300,61.7
+bing_to_google,regular,sobel,300,92.7
+google_to_bing,low,cae,27,88.9
+google_to_bing,low,gray,27,88.9
+google_to_bing,low,sobel,27,88.9
+google_to_bing,regular,cae,300,84.0
+google_to_bing,regular,gray,300,75.0
+google_to_bing,regular,sobel,300,91.0

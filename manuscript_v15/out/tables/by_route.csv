@@ -1,0 +1,319 @@
+run,model,mode,route,captured,eligible,accepted,correct,wrong,unresolved,not_attempted,gate_rejected,success_pct,availability_pct,precision_pct,median_m,mae_m,rmse_m,p90_m,max_m,sec_per_frame,rmse_lower_bound_m,consistent
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Rural1,181,177,70,66,4,107,0,0,37.288136,39.548023,94.285714,12.495,68.805143,264.130403,18.306,1749.34,0.961525,243.9109,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Rural2,211,200,120,95,25,80,0,0,47.5,60.0,79.166667,11.165,203.006917,467.275946,776.362,1588.94,1.5428,426.996473,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Rural3,198,198,121,116,5,77,0,0,58.585859,61.111111,95.867769,6.34,65.754628,291.841511,16.55,1801.04,2.174444,284.633158,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Rural5_heldout,265,159,43,16,27,116,0,0,10.062893,27.044025,37.209302,564.19,582.956744,777.324118,1278.866,1448.35,1.00805,729.021861,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban1,145,145,124,43,81,21,0,0,29.655172,85.517241,34.677419,32.825,30.890161,31.521651,37.593,41.41,1.708552,28.040978,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban10_heldout,81,81,81,80,1,0,0,0,98.765432,100.0,98.765432,24.58,24.746914,24.856398,28.12,30.05,1.053086,3.338889,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban11_heldout,54,54,51,25,26,3,0,0,46.296296,94.444444,49.019608,30.14,30.186863,30.320044,33.87,37.6,1.086296,23.313929,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.075,21.43975,21.732208,26.103,29.16,1.59585,,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban3,210,210,166,162,4,44,0,0,77.142857,79.047619,97.590361,19.47,20.335723,22.16455,26.28,112.47,1.559286,8.316065,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban4,183,178,144,141,3,34,0,0,79.213483,80.898876,97.916667,13.645,41.330556,211.293266,18.033,1890.27,1.595562,204.858309,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban5,237,234,217,215,2,17,0,0,91.880342,92.735043,99.078341,9.93,18.528018,89.592977,16.964,1161.64,1.202949,84.748152,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban6,147,147,141,140,1,6,0,0,95.238095,95.918367,99.29078,14.64,22.342624,102.475807,18.88,1204.67,0.957279,101.451515,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban7,174,172,141,137,4,31,0,0,79.651163,81.976744,97.163121,10.32,48.507589,233.66424,17.82,1554.38,1.077035,225.870619,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban8,115,115,41,41,0,74,0,0,35.652174,35.652174,100.0,11.49,11.422195,12.298461,15.96,25.12,1.289739,,True
+f48k4s1_oracle,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,oracle,Urban9_heldout,115,110,108,105,3,2,0,0,95.454545,98.181818,97.222222,11.195,45.286481,211.003778,15.621,1412.33,1.157455,209.718333,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Rural1,181,177,119,118,1,58,0,4,66.666667,67.231638,99.159664,11.74,12.154454,17.557249,17.662,137.84,1.182373,12.635772,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Rural2,211,200,134,133,1,66,0,20,66.5,67.0,99.253731,9.455,10.205448,11.341914,17.169,30.59,1.63725,2.642574,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Rural3,198,198,143,142,1,55,0,2,71.717172,72.222222,99.300699,5.82,8.69049,12.67117,16.404,100.67,0.74899,8.418448,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Rural5_heldout,265,159,6,3,3,153,85,18,1.886792,3.773585,50.0,95.76,158.425,223.320482,366.1,398.42,1.323378,212.129677,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban1,145,145,135,51,84,10,0,1,35.172414,93.103448,37.777778,32.41,30.542667,31.196521,37.554,41.41,1.622138,27.328251,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban10_heldout,81,81,81,80,1,0,0,0,98.765432,100.0,98.765432,24.55,24.695679,24.800543,27.93,30.05,0.981728,3.338889,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban11_heldout,54,54,53,28,25,1,0,0,51.851852,98.148148,52.830189,29.25,30.116792,30.234093,33.778,35.53,0.837778,22.438398,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.075,21.4298,21.727781,26.103,29.16,1.88055,,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban3,210,210,193,189,4,17,0,1,90.0,91.904762,97.927461,19.9,20.295855,20.967237,26.98,35.11,1.854143,4.870993,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban4,183,178,154,153,1,24,0,6,85.955056,86.516854,99.350649,12.605,13.880065,29.79348,17.647,334.25,1.036573,26.934633,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban5,237,234,219,219,0,15,0,5,93.589744,93.589744,100.0,9.9,10.464795,11.307818,16.514,18.71,1.368333,,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban6,147,147,141,141,0,6,0,4,95.918367,95.918367,100.0,14.54,13.961702,14.606299,18.88,27.43,1.316939,,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban7,174,172,157,156,1,15,0,8,90.697674,91.27907,99.363057,9.19,10.69465,12.110356,17.26,58.98,1.465756,4.707116,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban8,115,115,55,53,2,60,0,5,46.086957,47.826087,96.363636,10.66,18.984364,56.538778,18.214,408.28,1.286783,41.801707,True
+f48k4s1_track_aided,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_aided,Urban9_heldout,115,110,69,66,3,41,0,28,60.0,62.727273,95.652174,8.91,46.162464,180.757138,12.926,909.31,2.156455,180.404586,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Rural1,181,177,53,47,6,124,63,16,26.553672,29.943503,88.679245,6.89,72.421698,239.208241,113.366,1435.7,1.35547,197.401331,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Rural2,211,200,53,51,2,147,96,25,25.5,26.5,96.226415,8.47,60.055094,342.265695,11.524,2476.53,0.935096,266.494616,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Rural3,198,198,136,134,2,62,0,2,67.676768,68.686869,98.529412,6.235,9.680662,15.946748,16.48,109.7,1.257677,12.69674,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Rural5_heldout,265,159,2,1,1,157,154,0,0.628931,1.257862,50.0,51.235,51.235,60.283003,76.647,83.0,8.536667,58.689863,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban1,145,145,134,49,85,11,0,1,33.793103,92.413793,36.567164,32.5,30.693209,31.361763,37.478,41.05,0.920138,27.682167,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban10_heldout,81,81,81,81,0,0,0,0,100.0,100.0,100.0,24.63,24.748519,24.851335,27.9,29.96,0.729753,,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban11_heldout,54,54,53,28,25,1,0,0,51.851852,98.148148,52.830189,29.54,30.206792,30.335862,33.978,35.53,0.904074,22.580154,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.055,21.4338,21.734623,25.997,28.75,1.2598,,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban3,210,210,188,182,6,22,0,1,86.666667,89.52381,96.808511,20.035,20.300319,21.02235,27.355,36.43,1.016571,6.069545,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban4,183,178,155,154,1,23,0,2,86.516854,87.078652,99.354839,12.28,13.693742,28.630227,17.576,319.47,0.974607,25.660448,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban5,237,234,224,224,0,10,0,3,95.726496,95.726496,100.0,9.74,10.357143,11.198711,16.415,18.88,1.059234,,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban6,147,147,142,142,0,5,0,5,96.598639,96.598639,100.0,14.485,13.947113,14.577384,18.816,26.9,0.971905,,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban7,174,172,158,157,1,14,0,8,91.27907,91.860465,99.367089,9.295,10.461709,11.931035,16.786,58.98,0.987989,4.692197,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban8,115,115,55,54,1,60,0,5,46.956522,47.826087,98.181818,11.28,19.040545,56.598764,19.164,408.49,0.626783,55.08078,True
+f48k4s1_track_causal,03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__cb62bfb86ad0.h5,track_causal,Urban9_heldout,115,110,66,66,0,44,0,21,60.0,60.0,100.0,8.855,8.961667,9.430522,11.795,19.84,0.901043,,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Rural1,181,177,93,89,4,84,0,0,50.282486,52.542373,95.698925,12.05,66.915054,279.127122,18.484,1545.4,1.087175,271.343298,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Rural2,211,200,143,117,26,57,0,0,58.5,71.5,81.818182,10.93,233.982378,547.838987,1269.928,1697.96,1.00545,529.25569,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Rural3,198,198,147,146,1,51,0,0,73.737374,74.242424,99.319728,6.32,14.442585,73.263618,16.294,880.19,0.955051,72.596848,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Rural5_heldout,265,159,55,27,28,104,0,0,16.981132,34.591195,49.090909,31.09,400.867091,610.268119,1115.868,1271.18,0.700629,552.284275,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban1,145,145,119,43,76,26,0,0,29.655172,82.068966,36.134454,32.71,30.814202,31.424792,37.162,40.71,1.805793,27.671309,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban10_heldout,81,81,80,79,1,1,0,0,97.530864,98.765432,98.75,24.46,24.591875,24.713466,28.193,30.02,0.904074,3.356338,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban11_heldout,54,54,53,24,29,1,0,0,44.444444,98.148148,45.283019,30.78,30.317736,30.450569,33.854,35.33,0.983889,24.147427,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.225,21.41555,21.725302,26.199,28.94,1.5332,,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban3,210,210,181,177,4,29,0,0,84.285714,86.190476,97.790055,19.45,19.765746,20.445498,26.46,35.21,1.010524,4.844048,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban4,183,178,150,147,3,28,0,0,82.58427,84.269663,98.0,13.45,40.927533,213.762827,18.18,1890.26,1.043034,206.353086,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban5,237,234,213,212,1,21,0,0,90.598291,91.025641,99.530516,9.58,15.938826,83.5633,16.724,1208.6,1.077692,82.811907,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban6,147,147,142,142,0,5,0,0,96.598639,96.598639,100.0,14.345,13.759366,14.384344,18.968,25.05,1.005646,,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban7,174,172,138,137,1,34,0,0,79.651163,80.232558,99.275362,9.44,20.588768,118.466011,17.597,1385.1,1.034767,117.907542,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban8,115,115,37,37,0,78,0,0,32.173913,32.173913,100.0,11.95,11.784324,12.625731,18.588,22.91,1.029826,,True
+f48k4s1c1550_oracle,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,oracle,Urban9_heldout,115,110,108,105,3,2,0,0,95.454545,98.181818,97.222222,11.275,44.445648,206.268153,15.597,1413.1,0.984,204.798889,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Rural1,181,177,121,121,0,56,2,5,68.361582,68.361582,100.0,11.47,11.183471,12.327238,17.73,25.19,1.032938,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Rural2,211,200,144,142,2,56,1,16,71.0,72.0,98.611111,9.64,11.172361,17.758379,16.764,165.67,0.597871,11.688475,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Rural3,198,198,154,154,0,44,0,1,77.777778,77.777778,100.0,6.0,8.262792,9.639583,16.034,19.85,1.023535,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Rural5_heldout,265,159,4,3,1,155,154,0,1.886792,2.515723,75.0,19.74,68.28,109.199019,157.382,215.87,1.211667,107.935,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban1,145,145,135,49,86,10,0,1,33.793103,93.103448,36.296296,32.44,30.632222,31.281989,37.232,40.76,1.342138,27.568427,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban10_heldout,81,81,81,78,3,0,0,0,96.296296,100.0,96.296296,24.37,24.678272,24.801506,28.18,30.46,0.53679,5.807502,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban11_heldout,54,54,53,25,28,1,0,0,46.296296,98.148148,47.169811,30.18,30.356981,30.491194,34.058,35.33,0.588148,23.829314,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.195,21.42115,21.729832,26.009,28.77,1.2668,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban3,210,210,200,191,9,10,0,0,90.952381,95.238095,95.5,19.9,20.20005,21.037726,27.598,36.4,0.751952,7.060461,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban4,183,178,148,145,3,30,4,8,81.460674,83.146067,97.972973,13.63,21.02473,66.14362,18.293,553.05,0.657241,63.536162,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban5,237,234,221,221,0,13,0,5,94.444444,94.444444,100.0,9.71,10.3481,11.22636,16.7,18.67,0.643277,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban6,147,147,143,143,0,4,0,3,97.278912,97.278912,100.0,14.27,13.95007,14.588531,18.77,29.16,0.628503,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban7,174,172,160,160,0,12,0,5,93.023256,93.023256,100.0,9.17,10.01275,10.889936,16.584,19.98,0.63185,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban8,115,115,64,64,0,51,0,0,55.652174,55.652174,100.0,11.695,12.535,13.951234,21.516,28.54,0.603391,,True
+f48k4s1c1550_track_causal,_03_model_tpu_f48_k4_s1_elu__tpu_model_f48_k4_epoch__epoch__sigmoid__1__7__bdb7daa618c0.h5,track_causal,Urban9_heldout,115,110,68,67,1,42,0,21,60.909091,61.818182,98.529412,9.15,21.225441,102.477949,12.079,841.5,0.583217,102.046864,True
+gray_oracle,grayscale,oracle,Rural1,181,177,94,82,12,83,0,0,46.327684,53.107345,87.234043,12.715,116.842021,375.080844,32.846,1820.42,1.396045,296.278079,True
+gray_oracle,grayscale,oracle,Rural2,211,200,106,54,52,94,0,0,27.0,53.0,50.943396,23.145,530.21783,788.732087,1346.33,1928.5,1.19965,748.818558,True
+gray_oracle,grayscale,oracle,Rural3,198,198,143,143,0,55,0,0,72.222222,72.222222,100.0,6.57,8.772587,10.365099,17.558,24.77,1.192374,,True
+gray_oracle,grayscale,oracle,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+gray_oracle,grayscale,oracle,Rural5_heldout,265,159,86,73,13,73,0,0,45.91195,54.08805,84.883721,11.11,96.663605,263.324129,371.045,1038.4,1.339245,222.613265,True
+gray_oracle,grayscale,oracle,Urban1,145,145,64,30,34,81,0,0,20.689655,44.137931,46.875,30.805,57.968125,170.967359,39.668,1120.04,0.930138,65.93992,True
+gray_oracle,grayscale,oracle,Urban10_heldout,81,81,34,21,13,47,0,0,25.925926,41.975309,61.764706,23.02,26.629118,27.726164,36.964,40.97,1.110988,22.140626,True
+gray_oracle,grayscale,oracle,Urban11_heldout,54,54,16,12,4,38,0,0,22.222222,29.62963,75.0,25.21,27.809375,28.358379,37.205,38.26,1.081296,18.64125,True
+gray_oracle,grayscale,oracle,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.42,21.37235,21.696633,26.275,29.26,0.854,,True
+gray_oracle,grayscale,oracle,Urban3,210,210,175,168,7,35,0,0,80.0,83.333333,96.0,19.75,32.609486,124.417016,26.614,1281.25,0.845667,69.810571,True
+gray_oracle,grayscale,oracle,Urban4,183,178,129,126,3,49,0,0,70.786517,72.47191,97.674419,13.4,26.870698,106.629219,18.844,998.64,0.908427,98.842965,True
+gray_oracle,grayscale,oracle,Urban5,237,234,229,228,1,5,0,0,97.435897,97.863248,99.563319,9.66,17.446419,107.628445,16.522,1619.88,1.12359,107.044683,True
+gray_oracle,grayscale,oracle,Urban6,147,147,141,138,3,6,0,0,93.877551,95.918367,97.87234,14.88,28.989433,118.215941,19.65,1274.21,1.164286,100.525776,True
+gray_oracle,grayscale,oracle,Urban7,174,172,149,144,5,23,0,0,83.72093,86.627907,96.644295,9.92,39.900872,192.128042,16.154,1701.3,1.167093,162.463479,True
+gray_oracle,grayscale,oracle,Urban8,115,115,19,16,3,96,0,0,13.913043,16.521739,84.210526,12.96,98.652105,363.755824,32.026,1583.69,1.342957,218.453797,True
+gray_oracle,grayscale,oracle,Urban9_heldout,115,110,84,82,2,26,0,0,74.545455,76.363636,97.619048,10.72,34.634762,163.106919,15.038,1278.19,1.228818,157.91482,True
+gray_track_aided,grayscale,track_aided,Rural1,181,177,109,101,8,68,0,4,57.062147,61.581921,92.66055,12.23,21.244495,79.078166,26.53,804.64,0.440508,36.452858,True
+gray_track_aided,grayscale,track_aided,Rural2,211,200,99,92,7,101,0,41,46.0,49.5,92.929293,10.76,26.286465,79.627351,20.658,473.45,0.425,61.294076,True
+gray_track_aided,grayscale,track_aided,Rural3,198,198,159,157,2,39,0,3,79.292929,80.30303,98.742138,6.46,10.335975,20.653113,17.514,161.89,0.532323,18.147148,True
+gray_track_aided,grayscale,track_aided,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+gray_track_aided,grayscale,track_aided,Rural5_heldout,265,159,18,3,15,141,0,24,1.886792,11.320755,16.666667,1708.17,1343.723333,1538.927531,1980.643,2052.62,0.397358,1468.551287,True
+gray_track_aided,grayscale,track_aided,Urban1,145,145,98,44,54,47,0,1,30.344828,67.586207,44.897959,31.225,30.509082,32.285724,39.633,73.13,0.338276,28.266932,True
+gray_track_aided,grayscale,track_aided,Urban10_heldout,81,81,67,30,37,14,0,0,37.037037,82.716049,44.776119,33.05,30.107612,31.455092,41.592,47.37,0.31037,28.015513,True
+gray_track_aided,grayscale,track_aided,Urban11_heldout,54,54,32,21,11,22,0,0,38.888889,59.259259,65.625,26.085,28.533125,29.055347,36.712,38.87,0.368148,20.827045,True
+gray_track_aided,grayscale,track_aided,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.35,21.3707,21.694901,26.275,29.26,0.33215,,True
+gray_track_aided,grayscale,track_aided,Urban3,210,210,198,191,7,12,0,1,90.952381,94.285714,96.464646,19.89,20.232727,21.053431,26.876,50.25,0.339571,6.688331,True
+gray_track_aided,grayscale,track_aided,Urban4,183,178,156,151,5,22,0,0,84.831461,87.640449,96.794872,12.365,12.967885,17.003103,19.15,80.19,0.398202,11.109448,True
+gray_track_aided,grayscale,track_aided,Urban5,237,234,233,233,0,1,0,1,99.57265,99.57265,100.0,9.51,10.405622,11.202657,16.368,21.97,0.378718,,True
+gray_track_aided,grayscale,track_aided,Urban6,147,147,142,142,0,5,0,1,96.598639,96.598639,100.0,14.5,14.579648,15.195621,19.392,29.06,0.364966,,True
+gray_track_aided,grayscale,track_aided,Urban7,174,172,156,156,0,16,0,6,90.697674,90.697674,100.0,9.425,10.168462,10.931054,15.36,24.54,0.355814,,True
+gray_track_aided,grayscale,track_aided,Urban8,115,115,51,49,2,64,0,2,42.608696,44.347826,96.078431,12.96,14.785686,16.470115,26.75,34.09,0.362435,6.495368,True
+gray_track_aided,grayscale,track_aided,Urban9_heldout,115,110,61,61,0,49,0,26,55.454545,55.454545,100.0,9.71,9.239016,9.792819,12.74,18.57,0.439727,,True
+gray_track_causal,grayscale,track_causal,Rural1,181,177,52,51,1,125,89,10,28.813559,29.378531,98.076923,4.67,20.797308,112.752663,8.995,811.95,1.263523,112.597206,True
+gray_track_causal,grayscale,track_causal,Rural2,211,200,66,54,12,134,9,32,27.0,33.0,81.818182,10.715,144.222727,368.28441,736.59,1310.0,0.472081,318.551363,True
+gray_track_causal,grayscale,track_causal,Rural3,198,198,155,153,2,43,0,3,77.272727,78.282828,98.709677,6.24,10.71671,21.062824,17.808,161.8,0.805455,18.36391,True
+gray_track_causal,grayscale,track_causal,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+gray_track_causal,grayscale,track_causal,Rural5_heldout,265,159,2,2,0,157,154,0,1.257862,1.257862,100.0,18.18,18.18,18.215084,19.084,19.31,0.285556,,True
+gray_track_causal,grayscale,track_causal,Urban1,145,145,94,44,50,51,0,4,30.344828,64.827586,46.808511,30.52,29.868404,31.446781,39.745,62.0,0.326138,27.412845,True
+gray_track_causal,grayscale,track_causal,Urban10_heldout,81,81,67,30,37,14,0,0,37.037037,82.716049,44.776119,33.05,30.113284,31.452826,41.652,47.37,0.316173,27.994625,True
+gray_track_causal,grayscale,track_causal,Urban11_heldout,54,54,32,21,11,22,0,0,38.888889,59.259259,65.625,26.07,28.477188,28.990945,36.783,38.37,0.374444,20.768948,True
+gray_track_causal,grayscale,track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.415,21.3208,21.648996,26.161,28.82,0.3435,,True
+gray_track_causal,grayscale,track_causal,Urban3,210,210,194,190,4,16,0,1,90.47619,92.380952,97.938144,19.93,20.014845,20.737401,26.49,39.26,0.346571,4.892885,True
+gray_track_causal,grayscale,track_causal,Urban4,183,178,148,145,3,30,0,1,81.460674,83.146067,97.972973,12.59,12.87473,16.572632,18.854,79.69,0.399157,10.544196,True
+gray_track_causal,grayscale,track_causal,Urban5,237,234,230,230,0,4,0,4,98.290598,98.290598,100.0,9.36,10.357,11.188966,16.51,22.09,0.423319,,True
+gray_track_causal,grayscale,track_causal,Urban6,147,147,142,142,0,5,0,2,96.598639,96.598639,100.0,14.56,14.665563,15.271012,19.501,29.11,0.389864,,True
+gray_track_causal,grayscale,track_causal,Urban7,174,172,156,156,0,16,0,6,90.697674,90.697674,100.0,8.975,9.931603,10.733961,15.385,24.53,0.378497,,True
+gray_track_causal,grayscale,track_causal,Urban8,115,115,47,45,2,68,0,1,39.130435,40.869565,95.744681,12.48,14.76,16.389992,26.474,34.22,0.405652,6.779532,True
+gray_track_causal,grayscale,track_causal,Urban9_heldout,115,110,60,60,0,50,0,20,54.545455,54.545455,100.0,9.085,9.048833,9.643351,12.827,17.29,0.445478,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Rural1,181,177,97,90,7,80,0,0,50.847458,54.80226,92.783505,13.97,87.540206,301.894818,22.412,1812.94,2.692486,283.179646,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Rural2,211,200,140,122,18,60,0,0,61.0,70.0,87.142857,10.75,142.060214,398.300758,694.438,1770.59,1.3826,371.447569,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Rural3,198,198,154,154,0,44,0,0,77.777778,77.777778,100.0,6.245,8.71539,10.341824,17.866,20.52,2.301313,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Rural5_heldout,265,159,102,91,11,57,0,0,57.232704,64.150943,89.215686,13.855,103.27049,311.467468,176.358,1502.34,1.476604,278.802698,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban1,145,145,109,34,75,36,0,0,23.448276,75.172414,31.192661,32.76,32.025596,33.859052,37.328,127.02,2.497034,29.791948,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban10_heldout,81,81,67,51,16,14,0,0,62.962963,82.716049,76.119403,26.26,26.191642,26.535238,31.46,33.8,1.573951,15.469706,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban11_heldout,54,54,49,34,15,5,0,0,62.962963,90.740741,69.387755,27.87,29.23551,29.404771,34.624,36.36,1.864259,18.527615,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban2,200,200,199,199,0,1,0,0,99.5,99.5,100.0,21.44,21.588442,21.90284,26.44,29.51,3.0902,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban3,210,210,187,181,6,23,0,0,86.190476,89.047619,96.791444,19.86,20.206578,20.948862,27.454,38.87,1.072143,5.858264,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban4,183,178,154,152,2,24,0,0,85.393258,86.516854,98.701299,12.46,21.899675,97.55693,18.441,1088.81,1.598315,90.79524,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban5,237,234,224,224,0,10,0,0,95.726496,95.726496,100.0,9.31,10.414062,11.218605,16.452,19.0,1.916923,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban6,147,147,144,144,0,3,0,0,97.959184,97.959184,100.0,14.775,14.336042,14.912079,18.608,27.06,1.658776,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban7,174,172,164,164,0,8,0,0,95.348837,95.348837,100.0,8.855,10.097195,10.979904,16.58,22.05,2.517209,,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban8,115,115,47,46,1,68,0,0,40.0,40.869565,97.87234,13.12,13.458298,15.129672,23.634,32.12,1.835391,4.685184,True
+m4e300_oracle,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",oracle,Urban9_heldout,115,110,103,101,2,7,0,0,91.818182,93.636364,98.058252,11.16,38.763398,203.60405,15.704,1529.49,1.554273,203.044025,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Rural1,181,177,120,120,0,57,0,10,67.79661,67.79661,100.0,12.05,11.888333,13.62721,20.971,25.04,1.404746,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Rural2,211,200,143,138,5,57,0,23,69.0,71.5,96.503497,10.37,20.528392,59.584869,17.43,372.11,2.17595,57.718017,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Rural3,198,198,164,164,0,34,0,0,82.828283,82.828283,100.0,6.245,8.897622,10.598707,17.677,26.45,1.095606,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Rural5_heldout,265,159,30,27,3,129,85,29,16.981132,18.867925,90.0,17.335,26.006333,48.976932,22.911,194.08,1.353108,40.967307,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban1,145,145,138,50,88,7,0,3,34.482759,95.172414,36.231884,32.275,31.084493,32.827002,37.185,127.02,2.111862,28.60522,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban10_heldout,81,81,81,62,19,0,0,0,76.54321,100.0,76.54321,25.59,26.119259,26.440993,31.55,34.19,0.968148,15.426679,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban11_heldout,54,54,53,36,17,1,0,0,66.666667,98.148148,67.924528,27.88,29.423585,29.632323,35.536,37.91,0.895556,19.238981,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.4,21.5861,21.898995,26.42,29.51,2.0433,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban3,210,210,202,197,5,8,0,0,93.809524,96.190476,97.524752,20.295,20.310396,21.074531,27.61,38.87,2.069476,5.163859,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban4,183,178,171,171,0,7,0,0,96.067416,96.067416,100.0,10.45,11.204971,12.581187,18.36,26.97,0.762022,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban5,237,234,225,225,0,9,0,4,96.153846,96.153846,100.0,9.29,10.428622,11.225036,16.446,19.0,0.938162,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban6,147,147,143,143,0,4,0,2,97.278912,97.278912,100.0,14.7,14.294545,14.873485,18.612,27.06,1.11932,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban7,174,172,166,166,0,6,0,4,96.511628,96.511628,100.0,8.545,9.837771,10.770589,16.465,22.05,1.270116,,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban8,115,115,63,62,1,52,0,3,53.913043,54.782609,98.412698,12.89,13.296825,14.700845,21.458,32.12,1.518435,4.04674,True
+m4e300_track_aided,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_aided,Urban9_heldout,115,110,64,64,0,46,0,27,58.181818,58.181818,100.0,8.815,8.886719,9.390852,12.507,15.74,1.720727,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,56,50,6,121,59,15,28.248588,31.638418,89.285714,5.78,187.299107,578.317489,526.13,2559.35,1.792521,557.038262,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,55,49,6,145,73,17,24.5,27.5,89.090909,8.72,96.218909,299.574974,146.534,1354.09,1.26937,268.599928,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,157,157,0,41,0,1,79.292929,79.292929,100.0,5.9,8.497834,10.269238,17.644,26.1,2.474444,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural5_heldout,265,159,5,4,1,154,154,0,2.515723,3.144654,80.0,19.78,48.176,75.476038,106.78,164.36,1.816667,73.504027,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,133,52,81,12,0,2,35.862069,91.724138,39.097744,32.54,30.523759,31.372022,38.1,53.24,1.786621,27.676801,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban10_heldout,81,81,81,61,20,0,0,0,75.308642,100.0,75.308642,25.79,26.236296,26.554337,31.94,33.94,2.004568,15.784901,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban11_heldout,54,54,53,38,15,1,0,0,70.37037,98.148148,71.698113,27.88,29.346038,29.570158,35.12,37.91,1.158148,18.418028,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.45,21.58385,21.905046,26.602,29.52,1.49295,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,202,198,4,8,0,0,94.285714,96.190476,98.019802,20.57,20.253218,20.978373,27.531,33.47,1.965524,4.477695,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,170,170,0,8,0,0,95.505618,95.505618,100.0,10.51,11.273353,12.624616,18.366,27.62,0.906966,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,223,223,0,11,0,4,95.299145,95.299145,100.0,9.53,10.486323,11.251984,16.032,18.59,0.89017,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,143,143,0,4,0,2,97.278912,97.278912,100.0,14.42,14.300909,14.858744,18.696,27.06,1.029728,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,164,164,0,8,0,5,95.348837,95.348837,100.0,8.775,9.659268,10.660677,16.569,22.05,1.212254,,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,74,73,1,41,0,2,63.478261,64.347826,98.648649,12.83,13.822568,15.225252,22.16,32.12,1.455478,3.733874,True
+m4e300_track_causal,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban9_heldout,115,110,66,66,0,44,0,26,60.0,60.0,100.0,8.775,8.860909,9.356008,12.51,15.74,1.482261,,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,30,23,7,147,19,13,12.99435,16.949153,76.666667,7.07,255.245,545.266241,1143.749,1515.03,3.162778,519.379913,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,32,28,4,168,118,8,14.0,16.0,87.5,12.485,67.085625,206.855757,86.392,1027.76,0.90369,161.892098,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,61,61,0,137,0,2,30.808081,30.808081,100.0,6.66,8.931475,11.183184,18.51,29.28,2.585909,,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,97,48,49,48,0,1,33.103448,66.896552,49.484536,30.21,32.131443,36.574406,37.702,122.72,1.609793,28.964345,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,194,188,6,6,0,0,94.0,97.0,96.907216,20.84,21.461907,21.881249,27.319,33.26,1.20855,5.479602,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,187,177,10,23,0,0,84.285714,89.047619,94.652406,20.04,20.464385,21.302924,29.188,38.12,0.760238,7.797936,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,110,109,1,68,0,2,61.235955,61.797753,99.090909,12.12,12.699182,14.363711,22.352,31.83,0.800667,3.034871,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,154,154,0,80,0,1,65.811966,65.811966,100.0,10.775,11.608831,12.624096,19.042,24.97,1.436229,,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,133,133,0,14,0,5,90.47619,90.47619,100.0,14.65,14.654211,15.433004,20.032,29.74,0.785034,,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,138,138,0,34,0,3,80.232558,80.232558,100.0,9.555,10.258261,11.198104,16.129,24.13,0.914425,,True
+m4e300_track_causal_alt+10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,35,32,3,80,0,4,27.826087,30.434783,91.428571,12.07,24.869429,58.018206,26.196,286.07,1.069043,48.12456,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,102,102,0,75,0,5,57.627119,57.627119,100.0,13.365,12.856078,14.448725,21.456,24.57,2.966077,,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,50,43,7,150,67,24,21.5,25.0,86.0,9.695,88.6942,253.176513,251.266,1319.57,1.135263,215.997863,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,131,130,1,67,0,0,65.656566,66.161616,99.236641,6.17,9.336107,13.184333,18.38,90.28,3.351111,7.8878,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,139,52,87,6,0,2,35.862069,95.862069,37.410072,32.45,31.33295,33.04151,37.864,124.17,1.658828,28.67275,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.205,21.53645,21.868995,26.461,29.52,1.1729,,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,202,195,7,8,0,0,92.857143,96.190476,96.534653,20.47,20.36203,21.109317,27.39,38.3,0.729952,6.159584,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,166,166,0,12,0,1,93.258427,93.258427,100.0,10.265,11.16241,12.649458,18.965,28.66,0.867821,,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,222,221,1,12,0,0,94.444444,94.871795,99.54955,9.705,10.828378,12.100287,16.568,59.67,1.42234,4.004788,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,142,142,0,5,0,3,96.598639,96.598639,100.0,14.635,14.396479,14.995333,19.076,27.68,0.785374,,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,162,162,0,10,0,6,94.186047,94.186047,100.0,8.88,9.919753,10.760872,15.933,22.58,0.965434,,True
+m4e300_track_causal_alt+5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,43,42,1,72,0,2,36.521739,37.391304,97.674419,12.91,12.81,14.46161,19.908,36.98,1.369739,5.639397,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,16,14,2,161,108,12,7.909605,9.039548,87.5,8.48,47.456875,141.199832,55.715,555.55,4.415217,115.240728,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,37,32,5,163,106,22,16.0,18.5,86.486486,10.8,87.85027,307.4157,35.784,1347.57,1.796809,214.398142,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,133,133,0,65,0,4,67.171717,67.171717,100.0,6.7,8.680602,10.334714,17.88,24.58,2.799495,,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,57,22,35,88,0,2,15.172414,39.310345,38.596491,31.09,32.329123,35.661792,40.724,124.52,2.037241,30.265694,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,160,146,14,40,0,0,73.0,80.0,91.25,22.445,22.563875,23.239134,29.557,37.45,1.2089,9.686735,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,146,134,12,64,0,1,63.809524,69.52381,91.780822,21.21,22.169178,28.178728,29.32,218.68,0.734476,13.481171,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,79,74,5,99,3,2,41.573034,44.382022,93.670886,15.53,23.406203,61.115155,25.894,512.37,0.906571,35.391895,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,162,159,3,72,1,11,67.948718,69.230769,98.148148,11.11,13.037531,19.090699,17.866,159.28,1.379785,13.347905,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,95,94,1,52,7,7,63.945578,64.62585,98.947368,15.83,16.198,18.347292,23.954,74.88,0.653929,7.682526,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,110,109,1,62,1,2,63.372093,63.953488,99.090909,9.93,11.436909,13.485113,19.263,58.91,0.925731,5.616848,True
+m4e300_track_causal_alt-10pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,65,61,4,50,0,0,53.043478,56.521739,93.846154,13.83,14.406462,16.754747,24.544,49.65,0.884261,8.830653,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,90,86,4,87,2,10,48.587571,50.847458,95.555556,14.025,22.453111,83.537083,22.051,773.56,2.948457,49.160769,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,46,42,4,154,81,22,21.0,23.0,91.304348,7.525,34.689783,149.785633,12.77,986.96,1.261681,94.702706,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,163,163,0,35,0,2,82.323232,82.323232,100.0,6.32,8.764294,10.323348,17.278,22.1,3.221061,,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,108,46,62,37,0,2,31.724138,74.482759,42.592593,32.145,30.04213,30.992087,38.163,50.05,1.465034,26.884449,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,198,198,0,2,0,0,99.0,99.0,100.0,21.25,21.438384,21.780873,26.331,29.51,1.17935,,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,186,180,6,24,0,0,85.714286,88.571429,96.774194,20.385,20.090376,20.887099,26.93,42.72,0.792952,6.284988,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,162,161,1,16,1,2,90.449438,91.011236,99.382716,11.815,12.324259,14.201701,19.561,67.86,0.822147,5.331585,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,224,224,0,10,0,6,95.726496,95.726496,100.0,9.955,10.563482,11.338722,16.623,18.41,1.458077,,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,135,135,0,12,2,5,91.836735,91.836735,100.0,15.31,14.958963,15.611275,19.654,29.49,0.698069,,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,150,150,0,22,0,4,87.209302,87.209302,100.0,8.97,9.958467,11.108276,16.43,26.54,0.890233,,True
+m4e300_track_causal_alt-5pct,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,70,67,3,45,0,0,58.26087,60.869565,95.714286,11.915,15.482286,25.851972,22.995,178.65,1.200783,16.667844,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,56,50,6,121,59,15,28.248588,31.638418,89.285714,5.78,187.273571,578.316881,525.58,2559.35,3.474454,557.038262,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,52,46,6,148,73,19,23.0,26.0,88.461538,9.105,101.3225,308.089668,205.631,1354.09,0.460315,276.239363,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,157,157,0,41,0,1,79.292929,79.292929,100.0,5.94,8.497643,10.268952,17.644,26.1,0.720808,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,133,52,81,12,0,2,35.862069,91.724138,39.097744,32.54,30.487143,31.357229,38.1,53.24,2.146276,27.676801,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.45,21.57905,21.901125,26.602,29.52,1.78465,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,202,198,4,8,0,0,94.285714,96.190476,98.019802,20.57,20.25,20.975335,27.531,33.47,1.77919,4.477695,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,170,170,0,8,0,0,95.505618,95.505618,100.0,10.51,11.288765,12.631661,18.366,27.62,3.146034,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,223,223,0,11,0,4,95.299145,95.299145,100.0,9.53,10.486323,11.251984,16.032,18.59,2.90617,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,143,143,0,4,0,2,97.278912,97.278912,100.0,14.42,14.300559,14.858382,18.696,27.06,3.445986,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,164,164,0,8,0,5,95.348837,95.348837,100.0,8.775,9.662744,10.663867,16.569,22.05,1.965549,,True
+m4e300_track_causal_init+200m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,74,73,1,41,0,2,63.478261,64.347826,98.648649,12.83,13.772973,15.147708,21.88,32.12,3.043913,3.733874,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,42,36,6,135,59,22,20.338983,23.728814,85.714286,5.5,247.29881,667.767075,1377.539,2559.35,4.92479,643.212381,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,25,18,7,175,73,28,9.0,12.5,72.0,9.79,210.8964,446.936083,824.46,1354.09,1.588898,387.391663,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,141,141,0,57,0,5,71.212121,71.212121,100.0,5.81,8.72461,10.56929,17.69,26.1,3.201263,,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,121,40,81,24,0,12,27.586207,83.448276,33.057851,33.43,31.462727,32.188237,38.18,53.24,1.596759,29.016768,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,185,185,0,15,0,12,92.5,92.5,100.0,21.73,22.020973,22.301361,26.728,29.52,1.1702,,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,188,184,4,22,0,11,87.619048,89.52381,97.87234,21.055,20.401117,21.154531,27.616,33.47,1.303,4.641424,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,168,168,0,10,0,1,94.382022,94.382022,100.0,10.595,11.37119,12.694151,18.378,27.62,2.821989,,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,212,209,3,22,0,10,89.316239,90.598291,98.584906,9.76,16.908538,55.838638,16.508,460.8,2.283574,54.689234,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,130,130,0,17,0,14,88.435374,88.435374,100.0,14.295,14.234077,14.843952,18.791,27.06,2.639048,,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,151,151,0,21,0,15,87.790698,87.790698,100.0,7.97,9.486225,10.554768,16.77,22.05,2.608497,,True
+m4e300_track_causal_init+500m,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,65,64,1,50,0,6,55.652174,56.521739,98.461538,12.73,13.354308,14.728714,21.798,32.12,2.651652,3.983996,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,11,0,11,166,41,19,0.0,6.214689,0.0,643.32,849.24,1067.540816,1577.06,2577.12,0.966691,849.24,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,10,1,9,190,39,23,0.5,5.0,10.0,835.455,803.721,944.535437,1520.696,1632.8,1.306424,846.460565,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,56,47,9,142,45,9,23.737374,28.282828,83.928571,15.955,191.0325,581.607983,262.29,2390.08,1.007451,446.09732,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,17,5,12,128,0,5,3.448276,11.724138,29.411765,39.56,87.141765,150.847937,164.428,539.57,1.558966,95.422086,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,85,77,8,115,0,0,38.5,42.5,90.588235,21.31,22.082235,22.870008,28.942,36.75,0.95275,10.298806,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,32,26,6,178,0,3,12.380952,15.238095,81.25,22.26,76.428438,229.910705,36.661,956.59,0.644048,141.930017,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,5,0,5,173,3,3,0.0,2.808989,0.0,286.52,430.308,525.270795,737.122,1032.41,1.141886,430.308,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,36,35,1,198,0,2,14.957265,15.384615,97.222222,12.355,13.982222,15.528123,21.02,34.94,1.180928,5.823333,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,60,56,4,87,0,5,38.095238,40.816327,93.333333,15.25,15.282333,17.234833,25.069,40.02,1.106531,8.823302,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,80,78,2,92,2,5,45.348837,46.511628,97.5,10.91,12.57375,17.635667,16.364,87.78,0.991941,13.210415,True
+m4e300_track_causal_yaw+10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,86,83,3,29,0,1,72.173913,74.782609,96.511628,13.67,13.93593,15.439604,20.68,35.85,0.644783,6.141681,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,152,152,0,25,0,3,85.875706,85.875706,100.0,12.89,11.964145,13.482845,19.127,22.47,1.152707,,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,10,6,4,190,85,16,3.0,5.0,60.0,24.485,395.432,638.683744,1130.33,1314.11,1.769478,611.206607,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,121,121,0,77,0,3,61.111111,61.111111,100.0,12.57,11.655702,12.705794,16.95,25.12,0.832879,,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,47,20,27,98,0,0,13.793103,32.413793,42.553191,33.46,31.461277,32.37442,39.892,45.89,1.341379,28.066959,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,198,194,4,2,0,0,97.0,99.0,97.979798,21.01,21.390808,21.809505,26.769,31.43,1.35075,4.367417,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,138,131,7,72,0,0,62.380952,65.714286,94.927536,18.71,19.656087,20.492245,27.38,39.66,0.841619,7.631141,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,76,75,1,102,1,5,42.134831,42.696629,98.684211,15.875,15.557105,16.936857,21.91,50.36,1.185424,5.776688,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,199,199,0,35,0,3,85.042735,85.042735,100.0,10.72,11.258392,12.169605,17.68,20.38,1.14557,,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,128,128,0,19,0,3,87.07483,87.07483,100.0,14.35,14.460781,15.124913,19.296,29.57,0.902381,,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,165,165,0,7,0,5,95.930233,95.930233,100.0,8.18,9.502303,10.469063,16.128,21.15,1.019302,,True
+m4e300_track_causal_yaw+5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,113,111,2,2,0,0,96.521739,98.26087,98.230088,12.35,12.859115,14.514313,21.17,34.84,0.664,4.414202,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,3,0,3,174,98,10,0.0,1.694915,0.0,467.54,1509.49,2278.613489,3226.476,3916.21,1.012278,1509.49,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,67,56,11,133,63,22,28.0,33.5,83.58209,9.52,290.736716,785.63535,1617.386,2435.0,1.505306,699.486486,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,13,10,3,185,0,1,5.050505,6.565657,76.923077,15.84,135.056923,311.436539,637.558,797.27,1.048737,259.37078,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,32,17,15,113,0,3,11.724138,22.068966,53.125,27.275,31.607188,38.401767,38.812,144.98,1.368828,29.352908,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,51,47,4,149,0,0,23.5,25.5,92.156863,21.05,28.549608,64.887267,28.63,437.79,1.36355,37.360173,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,120,98,22,90,0,1,46.666667,57.142857,81.666667,24.49,23.525417,24.777851,32.755,49.29,0.838,14.647263,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,10,6,4,168,4,11,3.370787,5.617978,60.0,21.725,274.539,426.067982,726.743,728.3,1.117241,424.309673,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,20,18,2,214,0,5,7.692308,8.547009,90.0,9.83,42.212,115.929797,42.66,490.92,1.431356,102.509974,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,41,40,1,106,0,2,27.210884,27.891156,97.560976,17.92,17.402927,19.243411,27.64,38.73,0.624354,6.04861,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,29,22,7,143,3,16,12.790698,16.860465,75.862069,14.62,97.471724,199.26925,413.904,536.43,1.003846,179.923832,True
+m4e300_track_causal_yaw-10,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,4,0,4,111,0,4,0.0,3.478261,0.0,895.625,933.3125,1007.578036,1325.052,1505.19,0.657565,933.3125,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural1,181,177,9,6,3,168,105,9,3.389831,5.084746,66.666667,13.14,399.823333,685.474559,1265.932,1286.18,0.86875,681.096264,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural2,211,200,91,84,7,109,23,19,42.0,45.5,92.307692,8.48,57.866484,183.171675,14.11,777.02,1.280054,180.533915,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Rural3,198,198,108,108,0,90,0,0,54.545455,54.545455,100.0,5.635,7.226852,9.120565,16.442,25.46,0.789596,,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban1,145,145,126,56,70,19,0,2,38.62069,86.896552,44.444444,30.635,29.570397,30.540923,37.74,55.18,1.512966,26.234295,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban2,200,200,167,154,13,33,0,0,77.0,83.5,92.215569,21.83,22.29012,22.876565,29.246,33.22,0.97765,8.691249,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban3,210,210,202,199,3,8,0,0,94.761905,96.190476,98.514851,21.225,20.564703,21.328663,28.247,30.49,0.618714,3.690935,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban4,183,178,118,117,1,60,2,0,65.730337,66.292135,99.152542,10.16,12.172627,14.187736,21.826,51.18,0.760966,4.711501,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban5,237,234,156,156,0,78,0,6,66.666667,66.666667,100.0,12.07,11.748526,12.564625,17.26,23.3,0.993447,,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban6,147,147,119,119,0,28,2,4,80.952381,80.952381,100.0,15.67,14.81,15.687943,21.492,28.84,1.040207,,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban7,174,172,89,88,1,83,1,5,51.162791,51.744186,98.876404,9.89,16.923596,58.163859,20.656,535.95,0.630175,56.810586,True
+m4e300_track_causal_yaw-5,"GPU_model_f48_k5_epoch_00300_sigmoid_(2, 2)_.h5",track_causal,Urban8,115,115,11,6,5,104,0,2,5.217391,9.565217,54.545455,19.12,135.157273,309.149823,182.86,993.62,0.772522,190.574727,True
+sobel_oracle,sobel,oracle,Rural1,181,177,75,67,8,102,0,0,37.853107,42.372881,89.333333,11.1,131.987733,388.562567,293.264,1466.01,0.85209,375.940746,True
+sobel_oracle,sobel,oracle,Rural2,211,200,115,77,38,85,0,0,38.5,57.5,66.956522,11.82,304.766174,585.853497,1124.774,1795.19,0.6594,519.488741,True
+sobel_oracle,sobel,oracle,Rural3,198,198,156,154,2,42,0,0,77.777778,78.787879,98.717949,5.79,24.859359,150.508875,15.42,1327.37,0.896515,150.228818,True
+sobel_oracle,sobel,oracle,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+sobel_oracle,sobel,oracle,Rural5_heldout,265,159,119,113,6,40,0,0,71.069182,74.842767,94.957983,11.74,39.68958,154.890961,21.92,1156.85,0.612201,121.426852,True
+sobel_oracle,sobel,oracle,Urban1,145,145,108,27,81,37,0,0,18.62069,74.482759,25.0,34.425,32.051944,32.661909,37.759,39.97,0.963172,30.475648,True
+sobel_oracle,sobel,oracle,Urban10_heldout,81,81,73,73,0,8,0,0,90.123457,90.123457,100.0,23.1,23.197123,23.366416,27.508,29.68,0.599877,,True
+sobel_oracle,sobel,oracle,Urban11_heldout,54,54,50,17,33,4,0,0,31.481481,92.592593,34.0,31.305,32.0762,32.258732,36.548,37.75,0.597778,27.672937,True
+sobel_oracle,sobel,oracle,Urban2,200,200,197,197,0,3,0,0,98.5,98.5,100.0,21.15,21.436751,21.750366,26.484,29.24,0.9638,,True
+sobel_oracle,sobel,oracle,Urban3,210,210,166,162,4,44,0,0,77.142857,79.047619,97.590361,18.815,19.325542,20.028088,26.495,33.4,1.002857,4.870733,True
+sobel_oracle,sobel,oracle,Urban4,183,178,176,176,0,2,0,0,98.876404,98.876404,100.0,9.83,10.844375,11.715645,16.955,18.48,1.013539,,True
+sobel_oracle,sobel,oracle,Urban5,237,234,220,218,2,14,0,0,93.162393,94.017094,99.090909,9.76,16.613227,67.953063,16.818,703.75,1.014402,67.026036,True
+sobel_oracle,sobel,oracle,Urban6,147,147,140,138,2,7,0,0,93.877551,95.238095,98.571429,13.72,28.902,131.507125,19.583,1302.87,1.084218,127.66177,True
+sobel_oracle,sobel,oracle,Urban7,174,172,144,143,1,28,0,0,83.139535,83.72093,99.305556,8.7,19.684236,121.238305,17.081,1449.23,1.045698,120.769167,True
+sobel_oracle,sobel,oracle,Urban8,115,115,44,42,2,71,0,0,36.521739,38.26087,95.454545,10.91,34.889318,157.126262,17.824,1039.06,0.992261,114.017611,True
+sobel_oracle,sobel,oracle,Urban9_heldout,115,110,105,105,0,5,0,0,95.454545,95.454545,100.0,10.55,10.469714,10.85122,13.336,22.5,0.650091,,True
+sobel_track_causal,sobel,track_causal,Rural1,181,177,39,38,1,138,106,9,21.468927,22.033898,97.435897,5.82,20.359487,88.061479,11.94,548.13,0.346901,87.771045,True
+sobel_track_causal,sobel,track_causal,Rural2,211,200,53,41,12,147,110,12,20.5,26.5,77.358491,8.89,237.958868,578.203618,1428.55,1656.7,0.349,488.28662,True
+sobel_track_causal,sobel,track_causal,Rural3,198,198,172,172,0,26,0,1,86.868687,86.868687,100.0,6.145,8.556453,9.970375,15.907,25.6,0.355152,,True
+sobel_track_causal,sobel,track_causal,Rural4_heldout,435,0,0,0,0,0,0,0,,,,,,,,,,,True
+sobel_track_causal,sobel,track_causal,Rural5_heldout,265,159,4,4,0,155,154,0,2.515723,2.515723,100.0,19.355,19.3375,19.351296,20.116,20.29,0.235714,,True
+sobel_track_causal,sobel,track_causal,Urban1,145,145,136,44,92,9,0,4,30.344828,93.793103,32.352941,33.14,31.035147,31.774575,37.905,39.06,0.486,28.932821,True
+sobel_track_causal,sobel,track_causal,Urban10_heldout,81,81,81,81,0,0,0,0,100.0,100.0,100.0,22.56,23.020494,23.184686,27.51,29.68,0.319259,,True
+sobel_track_causal,sobel,track_causal,Urban11_heldout,54,54,54,19,35,0,0,0,35.185185,100.0,35.185185,31.9,31.946111,32.190637,36.573,38.0,0.305556,27.534536,True
+sobel_track_causal,sobel,track_causal,Urban2,200,200,200,200,0,0,0,0,100.0,100.0,100.0,21.23,21.3324,21.64306,26.023,28.99,0.55405,,True
+sobel_track_causal,sobel,track_causal,Urban3,210,210,198,194,4,12,0,0,92.380952,94.285714,97.979798,19.505,19.992121,20.859013,27.039,55.75,0.513238,5.346008,True
+sobel_track_causal,sobel,track_causal,Urban4,183,178,178,178,0,0,0,0,100.0,100.0,100.0,9.565,10.94073,11.891334,17.135,23.54,0.370955,,True
+sobel_track_causal,sobel,track_causal,Urban5,237,234,218,218,0,16,0,6,93.162393,93.162393,100.0,9.7,10.310826,11.23185,16.61,20.14,0.355617,,True
+sobel_track_causal,sobel,track_causal,Urban6,147,147,140,140,0,7,0,5,95.238095,95.238095,100.0,13.55,13.937714,14.621746,19.592,25.53,0.356803,,True
+sobel_track_causal,sobel,track_causal,Urban7,174,172,164,164,0,8,0,2,95.348837,95.348837,100.0,8.595,9.739817,10.703715,16.415,21.47,0.347861,,True
+sobel_track_causal,sobel,track_causal,Urban8,115,115,71,69,2,44,0,2,60.0,61.73913,97.183099,11.45,12.428028,13.901132,18.88,30.68,0.324609,5.140825,True
+sobel_track_causal,sobel,track_causal,Urban9_heldout,115,110,64,64,0,46,0,25,58.181818,58.181818,100.0,9.18,9.2275,9.498363,11.455,14.88,0.354513,,True
