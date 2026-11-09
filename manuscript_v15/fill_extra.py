@@ -78,6 +78,7 @@ def main():
     ap.add_argument('--eq1', nargs='*', default=[])
     ap.add_argument('--bias-run', default='')
     ap.add_argument('--sobel-bench', default='', help='sobel_summary.json of benchmark/deney_araclari/sobel_benchmark.py')
+    ap.add_argument('--flight-ci', default='', help='flight_ci.json of flight_ci.py (paired block-bootstrap intervals)')
     a = ap.parse_args()
     df = MT.annotate(MT.load(a.runs), THR)
     N = {}
@@ -181,6 +182,28 @@ def main():
                 s0 = MT.summarize(df[(df.run == run) & df.route.isin(common)], THR)
                 N[f'eq1_delta_{modes[parts[1]]}_{short[parts[0]]}'] = f'{s1.success_pct - s0.success_pct:.1f}'
                 N[f'eq1_routes_{modes[parts[1]]}_{short[parts[0]]}'] = str(len(common))
+    # coverage of the captured frames: eligibility and the reason of every non-eligible frame (reference run gray_oracle)
+    ref = df[df.run == 'gray_oracle']
+    if len(ref):
+        inel = ref[~ref['eligible_m']]
+        N['cov_cap'] = f'{len(ref):,}'; N['cov_elig'] = f"{int(ref['eligible_m'].sum()):,}"; N['cov_inel'] = f'{len(inel):,}'
+        for grp_, gs in (('doctoral', '_doc'), ('heldout', '_ho')):
+            r_ = ref[ref.group == grp_]
+            N['cov_cap' + gs] = f'{len(r_):,}'; N['cov_elig' + gs] = f"{int(r_['eligible_m'].sum()):,}"
+        small = inel[inel.reason == 'frame_smaller_than_tile_after_scaling']; dem = inel[inel.reason == 'dem_out_of_range']
+        N['cov_small'] = str(len(small)); N['cov_dem'] = str(len(dem)); N['cov_other'] = str(len(inel) - len(small) - len(dem))
+        N['cov_small_r4'] = str(int((small.route == 'Rural4_heldout').sum()))
+        N['cov_r4_cap'] = str(int((ref.route == 'Rural4_heldout').sum()))
+        N['cov_dem_r5'] = str(int((dem.route == 'Rural5_heldout').sum()))
+    # paired block-bootstrap intervals of the flight differences (flight_ci.py)
+    if a.flight_ci and os.path.exists(a.flight_ci):
+        C = json.load(open(a.flight_ci))
+        for r_ in C['rows']:
+            base = f"fd_{'or' if r_['mode'] == 'oracle' else 'ca'}_{r_['a']}_{r_['b']}{'_ho' if r_['group'] == 'heldout' else ''}"
+            for k_ in ('diff_pp', 'lo_25', 'hi_25', 'lo_10', 'hi_10', 'lo_50', 'hi_50', 'lo_route', 'hi_route'):
+                N[f'{base}_{k_}'] = f"{r_[k_]:.4f}"
+            N[base + '_rb'] = str(r_['routes_a_better']); N[base + '_nr'] = str(r_['n_routes'])
+        N['fci_reps'] = f"{C['reps']:,}"; N['fci_block'] = str(C['block_main'])
     json.dump({k: v for k, v in N.items() if not k.startswith('_raw_')}, open(a.out, 'w'), indent=1, ensure_ascii=False)
     for k in sorted(N):
         if not k.startswith('_raw_'): print(f'{k:28s} {N[k]}')

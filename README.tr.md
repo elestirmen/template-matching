@@ -1,5 +1,7 @@
 # UAV Görüntü Konumlandırma - Template Matching ile Derin Öğrenme Destekli Jeolokalizasyon
 
+> **Makale:** A. E. Arık ve N. Emrahoğlu, *Learned versus Classical Structural Representations for GNSS-Denied UAV Localization by Template Matching: A Cross-Source Map Benchmark and Flight Replay*, *International Journal of Engineering and Geosciences* (IJEG) dergisine gönderildi, 2026. Atıf için [CITATION.cff](CITATION.cff) dosyasına bakın.
+
 *[Click here for the English version (README.md)](README.md)*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
@@ -902,7 +904,7 @@ Bilinmeyen kamera modelleri için `DEFAULT_SENSOR_WIDTH_MM` (varsayılan: 13.2 m
 
 ## Atıf
 
-Bu depo için henüz doğrulanmış bir `CITATION.cff`, DOI veya yayımlanmış bibliyografik kayıt bulunmamaktadır. İlgili tez/makale yayımlandığında yazar, başlık, kurum, yıl, sürüm ve kalıcı bağlantı bilgileriyle atıf yapılmalıdır. Bu bilgiler kesinleşmeden tahmini bir BibTeX kaydı kullanılmamalıdır.
+[CITATION.cff](CITATION.cff) dosyasına ve bu dosyanın başındaki makaleye bakın. Makale yayımlanana kadar depo adresi ve kullanılan commit kimliği belirtilmelidir.
 
 ---
 

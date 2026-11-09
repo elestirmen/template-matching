@@ -190,6 +190,103 @@ def build(N):
         if abs(d_) < 0.05: return f'matches{o}'
         return f'{"leads" if d_ > 0 else "trails"}{o} by {abs(d_):.1f} points'
 
+    # ---- paired block-bootstrap intervals of the flight differences (flight_ci.py via fill_extra.py --flight-ci)
+    def fd(mode, a_, b_, ho=False):
+        base = f'fd_{mode}_{a_}_{b_}' + ('_ho' if ho else '')
+        if base + '_lo_25' not in N: return None
+        return {s_: float(N[f'{base}_{s_}']) for s_ in ('diff_pp', 'lo_25', 'hi_25', 'lo_10', 'hi_10', 'lo_50', 'hi_50',
+                                                        'lo_route', 'hi_route')}
+
+    def sgn(mode, a_, b_, ho=False):  # sign of the stated (printed, one decimal) difference a - b
+        s_ = '_ho' if ho else ''
+        return 1 if f1(f'{mode}_{a_}{s_}') - f1(f'{mode}_{b_}{s_}') >= 0 else -1
+
+    def oriented(mode, a_, b_, L='25', ho=False):  # interval of the stated lead or deficit, in points
+        x = fd(mode, a_, b_, ho); lo, hi = x[f'lo_{L}'], x[f'hi_{L}']
+        return (lo, hi) if sgn(mode, a_, b_, ho) > 0 else (-hi, -lo)
+
+    def ci(mode, a_, b_, L='25', ho=False):
+        lo, hi = oriented(mode, a_, b_, L, ho)
+        return f'{lo:.1f} to {hi:.1f}'
+
+    def excl(mode, a_, b_, L='25', ho=False):
+        lo, hi = oriented(mode, a_, b_, L, ho)
+        return lo > 0 or hi < 0
+
+    def join(xs, conj='and'):
+        return xs[0] if len(xs) == 1 else ', '.join(xs[:-1]) + f' {conj} ' + xs[-1]
+
+    WHO = {'m4': 'the Model 4 lineage', 'f48': 'checkpoint 1850', 'c1550': 'checkpoint 1550',
+           'sobel': 'gradient magnitude', 'gray': 'grayscale'}
+    MODEW = {'or': 'oracle', 'ca': 'causal'}
+
+    def lead(mode, a_, b_, ho=False):
+        return 'lead' if sgn(mode, a_, b_, ho) > 0 else 'deficit'
+
+    def phrase(mode, a_, b_, route=False):
+        return f"the {MODEW[mode]} {lead(mode, a_, b_)} of {WHO[a_]} ({ci(mode, a_, b_, 'route' if route else '25')} points)"
+
+    DISC = [('or', 'm4', 'sobel'), ('ca', 'm4', 'sobel'), ('or', 'f48', 'sobel'), ('ca', 'f48', 'sobel')]
+    REPORTED = DISC + [('or', 'm4', 'gray'), ('or', 'sobel', 'gray'), ('ca', 'c1550', 'sobel'), ('ca', 'sobel', 'gray')]
+    if not all(fd(*k) is not None for k in REPORTED):
+        raise SystemExit('narrative.py: paired flight intervals missing (flight_ci.json; make_v15.py runs flight_ci.py)')
+    ho_ck = [c for c in CAES if fd('or', c, 'sobel', True) is not None]
+    ho_lead = [f1('or_sobel_ho') - f1(f'or_{c}_ho') for c in ho_ck]
+    ho_all = bool(ho_ck) and all(d_ > 0 for d_ in ho_lead) and all(excl('or', c, 'sobel', ho=True) for c in ho_ck)
+    E['ci_oracle'] = (
+        "Paired on the same frames, with 95% intervals from a block bootstrap stratified by route (Section 3.7), the "
+        f"Model 4 lineage {vs('or_m4', 'or_sobel', 'gradient magnitude')} ({ci('or', 'm4', 'sobel')}) and "
+        f"{vs('or_m4', 'or_gray', 'grayscale')} ({ci('or', 'm4', 'gray')}), gradient magnitude "
+        f"{vs('or_sobel', 'or_gray', 'grayscale')} ({ci('or', 'sobel', 'gray')}) and checkpoint 1850 "
+        f"{vs('or_f48', 'or_sobel', 'gradient magnitude')} ({ci('or', 'f48', 'sobel')})" +
+        (f"; on the additional flights gradient magnitude leads the three checkpoints by {min(ho_lead):.1f}-"
+         f"{max(ho_lead):.1f} points, with intervals that exclude zero for all three." if ho_all else
+         f"; on the additional flights the differences between gradient magnitude and the checkpoints range from "
+         f"{min(ho_lead):.1f} to {max(ho_lead):.1f} points.")
+    )
+    flips = [k for k in REPORTED if len({excl(*k, L) for L in ('10', '25', '50')}) > 1]
+    if flips:
+        parts = []
+        for m_, a_, b_ in flips:
+            los = [oriented(m_, a_, b_, L)[0] for L in ('10', '25', '50')]
+            rel_ = 'over' if lead(m_, a_, b_) == 'lead' else 'relative to'
+            parts.append(f"the {MODEW[m_]} {lead(m_, a_, b_)} of {WHO[a_]} {rel_} {WHO[b_]}, whose lower limit lies "
+                         f"between {min(los):.1f} and {max(los):.1f} points")
+        sens = (" For the paired comparisons of both replays, blocks of 10 or 50 frames lead to the same conclusions "
+                f"except for {join(parts)}.")
+    else:
+        sens = " For the paired comparisons of both replays, blocks of 10 or 50 frames lead to the same conclusions."
+    E['ci_causal'] = (
+        f"Paired on the same frames (95% intervals in parentheses), the Model 4 lineage {vs('ca_m4', 'ca_sobel', 'gradient magnitude')} "
+        f"({ci('ca', 'm4', 'sobel')}), checkpoint 1850 {vs('ca_f48', 'ca_sobel', 'it')} ({ci('ca', 'f48', 'sobel')}) and "
+        f"checkpoint 1550 {vs('ca_c1550', 'ca_sobel', 'it')} ({ci('ca', 'c1550', 'sobel')}), and gradient magnitude "
+        f"{vs('ca_sobel', 'ca_gray', 'grayscale')} ({ci('ca', 'sobel', 'gray')})." + sens
+    )
+    ex = [phrase(*k) for k in DISC if excl(*k)]
+    inc = [phrase(*k) for k in DISC if not excl(*k)]
+    rex = [phrase(*k, route=True) for k in DISC if excl(*k, 'route')]
+    ci_disc = (" The paired intervals of Sections 4.1 and 4.2 separate " +
+               (f"{join(ex)} from zero, but not {join(inc, 'or')}" if ex and inc else
+                ("all four differences from zero" if ex else "none of these differences from zero")) +
+               "; when whole routes are resampled, a more conservative check with eleven routes, " +
+               (f"only {join(rex)} {'remains' if len(rex) == 1 else 'remain'}" if rex else "none of them remains") + ".")
+    small_txt = (f"{g('cov_small')} are too small at map resolution to contain a crop" +
+                 (f" ({g('cov_small_r4')} of them the entire low-altitude Rural 4 flight)"
+                  if g('cov_small_r4') == g('cov_r4_cap') and g('cov_small_r4') != '0' else ""))
+    dem_txt = (f"{g('cov_dem')} frames of Rural 5 lie outside the DEM" if g('cov_dem') == g('cov_dem_r5')
+               else f"{g('cov_dem')} frames lie outside the DEM")
+    E['coverage'] = (
+        f"Of the {g('cov_cap')} captured frames, {g('cov_elig')} are eligible ({g('cov_elig_doc')} on the eleven doctoral "
+        f"routes and {g('cov_elig_ho')} on the additional flights); of the {g('cov_inel')} that are not, {small_txt} and "
+        f"{dem_txt}" + ("." if g('cov_other') == '0' else f", and {g('cov_other')} fail for other reasons.")
+    )
+    E['ci_method'] = (
+        "Differences between representations are computed on the same eligible frames (paired). Because consecutive "
+        "frames overlap and a lost track persists over many frames, their 95% intervals come from a circular block "
+        f"bootstrap stratified by route (blocks of {g('fci_block')} consecutive frames, {g('fci_reps')} replicates); "
+        "blocks of 10 and 50 frames and resampling of whole routes serve as sensitivity checks."
+    )
+
     flight_diffs = [abs(f1(f'{m}_{c}') - f1(f'{m}_sobel')) for m in ('or', 'ca') for c in CAES]
     within = max(flight_diffs) <= max(or_hi - or_lo, ca_hi - ca_lo)
     E['contrib_baselines'] = (
@@ -266,7 +363,7 @@ def build(N):
         f"{vs('or_f48', 'or_sobel')} and {vs('ca_f48', 'ca_sobel')}, and on the additional flights gradient "
         f"magnitude {sob_ho}. The spread "
         f"between the three checkpoints ({ca_hi - ca_lo:.1f} points in the causal replay) is "
-        + ("larger than any" if within else "of the same order as") + " of these differences. Third, the gain of the "
+        + ("larger than any" if within else "of the same order as") + " of these differences." + ci_disc + " Third, the gain of the "
         "learned representation over grayscale is genuine - it persists when the checkpoint is selected on one half "
         "of the district and evaluated on the other" + (
             " and it does not arise when the same network is trained to reconstruct its input" if recon_ok else "") +
@@ -368,8 +465,9 @@ def build(N):
         f"30 m (gradient magnitude {g('or_sobel')}%, grayscale {g('or_gray')}%), and a causal replay that reads GNSS "
         f"only at the first frame localized {ca_lo:.1f}-{ca_hi:.1f}% with {cap_lo:.0f}-{cap_hi:.0f}% precision "
         f"({g('ca_sobel')}% and {g('ca_gray')}%); in the causal replay the flown lineage "
-        f"{vs('ca_m4', 'ca_sobel', 'gradient magnitude')}, the benchmark-selected checkpoint "
-        f"{vs('ca_f48', 'ca_sobel', 'it')}, and on the additional flights gradient magnitude {sob_ho_abs}. The "
+        f"{vs('ca_m4', 'ca_sobel', 'gradient magnitude')} (95% block-bootstrap interval {ci('ca', 'm4', 'sobel')} "
+        f"points), the benchmark-selected checkpoint {vs('ca_f48', 'ca_sobel', 'it')} ({ci('ca', 'f48', 'sobel')}), "
+        f"and on the additional flights gradient magnitude {sob_ho_abs}. The "
         "remaining errors are dominated by a constant camera offset, heading "
         "errors and a wrong ground height after a loss of track. Within its stated in-domain scope, structural "
         "template matching with a fixed gradient filter is an explainable and inexpensive candidate position-fix "

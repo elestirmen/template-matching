@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the revised manuscript end to end from the replay records (v15 chain; v16 adds the gradient-magnitude
-benchmark result and the comparative framing, see DEVAM.md).
+benchmark result and the comparative framing; v18 adds paired block-bootstrap intervals of the flight differences
+(flight_ci.py) and the coverage of the captured frames, see DEVAM.md).
 Usage: python make_v15.py OUT.docx --runs SPEC [SPEC ...] [--eq1 SPEC ...] [--texture CSV] [--recon JSON] [--fig6 PNG]
                                    [--sobel-bench sobel_summary.json]
 """
@@ -21,7 +22,9 @@ os.makedirs(a.work, exist_ok=True)
 T = os.path.join(a.work, 'tables'); NJ = os.path.join(a.work, 'numbers.json'); EJ = os.path.join(a.work, 'extra.json')
 py = sys.executable
 subprocess.check_call([py, os.path.join(HERE, 'make_tables.py'), T] + a.runs)
-cmd = [py, os.path.join(HERE, 'fill_extra.py'), NJ] + a.runs
+# paired block-bootstrap intervals of the flight differences (flight_ci.py; written next to the tables)
+subprocess.check_call([py, os.path.join(HERE, 'flight_ci.py'), os.path.join(T, 'flight_ci')] + a.runs, stdout=subprocess.DEVNULL)
+cmd = [py, os.path.join(HERE, 'fill_extra.py'), NJ] + a.runs + ['--flight-ci', os.path.join(T, 'flight_ci.json')]
 if a.texture: cmd += ['--texture', a.texture]
 if a.recon: cmd += ['--recon', a.recon]
 if a.sobel_bench: cmd += ['--sobel-bench', a.sobel_bench]

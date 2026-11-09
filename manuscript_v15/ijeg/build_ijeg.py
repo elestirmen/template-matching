@@ -144,11 +144,12 @@ def new_par(text_runs=None, style=None, align=None, indent=True, size=10, bold=F
     return P
 
 
-def blank(size=8):
-    return new_par([(' ', {'size': size})], indent=False, size=size)
+def blank(size=8, keep_next=False):
+    return new_par([(' ', {'size': size})], indent=False, size=size, keep_next=keep_next)
 
 
 CIT = re.compile(r'^[0-9][0-9,\- ]*$')
+ABBR_END = re.compile(r'\b(?:et al|e\.g|i\.e|etc|cf|vs)$')  # abbreviations whose final period stays with the word
 
 
 def convert_runs(p):
@@ -169,6 +170,9 @@ def convert_runs(p):
                 k = len(prev) - 1
                 while k >= 0 and prev[k] in '.,;:)': k -= 1
                 head, tail = prev[:k + 1], prev[k + 1:]
+                # the period of an abbreviation belongs to the word: "Fragoso et al.^17" -> "Fragoso et al. [17]"
+                if tail.startswith('.') and ABBR_END.search(head):
+                    head, tail = head + '.', tail[1:]
                 out[-1] = (head + ' ' + cit, pf); out.append((tail, pf))
             else:
                 out.append(((' ' if out and out[-1][0] and not out[-1][0].endswith((' ', '(', '[')) else '') + cit, {'bold': False, 'italic': False}))
@@ -235,6 +239,14 @@ def add_table(src_tbl, wide):
     jc = tblpr.find(qn('w:jc'))
     if jc is None: jc = OxmlElement('w:jc'); tblpr.append(jc)
     jc.set(qn('w:val'), 'center')
+    # keep the table on one page: every row is kept with the next one (rows already cannot split), so Word moves a
+    # table that does not fit to the next page instead of leaving its caption and first rows behind (Table 8)
+    trs = t.findall(qn('w:tr'))
+    for tr in trs[:-1]:
+        for p in tr.iter(qn('w:p')):
+            ppr = p.find(qn('w:pPr'))
+            if ppr is None: ppr = OxmlElement('w:pPr'); p.insert(0, ppr)
+            if ppr.find(qn('w:keepNext')) is None: ppr.insert(0, OxmlElement('w:keepNext'))
     return t
 
 
@@ -303,13 +315,13 @@ while i < len(src_body):
             blank()
             lvl2 = text.startswith('2. ')
             new_par([(HEAD_MAP[text], {'bold': True, 'size': 10})], indent=False, keep_next=True)
-            blank()
+            blank(keep_next=True)
         elif re.match(r'^\d\.\d\. ', text):  # level-2 heading
             num, _, rest = text.partition(' ')
             new_num = renum(num.rstrip('.')) + '.'
             blank()
             new_par([(f'{new_num} {rest}', {'bold': True, 'size': 10})], indent=False, keep_next=True)
-            blank()
+            blank(keep_next=True)
         elif text.startswith(('Fig. ', 'Figure ')) and re.match(r'^Fig\. \d+\.', text):
             cap = convert_runs(P)
             label = fix_text(text[:text.index('.', 5) + 1])
@@ -329,7 +341,8 @@ while i < len(src_body):
             wide = ti_here in WIDE_TABLES
             if wide: section_break(2); open_wide = True
             blank()
-            new_par(convert_runs(P), indent=False, keep_next=True)
+            cap_p = new_par(convert_runs(P), indent=False, keep_next=True)
+            cap_p.paragraph_format.keep_together = True   # a multi-line caption must not split from its table
             add_table(src.tables[ti_here], wide)
             # footnote paragraphs directly after the table (start with a superscript letter or 'a ', 'b ', 'h ')
             k = j + 1
@@ -347,7 +360,7 @@ while i < len(src_body):
             blank()
             new_par([({'Acknowledgments': 'Acknowledgement', 'Author Contributions': 'Author contributions',
                        'Data Availability': 'Data availability', 'Conflicts of Interest': 'Conflicts of interest'}[text], {'bold': True})], indent=False, keep_next=True)
-            blank()
+            blank(keep_next=True)
         elif text.startswith('Authors’ Biographies'):
             break
         elif is_equation:
@@ -363,7 +376,7 @@ while i < len(src_body):
 # ------------------------------------------------------------------ references
 blank()
 new_par([('References', {'bold': True})], indent=False, keep_next=True)
-blank()
+blank(keep_next=True)
 # reference runs with italics: taken from the v09 (APA) manuscript where available, hand-written otherwise
 V09 = sys.argv[5] if len(sys.argv) > 5 else None
 ref_runs = {}
@@ -394,5 +407,17 @@ for n, r in enumerate(refs, 1):
     for t, it in rr:
         for ch in '\u2013\u2014\u2212': t = t.replace(ch, '-')
         x = run(P, t, size=10); x.font.italic = it
+# running header: the template carries "2026, 11(3)" on the first page and "2025, 10(1)" on the others; both are
+# set to the issue-neutral form of the cite box (the journal fills volume, issue and pages)
+HEADER = ', 2026, 11(x), 00-0X'
+for sec in tpl.sections:
+    for hdr in (sec.header, sec.first_page_header, sec.even_page_header):
+        for p in hdr.paragraphs:
+            if 'International Journal of Engineering and Geosciences' in p.text and p.runs:
+                rs = p.runs
+                k = next(j for j, r in enumerate(rs) if 'Geosciences' in r.text)
+                if k + 1 < len(rs):
+                    rs[k + 1].text = HEADER
+                    for r in rs[k + 2:]: r.text = ''
 tpl.save(OUT)
 print('saved', OUT)

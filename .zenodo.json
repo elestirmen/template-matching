@@ -1,0 +1,20 @@
+{
+  "title": "UAV Image Positioning: Deep-Learning-Supported Geolocalization via Template Matching",
+  "description": "Flight-side companion code of the article 'Learned versus Classical Structural Representations for GNSS-Denied UAV Localization by Template Matching: A Cross-Source Map Benchmark and Flight Replay' (submitted to the International Journal of Engineering and Geosciences): UAV frame normalization (undistortion, heading rotation, DEM-aided GSD scaling), cross-autoencoder transformation and multi-scale NCC template matching against a georeferenced reference map, with three-crop consensus and route evaluation tooling. Dual-licensed MIT / Apache-2.0.",
+  "upload_type": "software",
+  "license": "mit",
+  "creators": [
+    {
+      "name": "Arık, Ahmet Ertuğrul",
+      "affiliation": "Kapadokya University, Nevşehir, Türkiye"
+    }
+  ],
+  "keywords": [
+    "GNSS-denied navigation",
+    "UAV localization",
+    "cross-autoencoder",
+    "template matching",
+    "remote sensing"
+  ],
+  "language": "eng"
+}

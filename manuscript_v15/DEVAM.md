@@ -169,8 +169,24 @@ Eşitlemesiz protokol, 11 doktora rotası, 1.976 uygun kare, 30 m eşik.
 - Kapak mektubu: `ijeg\make_cover_letter.py` → `IJEG\Arik_Emrahoglu_IJEG_Cover_Letter.docx` (sayılar out\numbers.json'dan).
 - Sürüm ve dergi notları: OneDrive `Tezden_Makale\_Ortak\00_Surum_ve_Dergi_Rehberi.md` ("IJEG v17 sonrası kalan işler").
 
+## IJEG v18 (9 Kasım 2026, claude.ai)
+- Yeni: `flight_ci.py` (uçuş farklarının eşleştirilmiş dairesel blok bootstrap aralıkları; rota içinde katmanlı, 25 kare, 10.000 tekrar; 10/50 kare ve rota bazlı duyarlılık). `make_v15.py` bunu `out\tables\flight_ci.csv/.json` olarak üretir ve `fill_extra.py --flight-ci` ile `fd_*` ve `cov_*` anahtarlarını `numbers.json`'a yazar.
+- `narrative.py`: `ci_oracle` (4.1 sonu), `ci_causal` (4.2), `coverage` ve `ci_method` (3.7 Outcomes paragrafı), tartışma (rota bazlı kontrol dahil) ve sonuç cümleleri sayılardan kurulur; aralık, ifade edilen farkın yönüne göre verilir.
+- `build_ijeg.py`: üstbilgi tüm sayfalarda "2026, 11(x), 00-0X".
+- Üretim (Linux/VM'de denendi; Windows'ta aynı komutlar `set PYTHONUTF8=1` ile):
+  ```
+  python make_v15.py out\v18\Arik_Emrahoglu_v18_WS_kaynak.docx --runs ..\flight_replay\runs_ne ..\flight_replay\runs@gray_ ^
+    --eq1 ..\flight_replay\runs --texture ..\flight_replay\texture_probe_ne\texture_probe_summary.csv --recon inputs\recon.json ^
+    --fig6 inputs\fig6_v15.png --sobel-bench ..\..\benchmark\outputs\sobel_baseline_4000\sobel_summary.json --work out
+  python ijeg\build_ijeg.py out\v18\Arik_Emrahoglu_v18_WS_kaynak.docx "<IJEG>\IJEG_Template.docx" ijeg\refs_apa_v16.txt ^
+    out\v18\Arik_Emrahoglu_StructuralRepresentations_UAV_Localization_v18_IJEG.docx "<IJEG>\..._v09_IJEG_icerik.docx"
+  python to_pdf.py out\v18\Arik_Emrahoglu_StructuralRepresentations_UAV_Localization_v18_IJEG.docx
+  ```
+- v18 docx OneDrive `IJEG\` klasörüne kopyalandı; Word PDF'i henüz alınmadı (`out\v18\*_libreoffice_kontrol.pdf` yalnız kontrol içindir).
+- Değişmeden kalanlar: özet (198 kelime), kapak mektubu, tablolar ve şekiller. `check_v16.py` temiz (tire yok, tutarlılık True).
+
 ## Sıradaki iş
-1. **GitHub:** commit listesi kullanıcıya sunuldu, onay bekleniyor (template-matching: flight_replay kodu + kare kayıtları + manuscript_v15 betikleri; benchmark: sobel_benchmark, recon_kontrol, sobel_summary.json). .gitignore beyaz liste; istisnalar eklenecek.
+1. **GitHub:** 9 Kasım'da iki depo main'e birleştirilip push edildi (template-matching 7fbc6d4, benchmark 8724fe9). Kalan: template-matching ve autoencoder_sat_to_map'te lisans ve atıf dosyaları .gitignore yüzünden yüklenmedi; üç deponun CITATION.cff/.zenodo.json'u eski başlık ve "Drones" diyor, IJEG'e göre güncellenmeli. Bu DEVAM.md değişikliği henüz commit edilmedi.
 2. **Kullanıcının kararını bekleyen konular:**
    - Kamera ofseti düzeltilmiş sonuç tabloda ek satır olsun mu, yalnız metinde mi kalsın?
    - Kırsal yer yüksekliği düzeltmesi (konum belirsizken son güvenilir konumun yer yüksekliği): önerimiz gelecek çalışma, çünkü sonradan yöntem değişikliği olur.

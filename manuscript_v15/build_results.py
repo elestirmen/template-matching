@@ -46,6 +46,16 @@ def rng(run, routes, col, nd=1):
 X = EXTRA.get
 URB = ['Urban%d' % i for i in range(1, 9)]; RUR = ['Rural1', 'Rural2', 'Rural3']; PRO_URB = ['Urban4', 'Urban5', 'Urban6', 'Urban7', 'Urban8']
 
+# ------------------------------------------------------------------ 3.7 outcomes: coverage and paired intervals
+if X('coverage') or X('ci_method'):
+    i, p = find_par(d, 'Outcomes and metrics.')
+    t_ = p.text
+    key_ = 'the reason for every non-eligible frame is recorded in the manifest.'
+    assert t_.count(key_) == 1
+    if X('coverage'): t_ = t_.replace(key_, key_ + ' ' + X('coverage'))
+    if X('ci_method'): t_ = t_.rstrip() + ' ' + X('ci_method')
+    set_par(p, t_)
+
 # ------------------------------------------------------------------ 4.1
 i, p = find_par(d, '4.1. Simulation-based model selection')
 set_par(p, '4.1. Representations compared on the same flight frames')
@@ -79,7 +89,8 @@ set_par(p, (
     f"reach {gv('gray_oracle', 'heldout', 'success_pct')}%, {gv('sobel_oracle', 'heldout', 'success_pct')}%, "
     f"{gv('m4e300_oracle', 'heldout', 'success_pct')}% and {gv('f48k4s1_oracle', 'heldout', 'success_pct')}%. "
     f"Checkpoint 1550 of the f48-k4-s1 run, which was best on the core benchmark mosaics, gives "
-    f"{gv('f48k4s1c1550_oracle', 'doctoral', 'success_pct')}% on the doctoral routes, {rel} checkpoint 1850. "
+    f"{gv('f48k4s1c1550_oracle', 'doctoral', 'success_pct')}% on the doctoral routes, {rel} checkpoint 1850. " +
+    (X('ci_oracle') + ' ' if X('ci_oracle') else '') +
     "For reference, the doctoral study had selected Model 4 with three simulations (Section 3.7); those selection "
     "results are not used as evidence here."))
 i, p = find_par(d, 'Table 3. Pooled comparison of the selected network')
@@ -133,7 +144,8 @@ set_par(p, (
     f"{gv('f48k4s1c1550_track_causal', 'doctoral', 'success_pct')}% (precision "
     f"{gv('m4e300_track_causal', 'doctoral', 'precision_pct')}%, {gv('f48k4s1_track_causal', 'doctoral', 'precision_pct')}% "
     f"and {gv('f48k4s1c1550_track_causal', 'doctoral', 'precision_pct')}%; Table 3), against {gv('gray_track_causal', 'doctoral', 'success_pct')}% for grayscale NCC and "
-    f"{gv('sobel_track_causal', 'doctoral', 'success_pct')}% for gradient magnitude. The GNSS-aided replay of the "
+    f"{gv('sobel_track_causal', 'doctoral', 'success_pct')}% for gradient magnitude. " +
+    (X('ci_causal') + ' ' if X('ci_causal') else '') + "The GNSS-aided replay of the "
     "doctoral study, which scales every frame with its own GNSS altitude and GNSS-position DEM value, reaches "
     f"{gv('m4e300_track_aided', 'doctoral', 'success_pct')}% and {gv('f48k4s1_track_aided', 'doctoral', 'success_pct')}%; "
     f"the difference to the causal replay ({X('aided_minus_causal_m4', '?')} and {X('aided_minus_causal_f48', '?')} "

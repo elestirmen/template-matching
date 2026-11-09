@@ -1,5 +1,7 @@
 # UAV Image Positioning - Deep Learning Supported Geolocalization via Template Matching
 
+> **Article:** A. E. Arık and N. Emrahoğlu, *Learned versus Classical Structural Representations for GNSS-Denied UAV Localization by Template Matching: A Cross-Source Map Benchmark and Flight Replay*, submitted to the *International Journal of Engineering and Geosciences* (IJEG), 2026. To cite this code, see [CITATION.cff](CITATION.cff).
+
 *[Türkçe sürüm için tıklayın (README.tr.md)](README.tr.md)*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
@@ -838,7 +840,7 @@ Per-EXIF-camera-model sensor widths are declared in `CAMERA_SENSOR_BY_MODEL`: `L
 ---
 
 ## Citation
-There is no published `CITATION.cff` or DOI for this repository yet. When the relevant thesis/article is published, citation should include author, title, institution, year, version, and permalink.
+See [CITATION.cff](CITATION.cff) and the article named at the top of this file. Until the article is published, cite the repository URL and the commit ID used.
 
 ---
 
