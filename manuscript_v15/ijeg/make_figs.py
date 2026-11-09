@@ -92,7 +92,10 @@ def fig8():
     fig, (a, b) = plt.subplots(1, 2, figsize=(W_IN, W_IN * 841 / 2136), gridspec_kw={'width_ratios': [1.05, 1]})
     a.hist(per.values, bins=np.arange(0, 101, 5), color=BLUE, edgecolor='white', lw=0.5)
     a.axvline(raw, color=VERM, lw=2)
-    a.text(raw - 1.5, a.get_ylim()[1] * 0.97, f'grayscale NCC\n{raw:.1f}%', color=VERM, ha='right', va='top', fontsize=8.5)
+    # label on a white ground, right-aligned just left of the bin that holds the baseline so that it never
+    # covers a bar top (the 70-75% bin is the tallest one)
+    a.text(5 * np.floor(raw / 5) - 1.0, a.get_ylim()[1] * 0.97, f'grayscale NCC\n{raw:.1f}%', color=VERM, ha='right',
+           va='top', fontsize=8.5, bbox=dict(facecolor='white', edgecolor='none', pad=1.5), zorder=5)
     a.set_title(f'(a) Architecture / checkpoint screening, 300 queries', loc='left')
     a.set_xlabel('Mean global success @ 25 m, clean & hard_v1 (%)'); a.set_ylabel(f'Checkpoints (n = {len(per)})')
     a.set_xlim(-2, 102)
@@ -135,9 +138,12 @@ def fig9():
 def fig1():
     fig = plt.figure(figsize=(W_IN, W_IN * 1053 / 1780)); ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, 100); ax.set_ylim(0, 60); ax.axis('off')
     NAVY = '#2E4A6B'; FILL = '#EEF3F9'; ORF, ORE = '#FFF3DC', '#C47A00'; GRF, GRE = '#EAF5EE', '#1E7A3C'
+    boxes = []
+
     def box(x, y, w, h, text, fill=FILL, edge=NAVY, fs=9):
         ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0,rounding_size=0.8', fc=fill, ec=edge, lw=1.6))
-        ax.text(x + w / 2, y + h / 2, text, ha='center', va='center', fontsize=fs, color='#111111', linespacing=1.3)
+        t = ax.text(x + w / 2, y + h / 2, text, ha='center', va='center', fontsize=fs, color='#111111', linespacing=1.3)
+        boxes.append((t, x, y, w, h))
     def arrow(p, q, **kw):
         ax.add_patch(FancyArrowPatch(p, q, arrowstyle='-|>', mutation_scale=14, color=NAVY, lw=1.6, shrinkA=0, shrinkB=0, **kw))
     bw, bh, gap, x0, FS = 21.0, 12, 2.0, 2, 7.2
@@ -160,8 +166,8 @@ def fig1():
         if i: arrow((xs[i - 1] + bw, y2 + bh / 2), (xs[i], y2 + bh / 2))
     # bottom row
     y3 = 3
-    box(xs[3], y3, bw, bh, 'NCC (TM_CCOEFF_NORMED)\nin a window around the\npredicted position;\nexpanded on failure', GRF, GRE, fs=FS)
-    box(xs[1], y3, 2 * bw + gap, bh, 'Three-crop consensus: implied frame centers agree within\n48 px → mean position → UTM; the window follows the fix\nthrough a visual-odometry prior (GNSS read only at initialization)', GRF, GRE, fs=FS)
+    box(xs[3], y3, bw, bh, 'NCC\n(TM_CCOEFF_NORMED)\nin a window around\nthe predicted position;\nexpanded on failure', GRF, GRE, fs=FS)
+    box(xs[1], y3, 2 * bw + gap, bh, 'Three-crop consensus: implied frame centers\nagree within 48 px → mean position → UTM;\nthe window follows the fix through a visual-\nodometry prior; GNSS read only at initialization', GRF, GRE, fs=FS)
     arrow((xs[3], y3 + bh / 2), (xs[2] + bw, y3 + bh / 2))
     # templates down, search space from the reference raster around the right side
     arrow((xs[3] + bw / 2 - 4, y2), (xs[3] + bw / 2 - 4, y3 + bh))
@@ -170,6 +176,13 @@ def fig1():
     ax.plot([xs[3] + bw, xr, xr, xs[3] + bw / 2 + 5], [y1 + bh / 2, y1 + bh / 2, y3 + bh + 3, y3 + bh + 3], color=NAVY, lw=1.6, solid_capstyle='round')
     arrow((xs[3] + bw / 2 + 5, y3 + bh + 3), (xs[3] + bw / 2 + 5, y3 + bh))
     ax.text(xr + 0.8, (y1 + y3 + bh) / 2 + 2, 'search space', fontsize=FS, color=NAVY, rotation=90, va='center')
+    # every label must sit inside its box with a margin (1.2 units across, 0.8 units vertically)
+    fig.canvas.draw(); r = fig.canvas.get_renderer(); inv = ax.transData.inverted()
+    for t, x, y, w, h in boxes:
+        (bx0, by0), (bx1, by1) = inv.transform(t.get_window_extent(r).get_points())
+        if bx0 < x + 1.2 or bx1 > x + w - 1.2 or by0 < y + 0.8 or by1 > y + h - 0.8:
+            raise SystemExit(f'Figure 1: text does not fit its box with margin: {t.get_text()!r} '
+                             f'text x {bx0:.1f}-{bx1:.1f} y {by0:.1f}-{by1:.1f}, box x {x:.1f}-{x + w:.1f} y {y:.1f}-{y + h:.1f}')
     save(fig, 'fig1_pipeline.png')
 
 
