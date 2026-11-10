@@ -1,4 +1,4 @@
-"""Small helpers for editing the Unmanned Systems manuscript (python-docx)."""
+"""Small helpers for editing the manuscript (python-docx)."""
 import copy, re
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
