@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the revised manuscript end to end from the replay records (v15 chain; v16 adds the gradient-magnitude
 benchmark result and the comparative framing; v18 adds paired block-bootstrap intervals of the flight differences
-(flight_ci.py) and the coverage of the captured frames, see DEVAM.md).
+(flight_ci.py) and the coverage of the captured frames).
 Usage: python make_v15.py OUT.docx --runs SPEC [SPEC ...] [--eq1 SPEC ...] [--texture CSV] [--recon JSON] [--fig6 PNG]
                                    [--sobel-bench sobel_summary.json]
 """

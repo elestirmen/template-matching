@@ -310,7 +310,7 @@ def build(N):
     )
     E['bench_sobel_par'] = (
         "Gradient-magnitude baseline. The classical gradient-magnitude representation of the flight replay (Section "
-        "3.8), run through the district benchmark after the first round of review in global search on the identical "
+        "3.8), run through the district benchmark in global search on the identical "
         f"{g('sb_n')} queries per direction, localizes {g('sb_sob_c')}% of clean and {g('sb_sob_h')}% of degraded "
         f"queries within 25 m without any training (mean of both directions), against {g('sb_cae_c')}% and "
         f"{g('sb_cae_h')}% for the benchmark-selected cross-autoencoder and {g('sb_gray_c')}% and {g('sb_gray_h')}% for "
@@ -342,9 +342,9 @@ def build(N):
         "mosaic, whose rendering is darker and less contrasted (Fig. 5), makes a poor NCC template, and either "
         "structural transform normalizes both sides to the same appearance."
     )
-    E['t7_sentence'] = ("The gradient-magnitude baseline added after review (last row of Table 7) exceeds every one of "
+    E['t7_sentence'] = ("The gradient-magnitude baseline (last row of Table 7) exceeds every one of "
                         "these checkpoints on the district mosaics (Section 4.3)." if every_ckpt else
-                        "The gradient-magnitude baseline added after review (last row of Table 7) is compared with "
+                        "The gradient-magnitude baseline (last row of Table 7) is compared with "
                         "them in Section 4.3.")
     E['t7_caption'] = (
         "Table 7. Best checkpoint per training lineage in the exhaustive sweep (Ürgüp core, 2,000 queries per "

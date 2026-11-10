@@ -57,3 +57,8 @@ __pycache__/
 !LICENSE-APACHE
 !CITATION.cff
 !.zenodo.json
+
+# Yalniz yerelde kalan calisma notlari (depoya konmaz)
+manuscript_v15/DEVAM.md
+manuscript_v15/make_response.py
+manuscript_v15/response_text.py

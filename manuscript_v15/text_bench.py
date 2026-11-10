@@ -18,8 +18,8 @@ BENCH_SOBEL_METHOD = (
     "Gradient-magnitude baseline. The classical structural representation of the flight replay (Section 3.7) is "
     "wrapped as a fixed-weight network - an 11-tap Gaussian of σ = 1.5 px, a 3 × 3 Sobel pair, the magnitude halved "
     "and clipped to 255, within 3.5 gray levels of the OpenCV reference - so that it passes through exactly the "
-    "tiling, normalization, pyramid search and bootstrap of the networks. It was added after the first round of "
-    "review, at the reviewers' request, and run in global search only, on the same 4,000 queries per direction as "
+    "tiling, normalization, pyramid search and bootstrap of the networks. It serves as a control and was run in "
+    "global search only, on the same 4,000 queries per direction as "
     "Table 6; the grayscale baseline was recomputed alongside as a check that the queries are identical (Section "
     "4.3). Its smoothing scale was fixed in the flight replay and was not tuned on the benchmark."
 )

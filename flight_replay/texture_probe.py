@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Low-texture probe for the cross-source benchmark (Reviewer 2, item 5).
+"""Low-texture probe for the cross-source benchmark.
 
 The benchmark rejects query tiles with grey-level standard deviation < 12 or entropy < 4 bits
 (and tiles with > 20 % near-black pixels, i.e. missing data). This probe measures how the

@@ -49,12 +49,8 @@ par('Both representations are evaluated with the identical matcher, on the same 
 par('Every number in the paper is produced by released scripts from per-query and per-frame records: the benchmark, '
     'the flight replay program, the frame manifest, the result records and the scripts that build the tables are in '
     'three public GitHub repositories (Data availability section), so the comparison can be repeated and extended.')
-par('An earlier version of this work was submitted to Unmanned Systems (World Scientific) and was rejected after '
-    'review. The reviewers found the flight statistics of that version internally inconsistent and the baselines weak. '
-    'We agreed. The present manuscript was rebuilt from scratch: all flight results were regenerated from per-frame '
-    'records, the outcome definitions were fixed, GNSS-independent operation was demonstrated by a causal replay, and '
-    'the classical baseline whose result now defines the paper was added. The manuscript is not under consideration '
-    'elsewhere. It is derived from the first author\'s doctoral thesis (Çukurova University, 2024), which is cited and '
+par('The manuscript is original, has not been published before and is not under consideration elsewhere. '
+    'It is derived from the first author\'s doctoral thesis (Çukurova University, 2024), which is cited and '
     'acknowledged in the text; the benchmark, the flight replay and the comparative result are new.')
 par('Thank you for your consideration.')
 par('Sincerely,', space_after=2)

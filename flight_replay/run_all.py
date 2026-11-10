@@ -281,7 +281,7 @@ def main():
     if main_jobs:
         _pool(main_jobs, 'main')
     if a.only in ('all', 'sens'):
-        # low-texture probe on the district benchmark mosaics (Reviewer 2, item 5); resumable
+        # low-texture probe on the district benchmark mosaics; resumable
         sh([PY, 'flight_replay/texture_probe.py', '--eq', str(EQ), '--out', 'flight_replay/texture_probe' + ('' if EQ else '_ne')])
         _abort_on_gpu_fault()
     if sens_jobs:
