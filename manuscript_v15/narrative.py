@@ -60,8 +60,9 @@ def build(N):
         "Three sources account for most of the remaining errors and failures. First, a constant camera offset: in the "
         "body frame of the vehicle the accepted fixes of the causal replay are displaced by about "
         f"{g('b_l1d_f_m4')} m along and {g('b_l1d_r_m4')} m across the heading with the Mavic 2 Pro and by about "
-        f"{g('b_fc_f_m4')} m and {g('b_fc_r_m4')} m with the Mavic 2 Zoom (positive: forward and to the right; Model 4 "
-        f"lineage, grayscale: {g('b_l1d_f_gray')}/{g('b_l1d_r_gray')} m and {g('b_fc_f_gray')}/{g('b_fc_r_gray')} m). The "
+        f"{g('b_fc_f_m4')} m and {g('b_fc_r_m4')} m with the Mavic 2 Zoom (positive: forward and to the right; these values are for "
+        f"the Model 4 lineage, and grayscale gives {g('b_l1d_f_gray')}/{g('b_l1d_r_gray')} m and "
+        f"{g('b_fc_f_gray')}/{g('b_fc_r_gray')} m). The "
         "offset is the same on every route and with every representation, which points to a small attitude (boresight) "
         "offset of the camera or a timing offset of the position tag rather than to the matcher. Estimating the offset "
         "of each route from the other doctoral routes flown with the same camera and subtracting it raises the "
@@ -147,7 +148,7 @@ def build(N):
                         else 'contributes to the gain')
     E['recon_par'] = (
         "Cartographic supervision versus input reconstruction. To isolate the training target, the training recipe of "
-        "the authors' current pipeline (seven-layer f32-k3 encoder-decoder without spatial reduction, sigmoid output, "
+        "the authors’ current pipeline (seven-layer f32-k3 encoder-decoder without spatial reduction, sigmoid output, "
         "binary cross-entropy, batch 1, 12 epochs) was trained twice with the target as the only difference: with the "
         "cartographic rendering, and - in a later run with the same code, configuration and training tiles - with the "
         "input satellite tile itself (an autoencoder that reconstructs its input). For each run the checkpoint with the lowest false-peak ratio on a training region was chosen "
@@ -189,6 +190,15 @@ def build(N):
         o = f' {obj}' if obj else ''
         if abs(d_) < 0.05: return f'matches{o}'
         return f'{"leads" if d_ > 0 else "trails"}{o} by {abs(d_):.1f} points'
+
+    def vs2(or_a, or_b, ca_a, ca_b):
+        """'leads by X points in the oracle replay and by Y points in the causal replay'; two verbs only when the
+        signs differ."""
+        d1 = f1(or_a) - f1(or_b); d2 = f1(ca_a) - f1(ca_b)
+        verb = lambda d_: 'leads' if d_ > 0 else 'trails'
+        if abs(d1) < 0.05 or abs(d2) < 0.05 or verb(d1) != verb(d2):
+            return f"{vs(or_a, or_b)} in the oracle replay and {vs(ca_a, ca_b)} in the causal replay"
+        return f"{verb(d1)} by {abs(d1):.1f} points in the oracle replay and by {abs(d2):.1f} points in the causal replay"
 
     # ---- paired block-bootstrap intervals of the flight differences (flight_ci.py via fill_extra.py --flight-ci)
     def fd(mode, a_, b_, ho=False):
@@ -358,9 +368,9 @@ def build(N):
         f"search over 3 × 3 km the three checkpoints localize {or_lo:.1f}-{or_hi:.1f}% of the eligible doctoral frames "
         f"within 30 m against {g('or_sobel')}% for gradient magnitude and {g('or_gray')}% for grayscale NCC, and in the "
         f"causal replay {ca_lo:.1f}-{ca_hi:.1f}% against {g('ca_sobel')}% and {g('ca_gray')}%. Relative to gradient "
-        f"magnitude, the flown Model 4 lineage {vs('or_m4', 'or_sobel')} in the oracle replay and "
-        f"{vs('ca_m4', 'ca_sobel')} in the causal replay, the benchmark-selected checkpoint 1850 "
-        f"{vs('or_f48', 'or_sobel')} and {vs('ca_f48', 'ca_sobel')}, and on the additional flights gradient "
+        f"magnitude, the flown Model 4 lineage {vs2('or_m4', 'or_sobel', 'ca_m4', 'ca_sobel')}, the "
+        f"benchmark-selected checkpoint 1850 {vs2('or_f48', 'or_sobel', 'ca_f48', 'ca_sobel')}, and on the "
+        f"additional flights gradient "
         f"magnitude {sob_ho}. The spread "
         f"between the three checkpoints ({ca_hi - ca_lo:.1f} points in the causal replay) is "
         + ("larger than any" if within else "of the same order as") + " of these differences." + ci_disc + " Third, the gain of the "

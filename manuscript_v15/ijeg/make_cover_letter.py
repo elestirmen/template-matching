@@ -24,7 +24,9 @@ def par(text, bold=False, space_after=6):
 
 
 par('To the Editor-in-Chief\nInternational Journal of Engineering and Geosciences (IJEG)', space_after=2)
-par('9 November 2026', space_after=8)
+import datetime as _dt
+_d = _dt.date.today()  # the letter carries the day it is generated (generate it on the day of submission)
+par(f"{_d.day} {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][_d.month - 1]} {_d.year}", space_after=8)
 par(f'Subject: Submission of a research article, "{TITLE}"', bold=True)
 par('Dear Editor,')
 par('On behalf of my co-author, I submit the above manuscript for consideration in IJEG. The work asks a question of '

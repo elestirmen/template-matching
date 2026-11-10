@@ -139,11 +139,11 @@ trk = (f"On the doctoral routes, tracking with a 600 m window around the predict
        f"more reliable for {words[n_better_ho]}, mainly because the track of Rural 5 is lost. ")
 set_par(p, (
     trk + "In the causal replay, which reads GNSS only at the first frame of each route, the Model 4 lineage localizes "
-    f"{gv('m4e300_track_causal', 'doctoral', 'success_pct')}% of the eligible doctoral frames within 30 m, f48-k4-s1 "
-    f"checkpoint 1850 {gv('f48k4s1_track_causal', 'doctoral', 'success_pct')}% and checkpoint 1550 "
-    f"{gv('f48k4s1c1550_track_causal', 'doctoral', 'success_pct')}% (precision "
+    f"{gv('m4e300_track_causal', 'doctoral', 'success_pct')}% of the eligible doctoral frames within 30 m, compared with "
+    f"{gv('f48k4s1_track_causal', 'doctoral', 'success_pct')}% for f48-k4-s1 checkpoint 1850 and "
+    f"{gv('f48k4s1c1550_track_causal', 'doctoral', 'success_pct')}% for checkpoint 1550 (precision "
     f"{gv('m4e300_track_causal', 'doctoral', 'precision_pct')}%, {gv('f48k4s1_track_causal', 'doctoral', 'precision_pct')}% "
-    f"and {gv('f48k4s1c1550_track_causal', 'doctoral', 'precision_pct')}%; Table 3), against {gv('gray_track_causal', 'doctoral', 'success_pct')}% for grayscale NCC and "
+    f"and {gv('f48k4s1c1550_track_causal', 'doctoral', 'precision_pct')}%; Table 3) and with {gv('gray_track_causal', 'doctoral', 'success_pct')}% for grayscale NCC and "
     f"{gv('sobel_track_causal', 'doctoral', 'success_pct')}% for gradient magnitude. " +
     (X('ci_causal') + ' ' if X('ci_causal') else '') + "The GNSS-aided replay of the "
     "doctoral study, which scales every frame with its own GNSS altitude and GNSS-position DEM value, reaches "

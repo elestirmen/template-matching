@@ -35,8 +35,8 @@ SELECTION_SPLIT = (
     "on the southern half gives checkpoint 1850, which on the northern half gains {N_GAIN_C} points ({N_CI_C}) and "
     "{N_GAIN_H} points ({N_CI_H}). The checkpoint chosen on one half is within 0.7 points of the best checkpoint of the "
     "other half in both cases, so the reported advantage does not depend on selecting on the evaluation region. The "
-    "architecture family was fixed before the district runs on the core mosaics, which do not overlap the district "
-    "query blocks of the southern half."
+    "architecture family was fixed on the core mosaics before the district runs, and the core does not overlap the "
+    "district query blocks of the southern half."
 )
 
 SELECTION_SPLIT_VALUES = dict(

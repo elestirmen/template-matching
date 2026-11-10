@@ -37,7 +37,9 @@ def renum(num):  # '3.4' -> '2.4', '2' -> '1.1', '4' -> '3'
 
 TEXT_FIXES = [
     ("It was added after the first round of review, at the reviewers' request, and run in global search only,",
-     "It was added as a control in this revision and run in global search only,"),
+     "It serves as a control and was run in global search only,"),
+    ("Thresholded F1 scores are no longer used:", "The thresholded F1 scores of the doctoral study are not used:"),
+    ("(released with the code; Data Availability)", "(released with the code; Data availability)"),
     ("run through the district benchmark after the first round of review in global search on the identical 4,000 queries per direction,",
      "run through the district benchmark in global search on the identical 4,000 queries per direction,"),
     ("The gradient-magnitude baseline added after review (last row of Table 7)", "The gradient-magnitude baseline (last row of Table 7)"),
@@ -60,6 +62,7 @@ def fix_text(t):
         return head + body2
     t = re.sub(r'(Sections? )((?:\d(?:\.\d+)?)(?:(?:, | and |-)\d(?:\.\d+)?)*)', repl, t)
     t = t.replace('Figs. ', 'Figures ').replace('Fig. ', 'Figure ')
+    t = t.replace('pre-process', 'preprocess').replace('Pre-process', 'Preprocess')
     for ch in '–—−': t = t.replace(ch, '-')
     return t
 

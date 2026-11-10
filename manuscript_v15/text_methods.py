@@ -68,7 +68,7 @@ CAMERA_PAR = (
 ROTATE_PAR = (
     "Each frame is converted to grayscale, rotated to north by the recorded flight yaw with bilinear "
     "interpolation,^{47} and the largest inscribed axis-aligned rectangle is retained. The GSD of the frame is "
-    "computed from the sensor width S_(w), flight height above ground H, focal length f and image width I_(w) "
+    "computed from the sensor width S_{w}, flight height above ground H, focal length f and image width I_{w} "
     "(Equation 3),^{48} and the frame is resampled (area averaging) so that its GSD equals the reference map GSD "
     "of 0.298 m/px. Equation 3 uses the nominal sensor width and focal length from the image metadata; a scale "
     "calibration of Section 3.4 confirmed the nominal scale within 4%."

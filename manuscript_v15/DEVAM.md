@@ -192,6 +192,15 @@ Eşitlemesiz protokol, 11 doktora rotası, 1.976 uygun kare, 30 m eşik.
 - Düzeltilmiş docx `out\v18\` içinde. OneDrive `IJEG\` klasöründeki v18 docx/pdf çifti henüz eski; Word PDF'i alınınca ikisi birlikte değiştirilecek. PDF alındıktan sonra kontrol: 1. sayfada iki ORCID simgesi, 11. sayfada "(-0.8 to 5.7)" tek satırda ve eksi işareti normal görünüyor mu.
 - Açık (kullanıcının kararı): autoencoder_sat_to_map'te yeniden kurma kontrolünün kullandığı `TARGET_MODE` değişikliği (`egitim\autoencoder_unified.py`) commit edilmedi ve yerel dal main'e gönderilmedi; Zenodo DOI.
 
+### v18 dil kontrolü (10 Kasım 2026, claude.ai)
+- Metnin tamamı okundu. İlk gönderimde yeri olmayan revizyon dili kaldırıldı: "added as a control in this revision" -> "It serves as a control and was run..."; "Thresholded F1 scores are no longer used" -> "The thresholded F1 scores of the doctoral study are not used" (ikisi de `build_ijeg.py` TEXT_FIXES; WS kaynağı değişmedi).
+- Bölüm 2.5'te düz metin olarak kalan "S_(w)" ve "I_(w)" alt simge yapıldı (`docx_tools.set_par` artık `_{w}` işaretini tanır; `text_methods.py`).
+- Tekrar eden yüklemler ve okunması zor yerler: "leads ... and leads / trails ... and trails" (`narrative.py` `vs2`), "checkpoint 1850 70.5%" sıralaması (`build_results.py`), kamera ofseti parantezi (`narrative.py`), mimari cümlesi (`text_bench.py`).
+- Yazım birliği: "pre-process" -> "preprocess", "Data Availability)" -> "Data availability)", düz kesme -> kıvrık kesme.
+- Kapak mektubu artık üretildiği günün tarihini taşır (`make_cover_letter.py`); gönderim günü yeniden üret.
+- Düzeltilmiş docx yine `out\v18\` içinde; Word PDF'i alınıp IJEG klasörüne birlikte kopyalanacak.
+- Açık (kullanıcının kararı): Acknowledgement'taki yapay zekâ kullanım beyanı v14'ten geliyor ("Claude Opus 5 ... software code and English-language editing"); kapsamı ve model adı güncel durumu tam yansıtmıyor olabilir.
+
 ## Sıradaki iş
 1. **GitHub:** 9 Kasım'da iki depo main'e birleştirilip push edildi (template-matching 7fbc6d4, benchmark 8724fe9). Kalan: template-matching ve autoencoder_sat_to_map'te lisans ve atıf dosyaları .gitignore yüzünden yüklenmedi; üç deponun CITATION.cff/.zenodo.json'u eski başlık ve "Drones" diyor, IJEG'e göre güncellenmeli. Bu DEVAM.md değişikliği henüz commit edilmedi.
 2. **Kullanıcının kararını bekleyen konular:**

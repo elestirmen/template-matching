@@ -14,18 +14,19 @@ def find_par(doc, prefix, start=0):
     raise KeyError(prefix)
 
 
-def _add_run(p, text, base_rpr=None, sup=False, italic=False, bold=False):
+def _add_run(p, text, base_rpr=None, sup=False, italic=False, bold=False, sub=False):
     r = p.add_run(text)
     if base_rpr is not None:
         r._r.insert(0, copy.deepcopy(base_rpr))
     if sup: r.font.superscript = True
+    if sub: r.font.subscript = True
     if italic: r.font.italic = True
     if bold: r.font.bold = True
     return r
 
 
 def set_par(p, markup, keep_rpr=True):
-    """Replace the text of paragraph p. Markup: ^{17} superscript, *text* italic, **text** bold."""
+    """Replace the text of paragraph p. Markup: ^{17} superscript, _{w} subscript, *text* italic, **text** bold."""
     base = None
     if keep_rpr and p.runs:
         rpr = p.runs[0]._r.find(qn('w:rPr'))
@@ -38,16 +39,17 @@ def set_par(p, markup, keep_rpr=True):
     # tokenise
     pos = 0
     tokens = []
-    pattern = re.compile(r'\^\{([^}]*)\}|\*\*([^*]+)\*\*|\*([^*]+)\*')
+    pattern = re.compile(r'\^\{([^}]*)\}|_\{([^}]*)\}|\*\*([^*]+)\*\*|\*([^*]+)\*')
     for m in pattern.finditer(markup):
         if m.start() > pos: tokens.append(('t', markup[pos:m.start()]))
         if m.group(1) is not None: tokens.append(('s', m.group(1)))
-        elif m.group(2) is not None: tokens.append(('b', m.group(2)))
-        else: tokens.append(('i', m.group(3)))
+        elif m.group(2) is not None: tokens.append(('u', m.group(2)))
+        elif m.group(3) is not None: tokens.append(('b', m.group(3)))
+        else: tokens.append(('i', m.group(4)))
         pos = m.end()
     if pos < len(markup): tokens.append(('t', markup[pos:]))
     for kind, text in tokens:
-        _add_run(p, text, base, sup=(kind == 's'), italic=(kind == 'i'), bold=(kind == 'b'))
+        _add_run(p, text, base, sup=(kind == 's'), italic=(kind == 'i'), bold=(kind == 'b'), sub=(kind == 'u'))
     return p
 
 
