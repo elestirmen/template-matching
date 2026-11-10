@@ -151,8 +151,10 @@ DATA_AVAIL = (
     "compute every flight table of this article, the frame manifest of all 2,951 captured frames and the per-frame "
     "records of every replay reported here (eligibility, outcome, estimated position and error of each frame). All "
     "three repositories are dual-licensed under the MIT and Apache-2.0 licenses. Satellite and cartographic imagery "
-    "are subject to the license terms of the respective providers and cannot be redistributed; the flight imagery "
-    "and the model checkpoints (identified in the records by their SHA-256 hashes) are available from the "
-    "corresponding author on reasonable request. The code versions used for the reported results will be archived "
+    "are subject to the license terms of the respective providers and cannot be redistributed. The three "
+    "cross-autoencoder checkpoints replayed on the flights are included in the benchmark repository, and their file "
+    "names and SHA-256 hashes are listed in the model registry of the replay program; the flight imagery is "
+    "available from the corresponding author on reasonable request. The code versions used for the reported "
+    "results will be archived "
     "as tagged releases with Zenodo DOIs upon acceptance."
 )

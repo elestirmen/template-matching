@@ -185,6 +185,13 @@ Eşitlemesiz protokol, 11 doktora rotası, 1.976 uygun kare, 30 m eşik.
 - v18 docx OneDrive `IJEG\` klasörüne kopyalandı; Word PDF'i henüz alınmadı (`out\v18\*_libreoffice_kontrol.pdf` yalnız kontrol içindir).
 - Değişmeden kalanlar: özet (198 kelime), kapak mektubu, tablolar ve şekiller. `check_v16.py` temiz (tire yok, tutarlılık True).
 
+### v18 son kontrol düzeltmeleri (10 Kasım 2026, claude.ai)
+- Word PDF'inde iki negatif sayı satır sonunda bölünüyordu ("(-" / "0.8 to 5.7)" ve "+1.5 and -" / "7.2 points"). `build_ijeg.py` artık gövde metnindeki negatif sayıların işaretini Word'ün bölünmez tiresi (`w:noBreakHyphen`, Word'de Ctrl+Shift+-; görünüşü klavye tiresiyle aynı) olarak yazar (`add_text`, 24 yer). Diğer bütün tireler düz "-" kalır. Kullanıcı istemezse `add_text` içindeki dönüşümü kaldırmak yeterli.
+- Yazar satırına şablondaki ORCID simgeleri geri kondu (`orcid_icon`; Arık 0000-0002-7952-4311, Emrahoğlu 0000-0003-4347-5279).
+- Data availability: uçuşlarda koşulan üç checkpoint benchmark deposunda zaten herkese açık (SHA-256 ile bayt bayt aynı; `flight_replay\models_registry.py` içinde `PUBLIC`). Cümle buna göre düzeltildi; uçuş görüntüleri hâlâ "istek üzerine" (`text_final.py` DATA_AVAIL).
+- Düzeltilmiş docx `out\v18\` içinde. OneDrive `IJEG\` klasöründeki v18 docx/pdf çifti henüz eski; Word PDF'i alınınca ikisi birlikte değiştirilecek. PDF alındıktan sonra kontrol: 1. sayfada iki ORCID simgesi, 11. sayfada "(-0.8 to 5.7)" tek satırda ve eksi işareti normal görünüyor mu.
+- Açık (kullanıcının kararı): autoencoder_sat_to_map'te yeniden kurma kontrolünün kullandığı `TARGET_MODE` değişikliği (`egitim\autoencoder_unified.py`) commit edilmedi ve yerel dal main'e gönderilmedi; Zenodo DOI.
+
 ## Sıradaki iş
 1. **GitHub:** 9 Kasım'da iki depo main'e birleştirilip push edildi (template-matching 7fbc6d4, benchmark 8724fe9). Kalan: template-matching ve autoencoder_sat_to_map'te lisans ve atıf dosyaları .gitignore yüzünden yüklenmedi; üç deponun CITATION.cff/.zenodo.json'u eski başlık ve "Drones" diyor, IJEG'e göre güncellenmeli. Bu DEVAM.md değişikliği henüz commit edilmedi.
 2. **Kullanıcının kararını bekleyen konular:**

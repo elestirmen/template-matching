@@ -88,14 +88,25 @@ def set_text(p, text, size=None, bold=None, italic=None):
 set_text(paras[3], TITLE)
 # authors line with superscript affiliation marks
 pa = paras[5]
+# the template puts an ORCID icon (inline picture linked to the ORCID page) after every author; keep one as a model
+_icon = copy.deepcopy(next(r for r in pa._p.findall(qn('w:r')) if r.find('.//' + qn('w:drawing')) is not None))
 for r in list(pa.runs): r._r.getparent().remove(r._r)
+ORCID = ['0000-0002-7952-4311', '0000-0003-4347-5279']  # Arık, Emrahoğlu
+def orcid_icon(p, k):
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+    r = copy.deepcopy(_icon)
+    rid = tpl.part.relate_to('https://orcid.org/' + ORCID[k], RT.HYPERLINK, is_external=True)
+    for h in r.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}hlinkClick'): h.set(qn('r:id'), rid)
+    for dp in r.iter(qn('wp:docPr')): dp.set('id', str(9001 + k)); dp.set('name', f'ORCID {k + 1}')
+    p._p.append(r)
 def run(p, text, sup=False, bold=None, size=None):
     r = p.add_run(text); r.font.superscript = sup
     if bold is not None: r.font.bold = bold
     if size: r.font.size = Pt(size)
     r.font.name = 'Cambria'
     return r
-run(pa, 'Ahmet Ertuğrul Arık '); run(pa, '*1', sup=True); run(pa, ', Nuri Emrahoğlu '); run(pa, '2', sup=True)
+run(pa, 'Ahmet Ertuğrul Arık '); run(pa, '*1', sup=True); orcid_icon(pa, 0)
+run(pa, ', Nuri Emrahoğlu '); run(pa, '2', sup=True); orcid_icon(pa, 1)
 set_text(paras[7], '1 Kapadokya University, Department of Information Systems and Technologies, Türkiye, ertugrul.arik@kapadokya.edu.tr', size=9)
 set_text(paras[8], '2 Çukurova University, Department of Remote Sensing and Geographic Information Systems, Türkiye, nemrahoglu@cu.edu.tr', size=9)
 paras[9]._p.getparent().remove(paras[9]._p)
@@ -126,6 +137,22 @@ for el in elems[i0 + 1:i1]:
 anchor = p_sect1._p  # new content is inserted before this paragraph
 
 
+NEG = re.compile(r'(?:^|(?<=[\s(\[/]))-(?=\d)')  # the sign of a negative number: -0.8, (-1.1 to 3.4), -6.3/-6.9
+
+
+def add_text(r, t):
+    """Fill run r with text t. The sign of a negative number is written as Word's non-breaking hyphen
+    (w:noBreakHyphen, Ctrl+Shift+- in Word: the same glyph as the keyboard hyphen), so that a line can never
+    end with the sign and leave the digits on the next line. Every other hyphen stays a plain '-'."""
+    def put(s):
+        if s:
+            e = OxmlElement('w:t'); e.text = s; e.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve'); r._r.append(e)
+    pos = 0
+    for m in NEG.finditer(t):
+        put(t[pos:m.start()]); r._r.append(OxmlElement('w:noBreakHyphen')); pos = m.end()
+    put(t[pos:])
+
+
 def new_par(text_runs=None, style=None, align=None, indent=True, size=10, bold=False, italic=False, space_after=0, keep_next=False):
     p = OxmlElement('w:p'); anchor.addprevious(p)
     from docx.text.paragraph import Paragraph
@@ -137,7 +164,7 @@ def new_par(text_runs=None, style=None, align=None, indent=True, size=10, bold=F
     if align is not None: pf.alignment = align
     if keep_next: pf.keep_with_next = True
     for t, fmt in (text_runs or []):
-        r = P.add_run(t); r.font.name = 'Cambria'; r.font.size = Pt(fmt.get('size', size))
+        r = P.add_run(); r.font.name = 'Cambria'; r.font.size = Pt(fmt.get('size', size)); add_text(r, t)
         r.font.bold = fmt.get('bold', bold); r.font.italic = fmt.get('italic', italic)
         if fmt.get('sup'): r.font.superscript = True
         if fmt.get('sub'): r.font.subscript = True
